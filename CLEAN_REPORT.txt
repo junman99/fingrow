@@ -1,0 +1,3 @@
+# FinGrow: Clean export summary
+
+Removed common junk: node_modules, .expo*, dist/build/coverage, ios/android, lockfiles from other managers, .env (created .env.example if applicable).

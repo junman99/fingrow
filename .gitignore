@@ -1,0 +1,32 @@
+.expo/
+# Node/Expo
+node_modules/
+.expo/
+.expo-shared/
+dist/
+build/
+coverage/
+.cache/
+.parcel-cache/
+.turbo/
+.next/
+npm-debug.log*
+yarn-error.log*
+*.log
+
+# Native (managed workflow)
+ios/
+android/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Env & secrets
+.env
+.env.*
+
+# Others
+**/__MACOSX/

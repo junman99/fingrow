@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "FinGrow",
+    "slug": "fingrow",
+    "scheme": "fingrow",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "jsEngine": "hermes",
+    "sdkVersion": "54.0.0"
+  }
+}

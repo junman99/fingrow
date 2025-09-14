@@ -1,0 +1,45 @@
+{
+  "name": "fingrow",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "fix:expo": "expo install --fix && expo doctor --fix-dependencies || true"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.1.2",
+    "@react-navigation/bottom-tabs": "6.6.0",
+    "@react-navigation/native": "6.1.18",
+    "@react-navigation/native-stack": "6.10.0",
+    "expo": "~54.0.0",
+    "expo-constants": "~17.1.7",
+    "expo-device": "~7.1.4",
+    "expo-file-system": "~18.1.11",
+    "expo-haptics": "~14.1.4",
+    "expo-image-picker": "~16.1.4",
+    "expo-linear-gradient": "~14.1.5",
+    "expo-notifications": "~0.31.4",
+    "expo-status-bar": "~2.2.3",
+    "react": "18.2.0",
+    "react-native": "*",
+    "react-native-gesture-handler": "~2.24.0",
+    "react-native-reanimated": "~4.1.0",
+    "react-native-safe-area-context": "5.4.0",
+    "react-native-screens": "~4.11.1",
+    "react-native-svg": "15.11.2",
+    "simple-swizzle": "^0.2.2",
+    "zustand": "^4.5.7",
+    "react-native-worklets": "0.5.1",
+    "@expo/vector-icons": "^14.0.0",
+    "lucide-react-native": "^0.525.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.0.10",
+    "babel-preset-expo": "~13.0.0",
+    "typescript": "~5.8.3"
+  }
+}
