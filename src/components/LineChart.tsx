@@ -2,6 +2,7 @@ import React from 'react';
 import { View, LayoutChangeEvent, Animated, Easing } from 'react-native';
 import Svg, { Path, Line, G, Defs, LinearGradient, Stop, Circle, Text as SvgText, Rect } from 'react-native-svg';
 import { useThemeTokens } from '../theme/ThemeProvider';
+import { ScrollContext } from './ScrollContext';
 
 type Point = { t: number; v: number };
 
@@ -10,6 +11,7 @@ type Props = {
   height?: number;
   padding?: { left?: number; right?: number; bottom?: number; top?: number };
   yAxisWidth?: number;   // space reserved for y-axis labels (px)
+  xTickStrategy?: { mode: 'auto' | 'day' | 'month'; every?: number };
   showArea?: boolean;
   baselineValue?: number;
   showMarker?: boolean;
@@ -95,6 +97,7 @@ export default function LineChart({
   height = 180,
   padding,
   yAxisWidth = 0,
+  xTickStrategy,
   showArea = true,
   baselineValue,
   showMarker = true,
@@ -103,8 +106,11 @@ export default function LineChart({
   showCurrentLabel = true,
 }: Props) {
   const { get } = useThemeTokens();
+  const { setScrollEnabled } = React.useContext(ScrollContext);
+  const enableParent = React.useCallback(() => setScrollEnabled && setScrollEnabled(true), [setScrollEnabled]);
+  const disableParent = React.useCallback(() => setScrollEnabled && setScrollEnabled(false), [setScrollEnabled]);
   // You can set left/right to 0 — yAxisWidth keeps a bit of space for labels
-  const pad = { left: 0, right: 6, bottom: 26, top: 10, ...(padding || {}) };
+  const pad = { left: 6, right: 10, bottom: 26, top: 10, ...(padding || {}) };
 
   const [layoutW, setLayoutW] = React.useState<number>(340);
   const onLayout = (e: LayoutChangeEvent) => {
@@ -115,6 +121,7 @@ export default function LineChart({
   const h = height;
 
   const values = data.map(d => d.v);
+  const suppressXAxisLabels = !data.length || values.every(v => v === 0);
   const minRaw = values.length ? Math.min(...values) : 0;
   const maxRaw = values.length ? Math.max(...values) : 1;
   // Guard when min == max to avoid div-by-zero
@@ -148,6 +155,17 @@ export default function LineChart({
 
   // Rounded y-axis ticks
   const yTicks = niceTicks(min, max, 4);
+  // x-axis ticks
+  const dayTicks: Array<{ t: number; label: string }> = [];
+  if (xTickStrategy?.mode === 'day' && data.length) {
+    const every = Math.max(1, Math.round(xTickStrategy.every || 1));
+    for (let i = 0; i < data.length; i += every) {
+      const d = new Date(data[i].t);
+      const label = d.toLocaleString(undefined, { day: '2-digit', month: 'short' }); // e.g., "12 Sep"
+      dayTicks.push({ t: data[i].t, label });
+    }
+  }
+
 
   // x-axis month ticks (cap to ~6 labels)
   const monthTicks: Array<{ t: number; label: string }> = [];
@@ -250,12 +268,14 @@ export default function LineChart({
   return (
     <View
       onLayout={onLayout}
+      onStartShouldSetResponderCapture={() => enableTooltip}
       onStartShouldSetResponder={() => enableTooltip}
+      onMoveShouldSetResponderCapture={() => enableTooltip}
       onMoveShouldSetResponder={() => enableTooltip}
-      onResponderGrant={onStart}
-      onResponderMove={onMove}
-      onResponderRelease={onEnd}
-      onResponderTerminate={onEnd}
+      onResponderGrant={(e) => { disableParent && disableParent(); onStart(e); }}
+      onResponderMove={(e) => onMove(e)}
+      onResponderRelease={() => { onEnd(); enableParent && enableParent(); }}
+      onResponderTerminate={() => { onEnd(); enableParent && enableParent(); }}
     >
       <Svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`}>
         <Defs>
@@ -271,7 +291,9 @@ export default function LineChart({
 
           {/* dotted horizontal gridlines at y ticks (excluding axes line) */}
           {yTicks.map((v, i) => {
-            const y = yFor(v);
+  const minGap = 12;
+  const y = yFor(v);
+  const yClamped = Math.min(y, plotBottom - minGap);
             if (Math.abs(y - plotBottom) < 0.5) return null; // skip axis line
             return <Line key={`gy${i}`} x1={plotLeft} x2={plotRight} y1={y} y2={y} stroke={grid} strokeWidth={1} strokeDasharray="2 2" />;
           })}
@@ -295,12 +317,15 @@ export default function LineChart({
 
           {/* y-axis labels (reserved yAxisWidth) */}
           {yTicks.map((v, i) => {
-            const y = yFor(v);
+  const minGap = 12;
+  const y = yFor(v);
+  const yClamped = Math.min(y, plotBottom - minGap);
+  if ((plotBottom - y) < minGap) { return null; }
             return <SvgText key={`y${i}`} x={pad.left + 2} y={y - 2} fill={label} fontSize="10">{formatYAxis(v, currency)}</SvgText>;
           })}
 
           {/* x-axis month labels */}
-          {monthTicks.map((m, i) => {
+          {!suppressXAxisLabels && (dayTicks.length ? dayTicks : monthTicks).map((m, i) => {
             const x = xFor(m.t);
             return <SvgText key={`m${i}`} x={x} y={h - 4} fill={label} fontSize="10" textAnchor="middle">{m.label}</SvgText>;
           })}

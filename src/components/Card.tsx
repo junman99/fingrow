@@ -9,7 +9,7 @@ export const Card: React.FC<{ children: React.ReactNode; style?: any; padding?: 
   const border = get('component.card.border') as string;
   return (
     <View style={[
-      { backgroundColor: bg, borderColor: border, borderWidth: 1, borderRadius: radius.lg, padding, ...elevation.level1 },
+      { backgroundColor: bg, borderColor: 'transparent', borderWidth: 0, borderRadius: radius.lg, padding, ...elevation.level1 },
       style
     ]}>
       {children}

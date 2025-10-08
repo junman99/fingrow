@@ -3,6 +3,7 @@ import { useThemeTokens } from '../theme/ThemeProvider';
 import { Feather } from '@expo/vector-icons';
 
 export type IconName =
+  | 'receipt'
   | 'plus-circle'
   | 'users-2'
   | 'target'
@@ -10,9 +11,19 @@ export type IconName =
   | 'history'
   | 'home'
   | 'settings'
-  | 'trending-up';
+  | 'trending-up'
+  | 'menu'
+  | 'check'
+  | 'filter'
+  | 'sort'
+  | 'chevron-right'
+  | 'plus'
+  | 'more-horizontal'
+  | 'trash'
+  | 'archive';
 
 const map: Record<IconName, keyof typeof Feather.glyphMap> = {
+  'receipt': 'file-text',
   'plus-circle': 'plus-circle',
   'users-2': 'users',
   'target': 'target',
@@ -21,6 +32,15 @@ const map: Record<IconName, keyof typeof Feather.glyphMap> = {
   'home': 'home',
   'settings': 'settings',
   'trending-up': 'trending-up',
+  'menu': 'menu',
+  'check': 'check',
+  'filter': 'filter',
+  'sort': 'sliders',
+  'chevron-right': 'chevron-right',
+  'plus': 'plus',
+  'more-horizontal': 'more-horizontal',
+  'trash': 'trash-2',
+  'archive': 'archive',
 };
 
 type Props = {

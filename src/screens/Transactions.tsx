@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { View, Text, Pressable, StyleSheet, FlatList } from 'react-native';
 import { Screen } from '../components/Screen';
 import { AppHeader } from '../components/AppHeader';
-import { Input } from '../components/Input';
+import Input from '../components/Input';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
 import { useTxStore } from '../store/transactions';
@@ -25,7 +25,7 @@ const Row = ({ item, onRemove }: { item: Tx; onRemove: () => void }) => {
   const isIncome = item.type === 'income';
 
   const renderRightActions = () => (
-    <Pressable onPress={onRemove}>
+    <Pressable accessibilityRole="button" onPress={onRemove}>
       <View style={{ width: 88, height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: get('semantic.danger') as string }}>
         <Text style={{ color: get('text.onPrimary') as string, fontWeight: '700' }}>Delete</Text>
       </View>

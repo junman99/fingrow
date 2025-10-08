@@ -6,10 +6,21 @@ import { spacing, radius } from '../theme/tokens';
 type Variant = 'primary' | 'secondary' | 'ghost';
 type Size = 'sm' | 'md' | 'lg';
 
-type Props = { title: string; onPress?: () => void; disabled?: boolean; loading?: boolean; variant?: Variant; size?: Size; style?: ViewStyle; };
+type Props = {
+  title?: string;
+  children?: string;
+  onPress?: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+  variant?: Variant;
+  size?: Size;
+  style?: ViewStyle;
+  accessibilityLabel?: string;
+};
 
-const Button: React.FC<Props> = ({ title, onPress, disabled, loading, variant='primary', size='md', style }) => {
+const Button: React.FC<Props> = ({ title, children, onPress, disabled, loading, variant='primary', size='md', style, accessibilityLabel }) => {
   const { get } = useThemeTokens();
+  const label = children || title || '';
   const stylesByVariant: any = {
     primary: { bg: get('component.button.primary.bg'), text: get('component.button.primary.text') },
     secondary: { bg: get('component.button.secondary.bg'), text: get('component.button.secondary.text'), border: get('component.button.secondary.border') },
@@ -19,12 +30,18 @@ const Button: React.FC<Props> = ({ title, onPress, disabled, loading, variant='p
   const rounded = radius.lg;
   const s = stylesByVariant[variant];
   return (
-    <Pressable onPress={onPress} disabled={disabled || loading} style={({ pressed }) => [
-      { paddingVertical: pad, paddingHorizontal: spacing.s16, borderRadius: rounded, alignItems: 'center', justifyContent: 'center',
-        backgroundColor: s.bg, borderWidth: s.border ? 1 : 0, borderColor: s.border || 'transparent', opacity: (disabled||loading) ? 0.6 : (pressed ? 0.9 : 1) },
-      style
-    ]}>
-      {loading ? <ActivityIndicator /> : <Text style={{ color: s.text, fontWeight: '700' }}>{title}</Text>}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || label}
+      onPress={onPress}
+      disabled={disabled || loading}
+      style={({ pressed }) => [
+        { paddingVertical: pad, paddingHorizontal: spacing.s16, borderRadius: rounded, alignItems: 'center', justifyContent: 'center',
+          backgroundColor: s.bg, borderWidth: s.border ? 1 : 0, borderColor: s.border || 'transparent', opacity: (disabled||loading) ? 0.6 : (pressed ? 0.9 : 1) },
+        style
+      ]}
+    >
+      {loading ? <ActivityIndicator /> : <Text style={{ color: s.text, fontWeight: '700' }}>{label}</Text>}
     </Pressable>
   );
 };

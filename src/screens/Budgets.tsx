@@ -322,8 +322,8 @@ async function exportPeriodCsv(start: Date, end: Date) {
     const header = 'date,type,amount,category,note';
     const csv = [header, ...rows].join('\n');
     const name = `fingrow_${start.toISOString().slice(0,10)}__${end.toISOString().slice(0,10)}.csv`;
-    const fileUri = (FileSystem.documentDirectory || FileSystem.cacheDirectory) + name;
-    await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+    const fileUri = ((FileSystem as any)?.documentDirectory || (FileSystem as any)?.cacheDirectory || '') + name;
+    await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: 'utf8' as any });
     await Share.share({ url: fileUri, message: 'FinGrow CSV', title: 'Share FinGrow CSV' }).catch(()=> Alert.alert('CSV saved', `Saved to: ${fileUri}`));
   } catch (e) {
     Alert.alert('Export failed', 'Sorry, could not create the CSV.');

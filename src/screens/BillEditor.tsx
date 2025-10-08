@@ -57,7 +57,7 @@ export default function BillEditor() {
   const Seg = (f: Freq, text: string) => {
     const on = freq === f;
     return (
-      <Pressable onPress={() => setFreq(f)} style={({ pressed }) => ({
+      <Pressable accessibilityRole="button" onPress={() => setFreq(f)} style={({ pressed }) => ({
         paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill,
         backgroundColor: on ? (get('accent.primary') as string) : (get('surface.level2') as string),
         opacity: pressed ? 0.9 : 1

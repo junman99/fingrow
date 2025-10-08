@@ -6,14 +6,17 @@ import { useThemeTokens } from '../theme/ThemeProvider';
 import { useInvestStore } from '../store/invest';
 import { toStooqSymbol } from '../lib/stooq';
 import { baseCryptoSymbol } from '../lib/coingecko';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 
 type Item = { symbol: string; provider: string };
 
 export default function Search() {
+  const route = useRoute<any>();
+  const intent = (route.params?.intent ?? 'watchlist') as 'watchlist' | 'holding';
+  const fromPortfolioId = route.params?.portfolioId as (string | undefined);
   const { get } = useThemeTokens();
   const nav = useNavigation<any>();
-  const { addWatch, watchlist } = useInvestStore();
+  const { addWatch } = useInvestStore();
   const [q, setQ] = useState('');
 
   const results: Item[] = useMemo(() => {
@@ -34,9 +37,13 @@ export default function Search() {
   const accent = get('accent.primary') as string;
 
   const onAdd = async (sym: string) => {
-    await addWatch(sym);
+  if (intent === 'holding') {
+    nav.navigate('AddLot' as never, { symbol: sym, portfolioId: fromPortfolioId } as never);
+  } else {
+    await addWatch(sym, { portfolioId: fromPortfolioId });
     nav.goBack();
-  };
+  }
+};
 
   return (
     <Screen>
@@ -55,17 +62,17 @@ export default function Search() {
         </View>
 
         {results.length === 0 ? (
-          <Text style={{ color: muted }}>Type a US symbol to add to your watchlist.</Text>
+          <Text style={{ color: muted }}>{`Type a US symbol to add to your ${intent === 'holding' ? 'holdings' : 'watchlist'}.`}</Text>
         ) : (
           <FlatList
             data={results}
             keyExtractor={(it) => it.symbol}
             renderItem={({ item }) => (
-              <Pressable onPress={() => onAdd(item.symbol)} style={{ backgroundColor: bg, borderRadius: radius.lg, padding: spacing.s12, marginBottom: spacing.s8 }}>
+              <Pressable accessibilityRole="button" onPress={() => onAdd(item.symbol)} style={{ backgroundColor: bg, borderRadius: radius.lg, padding: spacing.s12, marginBottom: spacing.s8 }}>
                 <Text style={{ color: text, fontWeight:'700' }}>{item.symbol}</Text>
                 <Text style={{ color: muted }}>{item.provider}</Text>
                 <View style={{ marginTop: spacing.s8, alignSelf:'flex-start', backgroundColor: accent, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill }}>
-                  <Text style={{ color: get('text.onPrimary') as string, fontWeight:'700' }}>Add to watchlist</Text>
+                  <Text style={{ color: get('text.onPrimary') as string, fontWeight:'700' }}>{intent === 'holding' ? 'Add to holdings' : 'Add to watchlist'}</Text>
                 </View>
               </Pressable>
             )}

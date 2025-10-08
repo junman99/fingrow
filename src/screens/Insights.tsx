@@ -70,7 +70,7 @@ export const Insights: React.FC = () => {
 
   return (
     <ScreenScroll>
-      <AppHeader title="Insights" right={<Pressable onPress={handleEmailCSV}><Text style={{ color: get('accent.primary') as string, fontWeight: '700' }}>Email CSV</Text></Pressable>} />
+      <AppHeader title="Insights" right={<Pressable accessibilityRole="button" onPress={handleEmailCSV}><Text style={{ color: get('accent.primary') as string, fontWeight: '700' }}>Email CSV</Text></Pressable>} />
       <View style={{ padding: spacing.s16, gap: spacing.s16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Pressable onPress={() => setOffset(offset - 1)} hitSlop={12} style={{ padding: spacing.s8 }}><Text style={{ color: get('text.primary') as string, fontSize: 18 }}>{'<'}</Text></Pressable>

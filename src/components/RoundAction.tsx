@@ -12,7 +12,7 @@ const RoundAction: React.FC<Props> = ({ icon, iconName, label, onPress, primary 
   const fg = primary ? (get('text.onPrimary') as string) : (get('text.primary') as string);
   return (
     <View style={{ alignItems: 'center', width: 72 }}>
-      <Pressable
+      <Pressable accessibilityRole="button"
         onPress={onPress}
         style={({ pressed }) => ({
           width: 56, height: 56, borderRadius: 28,

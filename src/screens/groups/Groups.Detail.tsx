@@ -4,6 +4,7 @@ import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler'
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { addMember, deleteBill, deleteMember, getGroup } from '../../storage/groups';
 import type { Bill, Group } from '../../types/groups';
+import { Screen } from '../../components/Screen';
 
 export default function GroupDetail({ route, navigation }: any) {
   const { groupId } = route.params as { groupId: string };
@@ -37,6 +38,7 @@ export default function GroupDetail({ route, navigation }: any) {
   );
 
   return (
+  <Screen>
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: bg }}>
       <View style={{ padding: 16, gap: 16 }}>
 
@@ -56,7 +58,7 @@ export default function GroupDetail({ route, navigation }: any) {
             <TouchableOpacity
               onPress={async () => {
                 if (!memberName.trim()) return;
-                await addMember(groupId, memberName.trim());
+                await addMember(groupId, { id: Math.random().toString(36).slice(2) + Date.now().toString(36), name: memberName.trim() });
                 setMemberName('');
                 load();
               }}
@@ -120,5 +122,6 @@ export default function GroupDetail({ route, navigation }: any) {
         </View>
       </View>
     </GestureHandlerRootView>
-  );
+    </Screen>
+);
 }

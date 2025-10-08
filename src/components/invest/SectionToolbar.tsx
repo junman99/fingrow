@@ -11,14 +11,20 @@ type Props = {
   sortLabel?: string;
   filterLabel?: string;
   editLabel?: string;
+  onAdd?: () => void;
+  addLabel?: string;
+  collapsed?: boolean;
+  onToggle?: () => void;
+  subtitle?: string;
 };
 
-export default function SectionToolbar({ title, onFilter, onSort, onEdit, sortLabel='Sort', filterLabel='Filter', editLabel='Edit' }: Props) {
+export default function SectionToolbar({ title, onFilter, onSort, onEdit, sortLabel='Sort', filterLabel='Filter', editLabel='Edit', onAdd, addLabel='Add', collapsed=false, onToggle, subtitle }: Props) {
   const { get } = useThemeTokens();
   const text = get('text.primary') as string;
+  const muted = get('text.muted') as string;
   const bg = get('surface.level2') as string;
 
-  const Btn = ({ label, onPress }: { label: string; onPress?: () => void }) => (
+  const Pill = ({ label, onPress }: { label: string; onPress?: () => void }) => (
     <Pressable
       onPress={onPress}
       style={{ backgroundColor: bg, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill }}
@@ -28,12 +34,18 @@ export default function SectionToolbar({ title, onFilter, onSort, onEdit, sortLa
   );
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.s16, marginBottom: spacing.s8, paddingHorizontal: spacing.s16 }}>
-      <Text style={{ color: text, fontWeight: '700' }}>{title}</Text>
-      <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-        {onFilter ? <Btn label={filterLabel} onPress={onFilter} /> : null}
-        {onSort ? <Btn label={sortLabel} onPress={onSort} /> : null}
-        {onEdit ? <Btn label={editLabel} onPress={onEdit} /> : null}
+    <View style={{ gap: spacing.s8, paddingTop: spacing.s8, marginBottom: spacing.s8, paddingHorizontal: spacing.s12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Pressable onPress={onToggle} accessibilityRole="button" accessibilityLabel={`${collapsed ? 'Expand' : 'Collapse'} ${title}`} style={{ flexDirection:'row', alignItems:'baseline' }}>
+          <Text style={{ color: text, fontWeight: '700', fontSize: 20 }}>{collapsed ? '▸' : '▾'} {title}</Text>
+          {subtitle ? <Text style={{ color: muted, marginLeft: spacing.s8, fontSize: 13 }}>{subtitle}</Text> : null}
+        </Pressable>
+        <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
+          {onFilter ? <Pill label={filterLabel!} onPress={onFilter} /> : null}
+          {onSort ? <Pill label={sortLabel!} onPress={onSort} /> : null}
+          {onEdit ? <Pill label={editLabel!} onPress={onEdit} /> : null}
+          {onAdd ? <Pill label={addLabel!} onPress={onAdd} /> : null}
+        </View>
       </View>
     </View>
   );

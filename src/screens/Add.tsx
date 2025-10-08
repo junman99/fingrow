@@ -125,7 +125,7 @@ export default function Add() {
       category: category?.label || (mode === 'expense' ? 'Expense' : 'Income'),
       date: txDate.toISOString(),
       note: notes || undefined,
-      account,
+      
     });
     nav.goBack();
   };
@@ -151,7 +151,7 @@ export default function Add() {
         anchorISO: new Date().toISOString()
       };
       await addRecurring(payload as any);
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackStyle.Success);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setToast('Saved as recurring');
       setToastVisible(true);
       setTimeout(() => setToastVisible(false), 1200);
@@ -172,7 +172,7 @@ export default function Add() {
       category: category?.label || (mode === 'expense' ? 'Expense' : 'Income'),
       date: txDate.toISOString(),
       note: notes || undefined,
-      account,
+      
     });
     setToast(`$${amt.toFixed(2)} • ${category?.label || ''} added`);
     setToastVisible(true);
@@ -189,7 +189,7 @@ export default function Add() {
       category: category?.label || (mode === 'expense' ? 'Expense' : 'Income'),
       date: txDate.toISOString(),
       note: notes || undefined,
-      account,
+      
     });
     nav.goBack();
   };
@@ -203,7 +203,7 @@ export default function Add() {
     const Seg = (m: Mode, label: string) => {
       const on = mode === m;
       return (
-        <Pressable onPress={() => setMode(m)} style={({ pressed }) => ({
+        <Pressable accessibilityRole="button" onPress={() => setMode(m)} style={({ pressed }) => ({
           height: 52,
           borderRadius: radius.pill,
           alignItems: 'center',

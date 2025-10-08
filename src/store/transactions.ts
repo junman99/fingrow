@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type TxType = 'expense' | 'income';
-export type Transaction = { id: string; type: TxType; amount: number; category: string; date: string; note?: string; };
+export type Transaction = { id: string; type: TxType; amount: number; category: string; date: string; note?: string; title?: string; };
 
 type State = {
   transactions: Transaction[];
@@ -13,6 +13,8 @@ type State = {
   clearAll: () => Promise<void>;
   hydrate: () => Promise<void>;
   restore: (tx: Transaction) => Promise<void>;
+  updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<void>;
+  deleteTransaction: (id: string) => Promise<void>;
 };
 
 const KEY = 'fingrow/transactions';
@@ -51,5 +53,15 @@ export const useTxStore = create<State>((set, get) => ({
     const raw = await AsyncStorage.getItem(KEY);
     const parsed: Transaction[] = raw ? JSON.parse(raw) : [];
     set({ transactions: parsed, ready: true });
+  },
+  updateTransaction: async (id, updates) => {
+    const arr = (get().transactions || []).map(t => t.id === id ? { ...t, ...updates } : t);
+    set({ transactions: arr });
+    await AsyncStorage.setItem(KEY, JSON.stringify(arr));
+  },
+  deleteTransaction: async (id) => {
+    const arr = (get().transactions || []).filter(t => t.id !== id);
+    set({ transactions: arr });
+    await AsyncStorage.setItem(KEY, JSON.stringify(arr));
   }
 }));

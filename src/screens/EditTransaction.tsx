@@ -1,10 +1,11 @@
 
 import React, { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
+import { View, Text, TextInput, Pressable } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
 import { useTxStore } from '../store/transactions';
+import { ScreenScroll } from '../components/ScreenScroll';
 
 export default function EditTransaction() {
   const { get } = useThemeTokens();
@@ -41,7 +42,7 @@ export default function EditTransaction() {
   }
 
   return (
-    <ScrollView style={{ flex: 1, padding: spacing.s16 }}>
+    <ScreenScroll style={{ flex: 1, padding: spacing.s16 }}>
       <Text style={{ color: get('text.primary') as string, fontSize: 18, fontWeight: '700', marginBottom: spacing.s12 }}>
         Edit Transaction
       </Text>
@@ -77,7 +78,7 @@ export default function EditTransaction() {
       <Text style={{ color: get('text.muted') as string, marginTop: spacing.s8 }}>Type</Text>
       <TextInput
         value={type}
-        onChangeText={setType}
+        onChangeText={(text) => setType(text as any)}
         placeholder="expense | income"
         placeholderTextColor={get('text.muted') as string}
         style={{ color: get('text.primary') as string, borderWidth: 1, borderColor: get('border.subtle') as string, borderRadius: radius.md, padding: spacing.s10 }}
@@ -93,13 +94,13 @@ export default function EditTransaction() {
       />
 
       <View style={{ flexDirection: 'row', marginTop: spacing.s16, gap: spacing.s12 }}>
-        <Pressable onPress={save} style={{ paddingVertical: spacing.s12, paddingHorizontal: spacing.s16, borderRadius: radius.lg, backgroundColor: get('accent.primary') as string }}>
+        <Pressable accessibilityRole="button" onPress={save} style={{ paddingVertical: spacing.s12, paddingHorizontal: spacing.s16, borderRadius: radius.lg, backgroundColor: get('accent.primary') as string }}>
           <Text style={{ color: get('text.onAccent') as string, fontWeight: '700' }}>Save</Text>
         </Pressable>
         <Pressable onPress={() => { deleteTransaction(id); nav.goBack(); }} style={{ paddingVertical: spacing.s12, paddingHorizontal: spacing.s16, borderRadius: radius.lg, backgroundColor: get('semantic.dangerSoft') as string }}>
           <Text style={{ color: get('semantic.danger') as string, fontWeight: '700' }}>Delete</Text>
         </Pressable>
       </View>
-    </ScrollView>
+    </ScreenScroll>
   );
 }

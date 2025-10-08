@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { ScreenScroll } from '../components/ScreenScroll';
+import { Screen } from '../components/Screen';
+// FinGrow TODO: Avoid nesting FlatList inside ScreenScroll; prefer FlatList as primary scroller.
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
+import { isCryptoSymbol, baseCryptoSymbol, fetchCryptoOhlc } from '../lib/coingecko';
 import { useInvestStore } from '../store/invest';
 import { useProfileStore } from '../store/profile';
 import { useRoute, useNavigation } from '@react-navigation/native';
@@ -28,7 +30,7 @@ export function Instrument() {
   const accent = get('accent.primary') as string;
 
   const [tf, setTf] = useState<'1M'|'6M'|'1Y'>('1M');
-  const [cryptoBars, setCryptoBars] = useState<Array<{t:number;o:number;h:number;l:number;c:number}>>([]);
+  const [cryptoBars, setCryptoBars] = useState<Array<{t:number;o:number;h:number;l:number;c:number;v:number}>>([]);
   const [loadingBars, setLoadingBars] = useState(false);
   const [mode, setMode] = useState<'line'|'candle'>('line');
 
@@ -48,7 +50,7 @@ export function Instrument() {
         const days = tf==='1M' ? 30 : tf==='6M' ? 180 : 365;
         const base = baseCryptoSymbol(symbol)!;
         const bars = await fetchCryptoOhlc(base, days);
-        setCryptoBars(bars.map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c })));
+        setCryptoBars(bars.map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: 0 })));
       } finally { setLoadingBars(false); }
     };
     load();
@@ -65,12 +67,12 @@ export function Instrument() {
   const lo52 = bars.length ? Math.min(...bars.slice(-260).map(b => b.l)) : undefined;
 
   return (
-    <ScreenScroll allowBounce>
+    <Screen>
       <View style={{ padding: spacing.s16, gap: spacing.s12 }}>
         {/* Header with Buy/Sell */}
         <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
           <Text style={{ color: text, fontWeight:'700', fontSize: 24 }}>{symbol}</Text>
-          <Pressable onPress={() => nav.navigate('AddLot', { symbol })} style={{ backgroundColor: accent, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill }}>
+          <Pressable accessibilityRole="button" onPress={() => nav.navigate('AddLot', { symbol })} style={{ backgroundColor: accent, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill }}>
             <Text style={{ color: get('text.onPrimary') as string, fontWeight:'700' }}>Buy / Sell</Text>
           </Pressable>
         </View>
@@ -155,6 +157,6 @@ export function Instrument() {
           })()}
         </View>
       </View>
-    </ScreenScroll>
+    </Screen>
   );
 }

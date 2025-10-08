@@ -3,8 +3,15 @@ import { View, Text, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
+const rgbToRgba = (rgbStr: string, alpha: number) => {
+  const m = rgbStr.match(/rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d\.]+))?\)/);
+  if (!m) return rgbStr;
+  const r = m[1], g = m[2], b = m[3];
+  return `rgba(${r},${g},${b},${alpha})`;
+};
 
-type Props = { name?: string; email?: string; avatarUri?: string; };
+
+type Props = { name?: string; email?: string; avatarUri?: string; variant?: 'card' | 'blend' };
 
 const initials = (s?: string) => {
   if (!s) return '👋';
@@ -13,7 +20,7 @@ const initials = (s?: string) => {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 };
 
-const ProfileHero: React.FC<Props> = ({ name='There', email, avatarUri }) => {
+const ProfileHero: React.FC<Props> = ({ name='There', email, avatarUri, variant = 'blend' }) => {
   const { get } = useThemeTokens();
   return (
     <View style={{ borderRadius: radius.lg, overflow: 'hidden' }}>

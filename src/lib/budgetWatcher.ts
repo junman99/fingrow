@@ -1,7 +1,6 @@
 
 import { useTxStore } from '../store/transactions';
-import { useBudgetsStore, getBudgetStatus } from '../store/budgets';
-import { initNotifications } from './notifications';
+import { useBudgetsStore } from '../store/budgets';
 import * as Notifications from 'expo-notifications';
 
 /**
@@ -9,7 +8,7 @@ import * as Notifications from 'expo-notifications';
  */
 export async function setupBudgetWatcher() {
   try {
-    await initNotifications();
+    await Notifications.requestPermissionsAsync();
   } catch {}
   try {
     await useBudgetsStore.getState().hydrate();
@@ -20,9 +19,7 @@ export async function setupBudgetWatcher() {
 
   // subscribe to future changes
   useTxStore.subscribe(
-    (state) => state.transactions,
-    () => checkAndNotify(),
-    { equalityFn: (a, b) => a.length === b.length } as any
+    () => checkAndNotify()
   );
 }
 
@@ -34,26 +31,34 @@ function nowYM() {
 async function checkAndNotify() {
   const { y, m } = nowYM();
   const txs = useTxStore.getState().transactions;
-  const budgets = useBudgetsStore.getState().budgets;
+  const budgetState = useBudgetsStore.getState() as any;
+  const budgets = budgetState.budgets || {};
   if (!budgets || Object.keys(budgets).length === 0) return;
 
-  const statuses = getBudgetStatus(txs, budgets, y, m);
-  for (const s of statuses) {
-    if (s.limit <= 0) continue;
+  // Simple budget check without getBudgetStatus
+  for (const [category, budget] of Object.entries(budgets) as any) {
+    const spent = txs
+      .filter((t: any) => t.type === 'expense' && t.category === category)
+      .reduce((s: number, t: any) => s + Math.abs(t.amount || 0), 0);
 
-    if (s.ratio >= 1) {
+    const limit = budget.limit || 0;
+    if (limit <= 0) continue;
+
+    const ratio = spent / limit;
+
+    if (ratio >= 1) {
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: `Budget exceeded: ${s.category}`,
-          body: `You've spent ${fmtCurrency(s.spent)} of ${fmtCurrency(s.limit)} this month.`,
+          title: `Budget exceeded: ${category}`,
+          body: `You've spent ${fmtCurrency(spent)} of ${fmtCurrency(limit)} this month.`,
         },
         trigger: null,
       });
-    } else if (s.ratio >= s.warnAt) {
+    } else if (ratio >= 0.8) {
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: `You're close on ${s.category}`,
-          body: `At ${(s.ratio * 100).toFixed(0)}% of your ${fmtCurrency(s.limit)} budget.`,
+          title: `You're close on ${category}`,
+          body: `At ${(ratio * 100).toFixed(0)}% of your ${fmtCurrency(limit)} budget.`,
         },
         trigger: null,
       });

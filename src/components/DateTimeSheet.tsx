@@ -63,7 +63,7 @@ export default function DateTimeSheet({ visible, date, onCancel, onConfirm }: Pr
     <BottomSheet visible={visible} onClose={onCancel} height={560}>
       {/* Header */}
       <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between', marginBottom: spacing.s8 }}>
-        <Pressable onPress={onCancel} hitSlop={12}><Text style={{ color: accent, fontWeight:'700' }}>Cancel</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={12}><Text style={{ color: accent, fontWeight:'700' }}>Cancel</Text></Pressable>
         <Text style={{ color: textPrimary, fontWeight:'700' }}>{sel.toDateString()} · {sel.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
         <Pressable onPress={onDone} hitSlop={12}><Text style={{ color: accent, fontWeight:'700' }}>Done</Text></Pressable>
       </View>

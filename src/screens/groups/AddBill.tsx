@@ -9,6 +9,7 @@ import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useGroupsStore } from '../../store/groups';
+import { formatCurrency } from '../../lib/format';
 import type { ID } from '../../types/groups';
 
 const KEY_ADVANCED_OPEN = 'fingrow/ui/addbill/advancedOpen';

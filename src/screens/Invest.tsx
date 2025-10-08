@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
-import { View, Text, FlatList, Pressable, RefreshControl } from 'react-native';
-import { Screen } from '../components/Screen';
-import { SectionList } from 'react-native';
+import React from 'react';
+import { Card } from '../components/Card';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScreenScroll } from '../components/ScreenScroll';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { useInvestStore } from '../store/invest';
@@ -9,202 +9,373 @@ import { formatCurrency, formatPercent } from '../lib/format';
 import { useProfileStore } from '../store/profile';
 import { useNavigation } from '@react-navigation/native';
 import LineChart from '../components/LineChart';
-import HoldingRow from '../components/invest/HoldingRow';
-import WatchRow from '../components/invest/WatchRow';
-import SectionToolbar from '../components/invest/SectionToolbar';
+import { computePnL } from '../lib/positions';
+import AppHeader from '../components/AppHeader';
+import PortfolioListCard from '../components/invest/PortfolioListCard';
+import CreatePortfolioModal from '../components/invest/CreatePortfolioModal';
+import PortfolioDetailSheet from '../components/invest/PortfolioDetailSheet';
+import AddHoldingSheet from '../components/invest/AddHoldingSheet';
+import PortfolioManagerModal from '../components/invest/PortfolioManagerModal';
+import EditPortfolioModal from '../components/invest/EditPortfolioModal';
+import HoldingsFilterSheet from '../components/invest/HoldingsFilterSheet';
+import HoldingsSortSheet from '../components/invest/HoldingsSortSheet';
 
 export function Invest() {
   const { get } = useThemeTokens();
   const nav = useNavigation<any>();
-  const [pfTf, setPfTf] = React.useState<'1M'|'6M'|'YTD'|'1Y'|'ALL'>('6M');
+  const [pfTf, setPfTf] = React.useState<'1D'|'5D'|'1M'|'6M'|'YTD'|'1Y'|'ALL'>('6M');
   const [hideAmounts, setHideAmounts] = React.useState(false);
-  const { holdings, watchlist, quotes, hydrate, refreshQuotes, ready, lastUpdated, refreshing, error, fxRates, refreshFx } = useInvestStore();
+  const [showCreateSheet, setShowCreateSheet] = React.useState(false);
+  const [showManager, setShowManager] = React.useState(false);
+  const [showAddHolding, setShowAddHolding] = React.useState(false);
+  const [addMode, setAddMode] = React.useState<'holdings'|'watchlist'>('holdings');
+  const [editPortfolioId, setEditPortfolioId] = React.useState<string | null>(null);
+    // Selection mode for deleting portfolios
+  const [deleteMode, setDeleteMode] = React.useState(false);
+  const [selectedPids, setSelectedPids] = React.useState<string[]>([]);
+  const onToggleSelectPid = React.useCallback((pid: string) => {
+    setSelectedPids(prev => prev.includes(pid) ? prev.filter(x => x!==pid) : [...prev, pid]);
+  }, []);
+  const deletePortfolio = useInvestStore(s => (s as any).deletePortfolio);
+  const onDeleteSelected = React.useCallback(async () => {
+    for (const pid of selectedPids) { try { await deletePortfolio(pid); } catch {} }
+    setSelectedPids([]); setDeleteMode(false);
+  }, [selectedPids, deletePortfolio]);
+const onStartDeleteMode = React.useCallback(() => { setDeleteMode(true); setSelectedPids([]); }, []);
+  const [currentPortfolioId, setCurrentPortfolioId] = React.useState<string|null>(null);
+  const [modalPortfolioId, setModalPortfolioId] = React.useState<string|null>(null);
+  const [showHoldingsFilter, setShowHoldingsFilter] = React.useState(false);
+  const [showHoldingsSort, setShowHoldingsSort] = React.useState(false);
+  const [qHold, setQHold] = React.useState('');
+  const [minWeight, setMinWeight] = React.useState(0);
+  const [sortKey, setSortKey] = React.useState<'mv'|'pnlAbs'|'pnlPct'|'ticker'>('mv');
+  const [sortDir, setSortDir] = React.useState<'asc'|'desc'>('desc');
+
+  const { portfolios, quotes, hydrate, refreshQuotes, refreshing, error, fxRates, refreshFx, allSymbols } = useInvestStore();
   const { profile } = useProfileStore();
 
-  React.useEffect(() => { hydrate(); refreshFx(); }, []);
-  React.useEffect(() => { if (watchlist.length) refreshQuotes(watchlist); }, [watchlist]);
+  React.useEffect(() => { hydrate(); refreshFx(); /* auto-refresh quotes on mount */ const syms = allSymbols(); refreshQuotes(syms && syms.length ? syms : undefined); }, []);
 
-  const bg = get('surface.level1') as string;
-  const text = get('text.primary') as string;
-  const muted = get('text.muted') as string;
-  const border = get('border.subtle') as string;
+  // Aggregate holdings across all portfolios for the overview chart
+  const effectiveHoldings: Record<string, any> = React.useMemo(() => {
+    const out: Record<string, any> = {};
+    Object.values(portfolios || {}).forEach((p:any) => {
+      if (!p || !p.holdings) return;
+      Object.values(p.holdings || {}).forEach((h:any) => {
+        const sym = h.symbol;
+        if (!out[sym]) out[sym] = { ...h, lots: [] };
+        out[sym].lots = out[sym].lots.concat(h.lots || []);
+      });
+    });
+    return out;
+  }, [portfolios]);
 
-  const symbols = Object.keys(holdings);
-  const allSyms = Array.from(new Set([...symbols, ...watchlist]));
+  const symbols = React.useMemo(()=> Object.keys(effectiveHoldings), [effectiveHoldings]);
 
-  const totalUSD = symbols.reduce((acc, sym) => {
-    const q = quotes[sym]?.last || 0;
-    const qty = (holdings[sym]?.lots || []).reduce((s,l)=> s + (l.side==='buy'? l.qty : -l.qty), 0);
-    return acc + q * qty;
-  }, 0);
+  const totalUSD = React.useMemo(() => {
+    return symbols.reduce((acc, sym) => {
+      const last = quotes[sym]?.last || 0;
+      const qty = (effectiveHoldings[sym]?.lots || []).reduce((s:any,l:any)=> s + (l.side==='buy'? l.qty : -l.qty), 0);
+      return acc + last * qty;
+    }, 0);
+  }, [symbols, effectiveHoldings, quotes]);
 
-  const cur = (profile?.currency || 'USD').toUpperCase();
+  const cur = ((profile?.currency) || 'USD').toUpperCase();
   const rate = fxRates?.rates?.[cur] || (cur==='USD'?1:undefined);
   const totalValue = rate ? totalUSD * rate : totalUSD;
-  // Build a portfolio time series (last 180 days) by summing per-symbol position value each day.
-  // Build a portfolio time series based on selected timeframe
+
   const portfolioLine = React.useMemo(() => {
-    const oneDay = 24*60*60*1000;
-    const curCode = (profile?.currency || 'USD').toUpperCase();
-    const fx = fxRates?.rates?.[curCode] || (curCode==='USD' ? 1 : undefined);
-
-    const symbols = Object.keys(holdings);
-    if (!symbols.length) return [] as Array<{t:number; v:number}>;
-
-    // Prepare price maps and lots per symbol
+    const syms = Object.keys(effectiveHoldings);
+    if (!syms.length) return [] as Array<{t:number; v:number}>;
     const priceMaps: Record<string, Record<string, number>> = {};
     const positionLots: Record<string, { side:'buy'|'sell'; qty:number; date:number }[]> = {};
-
-    symbols.forEach(sym => {
+    syms.forEach(sym => {
       const q = quotes[sym];
       const map: Record<string, number> = {};
       if (q?.bars && q.bars.length) {
-        q.bars.forEach(b => { const key = new Date(b.t).toISOString().slice(0,10); map[key] = b.c; });
+        let lastC: number | undefined;
+        q.bars.forEach(b => {
+          const c = Number((b as any).c);
+          if (!Number.isFinite(c) || c <= 0) return;
+          if (lastC && (c > lastC * 5 || c < lastC / 5)) return;
+          const key = new Date((b as any).t).toISOString().slice(0,10);
+          map[key] = c;
+          lastC = c;
+        });
       } else if (q?.line && q.line.length) {
-        q.line.forEach(p => { const key = new Date(p.t).toISOString().slice(0,10); map[key] = p.v; });
+        const last = Number.isFinite((q as any).last) ? (q as any).last as number : undefined;
+        (q.line as any[]).forEach(p => {
+          const v = (p as any)?.v;
+          if (Number.isFinite(v) && v > 0 && (!last || v < last * 5)) {
+            const key = new Date((p as any).t).toISOString().slice(0,10);
+            map[key] = v as number;
+          }
+        });
       }
       priceMaps[sym] = map;
-      const lots = (holdings[sym]?.lots || []).map(l => ({ side: l.side, qty: l.qty, date: new Date(l.date).getTime() }));
+      const lots = (effectiveHoldings[sym]?.lots || []).map((l:any) => ({ side: l.side, qty: l.qty, date: new Date(l.date).getTime() }));
       positionLots[sym] = lots.sort((a,b)=> a.date - b.date);
     });
+    // date domain & forward-fill
+    // Collect union of all dates present across symbols
+    const allDates = new Set<string>();
+    Object.values(priceMaps).forEach(m => Object.keys(m).forEach(d => allDates.add(d)));
+    const dates = Array.from(allDates).sort(); // 'YYYY-MM-DD'
 
-    // Determine range
-    const now = new Date();
-    let start: Date;
-    if (pfTf === '1M') start = new Date(now.getFullYear(), now.getMonth()-1, now.getDate());
-    else if (pfTf === '6M') start = new Date(now.getFullYear(), now.getMonth()-6, now.getDate());
-    else if (pfTf === 'YTD') start = new Date(now.getFullYear(), 0, 1);
-    else if (pfTf === '1Y') start = new Date(now.getFullYear()-1, now.getMonth(), now.getDate());
-    else start = new Date(now.getFullYear()-5, now.getMonth(), now.getDate()); // ALL ~5y cap for perf
-
-    const days = Math.max(1, Math.ceil((now.getTime() - start.getTime())/oneDay));
-    let lastPrices: Record<string, number> = {};
-    const out: Array<{ t:number; v:number }> = [];
-
-    for (let d = 0; d <= days; d++) {
-      const dt = new Date(start.getTime() + d * oneDay);
-      const key = dt.toISOString().slice(0,10);
-      let totalUSD = 0;
-
-      symbols.forEach(sym => {
-        const map = priceMaps[sym] || {};
-        if (map[key] !== undefined) lastPrices[sym] = map[key];
-        const price = lastPrices[sym];
-        if (price === undefined) return;
-
-        // qty position on that date
-        const lots = positionLots[sym] || [];
-        let qty = 0;
-        for (const l of lots) {
-          if (l.date <= dt.getTime()) qty += (l.side==='buy' ? l.qty : -l.qty);
-          else break;
+    // Build a forward-filled price map per symbol (no back-fill before first price)
+    const ff: Record<string, Record<string, number>> = {};
+    syms.forEach(sym => {
+      const src = priceMaps[sym] || {};
+      const dst: Record<string, number> = {};
+      let lastKnown: number | undefined;
+      for (const d of dates) {
+        if (Object.prototype.hasOwnProperty.call(src, d)) {
+          const val = src[d];
+          if (lastKnown && (val > lastKnown * 5 || val < lastKnown / 5)) {
+            // ignore absurd jump; keep lastKnown for this day
+            dst[d] = lastKnown;
+          } else {
+            dst[d] = val;
+            lastKnown = val;
+          }
+        } else if (lastKnown !== undefined) {
+          dst[d] = lastKnown;
         }
-        if (qty <= 0) return;
-        totalUSD += qty * price;
+      }
+      ff[sym] = dst;
+    });
+
+    const points: Array<{t:number; v:number}> = dates.map(d => {
+      let total = 0;
+      syms.forEach(sym => {
+        const price = ff[sym]?.[d];
+        if (price !== undefined) {
+          const lots = positionLots[sym];
+          const cutTs = new Date(d).getTime();
+          const qty = lots.reduce((s,l) => s + (l.date <= cutTs ? (l.side==='buy' ? l.qty : -l.qty) : 0), 0);
+          if (qty) total += qty * price;
+        }
       });
+      return { t: new Date(d).getTime(), v: (rate || 1) * total };
+    });
+    return points.slice(-520); // keep it light
+  }, [effectiveHoldings, quotes, rate]);
 
-      const value = fx ? totalUSD * fx : totalUSD;
-      out.push({ t: dt.getTime(), v: Number(value.toFixed(2)) });
+// Always have something to render for the chart (placeholder if empty)
+const displaySeries = React.useMemo(() => {
+  if (portfolioLine && portfolioLine.length) return portfolioLine;
+  const now = Date.now();
+  const day = 24 * 3600 * 1000;
+  return Array.from({ length: 14 }, (_, i) => ({ t: now - (13 - i) * day, v: 0 }));
+}, [portfolioLine]);
+
+// Timeframe-filtered view
+const visibleSeries = React.useMemo(() => {
+  const s = portfolioLine || [];
+  if (!s.length) return s;
+  const endTs = s[s.length - 1].t;
+  const end = new Date(endTs);
+  const msDay = 24 * 3600 * 1000;
+
+  const since = (() => {
+    switch (pfTf) {
+      case '1D': return endTs - 1 * msDay;
+      case '5D': return endTs - 5 * msDay;
+      case '1M': { const d = new Date(end); d.setMonth(d.getMonth() - 1); return d.getTime(); }
+      case '6M': { const d = new Date(end); d.setMonth(d.getMonth() - 6); return d.getTime(); }
+      case '1Y': { const d = new Date(end); d.setFullYear(d.getFullYear() - 1); return d.getTime(); }
+      case 'YTD': { const d = new Date(end); d.setMonth(0,1); d.setHours(0,0,0,0); return d.getTime(); }
+      default: return 0; // ALL
     }
-    return out;
-  }, [pfTf, holdings, quotes, fxRates, profile]);
+  })();
 
-  const pfBaseline = portfolioLine.length ? portfolioLine[0].v : 0;
-  const pfLast = portfolioLine.length ? portfolioLine[portfolioLine.length-1].v : 0;
-  const pfPrev = portfolioLine.length>1 ? portfolioLine[portfolioLine.length-2].v : pfLast;
-  const pfTodayAbs = Number((pfLast - pfPrev).toFixed(2));
-  const pfTodayPct = pfPrev ? Number(((pfLast - pfPrev)/pfPrev*100).toFixed(2)) : 0;
-  const pfRangeAbs = Number((pfLast - pfBaseline).toFixed(2));
-  const pfRangePct = pfBaseline ? Number(((pfLast - pfBaseline)/pfBaseline*100).toFixed(2)) : 0;
+  return pfTf === 'ALL' ? s : s.filter(p => p.t >= since);
+}, [portfolioLine, pfTf]);
+
+// Change label (color + text)
+const changeInfo = React.useMemo(() => {
+  const s = (visibleSeries && visibleSeries.length >= 2) ? visibleSeries : displaySeries;
+  if (!s || s.length < 2) return { color: get('text.muted') as string, text: '+0 (+0.0%)' };
+  const first = s[0].v;
+  const last = s[s.length - 1].v;
+  const delta = last - first;
+  const pct = first !== 0 ? (delta / Math.abs(first)) * 100 : 0;
+  const color = delta > 0 ? (get('semantic.success') as string) : delta < 0 ? (get('semantic.danger') as string) : (get('text.muted') as string);
+  const sign = delta > 0 ? '+' : (delta < 0 ? '' : '+');
+  const absDelta = Math.abs(delta);
+  const text = `${sign}${absDelta.toLocaleString(undefined, { maximumFractionDigits: 2 })} (${sign}${Math.abs(pct).toFixed(1)}%)`;
+  return { color, text };
+}, [visibleSeries, displaySeries, get]);
 
 
-  type Row = { key: string; sym: string; kind: 'holding' | 'watch' };
 
-  const sections: Array<{ title: string; data: Row[] }> = [
-    { title: 'Holdings', data: symbols.map(sym => ({ key: 'h:'+sym, sym, kind: 'holding' })) },
-    { title: 'Watchlist', data: allSyms.map(sym => ({ key: 'w:'+sym, sym, kind: 'watch' })) },
-  ];
+  
 
-  const renderHeader = () => (
-    <View style={{ padding: spacing.s16, gap: spacing.s12 }}>
-      {/* top toolbar */}
-      <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between' }}>
-        <Text style={{ color: get('text.primary') as string, fontWeight:'700' }}>Invest</Text>
-        <View style={{ flexDirection:'row', gap: spacing.s8 }}>
-          <Pressable onPress={() => nav.navigate('EditWatchlist')} style={{ backgroundColor: get('surface.level2') as string, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill }}>
-            <Text style={{ color: get('text.primary') as string, fontWeight:'700' }}>Edit</Text>
-          </Pressable>
-          <Pressable onPress={() => nav.navigate('Search')} style={{ backgroundColor: get('accent.primary') as string, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill }}>
-            <Text style={{ color: get('text.onPrimary') as string, fontWeight:'700' }}>Add</Text>
-          </Pressable>
-        </View>
-      </View>
+// Change labels
+const todayInfo = React.useMemo(() => {
+  const s = portfolioLine || [];
+  if (!s || s.length < 2) return { color: get('text.muted') as string, text: '+0 (+0.0%) Today' };
+  const last = s[s.length - 1].v;
+  const prev = s[s.length - 2].v;
+  const delta = last - prev;
+  const pct = prev !== 0 ? (delta / Math.abs(prev)) * 100 : 0;
+  const color = delta > 0 ? (get('semantic.success') as string) : delta < 0 ? (get('semantic.danger') as string) : (get('text.muted') as string);
+  const sign = delta > 0 ? '+' : (delta < 0 ? '' : '+');
+  const absDelta = Math.abs(delta);
+  const text = `${sign}${absDelta.toLocaleString(undefined, { maximumFractionDigits: 2 })} (${sign}${Math.abs(pct).toFixed(1)}%) Today`;
+  return { color, text };
+}, [portfolioLine, get]);
 
-      {error ? (
-        <View style={{ backgroundColor: get('surface.level2') as string, borderRadius: radius.lg, padding: spacing.s12 }}>
-          <Text style={{ color: get('text.muted') as string }}>Offline or unable to refresh. Showing cached data.</Text>
-        </View>
-      ) : null}
-      <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
-        <Text style={{ color: get('text.primary') as string, fontWeight:'700' }}>Invest</Text>
-        <Pressable onPress={() => nav.navigate('Search')} style={{ backgroundColor: get('surface.level2') as string, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill }}>
-          <Text style={{ color: get('text.primary') as string }}>Add to watchlist</Text>
-        </Pressable>
-      </View>
+const rangeInfo = React.useMemo(() => {
+  const s = (visibleSeries && visibleSeries.length >= 2) ? visibleSeries : displaySeries;
+  if (!s || s.length < 2) return { color: get('text.muted') as string, text: '+0 (+0.0%)' };
+  const first = s[0].v;
+  const last = s[s.length - 1].v;
+  const delta = last - first;
+  const pct = first !== 0 ? (delta / Math.abs(first)) * 100 : 0;
+  const color = delta > 0 ? (get('semantic.success') as string) : delta < 0 ? (get('semantic.danger') as string) : (get('text.muted') as string);
+  const sign = delta > 0 ? '+' : (delta < 0 ? '' : '+');
+  const absDelta = Math.abs(delta);
+  const text = `${sign}${absDelta.toLocaleString(undefined, { maximumFractionDigits: 2 })} (${sign}${Math.abs(pct).toFixed(1)}%)`;
+  return { color, text };
+}, [visibleSeries, displaySeries, get]);
+const text = get('text.primary') as string;
+  const muted = get('text.muted') as string;
+  const good = get('semantic.success') as string;
 
-      <View style={{ backgroundColor: bg, borderRadius: radius.lg, padding: spacing.s16, marginTop: spacing.s12, borderWidth: 1, borderColor: get('border.subtle') as string, overflow: 'hidden' }}>
-        <Text style={{ color: muted, marginBottom: spacing.s8 }}>Portfolio</Text>
-        <Text style={{ color: text, fontWeight: '700', fontSize: 24 }}>{formatCurrency(totalValue, cur, { compact: false })}</Text>
-        <Text style={{ color: muted, marginTop: spacing.s4 }}>{lastUpdated ? `Last updated ${new Date(lastUpdated).toLocaleTimeString()}` : ''}</Text>
-        {/* KPI lines */}
-        <Text style={{ marginTop: spacing.s4, color: (pfTodayAbs>=0 ? (get('semantic.success') as string) : (get('semantic.danger') as string)) }}>{`${pfTodayAbs>=0?'+':''}${formatCurrency(Math.abs(pfTodayAbs), cur)} (${formatPercent(pfTodayPct)})`} Today</Text>
-        <Text style={{ color: (pfRangeAbs>=0 ? (get('semantic.success') as string) : (get('semantic.danger') as string)) }}>{`${pfRangeAbs>=0?'+':''}${formatCurrency(Math.abs(pfRangeAbs), cur)} (${formatPercent(pfRangePct)})`} {pfTf==='6M'?'Past 6 months': pfTf==='1M'?'Past month': pfTf==='YTD'?'Year to date': pfTf==='1Y'?'Past year':'All time'}</Text>
-        {portfolioLine.length ? (
-          <View style={{ marginTop: spacing.s12 }}>
-            <LineChart data={portfolioLine} height={160} baselineValue={pfBaseline} area showMarker />
-          </View>
-        ) : null}
-        {/* Timeframes */}
-        <View style={{ flexDirection:'row', gap: spacing.s8, marginTop: spacing.s12 }}>
-          {(['1D','5D','1M','6M','YTD','1Y','ALL'] as const).map(k => {
-            const disabled = (k==='1D' || k==='5D');
-            const on = pfTf===k;
-            return (
-              <Pressable key={k} disabled={disabled} onPress={() => setPfTf(k as any)} style={{ opacity: disabled? 0.4:1, backgroundColor: on ? (get('accent.primary') as string) : (get('surface.level2') as string), paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill }}>
-                <Text style={{ color: on ? (get('text.onPrimary') as string) : (get('text.primary') as string), fontWeight:'700' }}>{k}</Text>
-              </Pressable>
-            )
-          })}
-        </View>
-      </View>
-    </View>
-  );
+
+  const xTickStrategy = React.useMemo(() => {
+    if (pfTf === '1D' || pfTf === '5D') {
+      return { mode: 'day', every: 1 } as const; // every point
+    }
+    if (pfTf === '1M') {
+      // About ~6 labels across 1M
+      const len = (visibleSeries.length ? visibleSeries.length : displaySeries.length) || 0;
+      const every = Math.max(1, Math.round(len / 6));
+      return { mode: 'day', every } as const;
+    }
+    // Others: month labels
+    return { mode: 'month' } as const;
+  }, [pfTf, visibleSeries, displaySeries]);
 
   return (
-    <Screen>
-      <SectionList
-        refreshControl={undefined}
-        refreshing={refreshing}
-        onRefresh={() => refreshQuotes(allSyms)}
-        sections={sections}
-        keyExtractor={(item) => item.key}
-        ListHeaderComponent={renderHeader}
-        stickySectionHeadersEnabled={false}
-        renderSectionHeader={({ section }) => (
-          <SectionToolbar
-            title={section.title}
-            onEdit={section.title === 'Watchlist' ? () => nav.navigate('EditWatchlist' as never) : undefined}
-            onSort={() => {}}
-            onFilter={() => {}}
-          />
-        )}
-        renderItem={({ item }) => (
-  item.kind === 'holding'
-    ? <HoldingRow sym={item.sym} onPress={() => nav.navigate('Instrument' as never, { symbol: item.sym } as never)} />
-    : <WatchRow sym={item.sym} onPress={() => nav.navigate('Instrument' as never, { symbol: item.sym } as never)} />
-)}
-        contentInsetAdjustmentBehavior="never"
+    <ScreenScroll
+      refreshing={refreshing}
+      onRefresh={async () => { try { await refreshFx(); const syms = allSymbols(); await refreshQuotes(syms && syms.length ? syms : undefined); } catch (e) {} }} inTab>
+      <View style={{ padding: spacing.s16, gap: spacing.s16 }}>
+        <Text style={{ fontSize: 24, fontWeight: '800', color: get('text.primary') as string, marginTop: spacing.s12, marginBottom: spacing.s12 }}>Invest</Text>
+
+        {/* Overview card with chart */}
+        <Card style={{ padding: spacing.s16 }}>
+<Text style={{ color: text, fontWeight:'800', fontSize: 28 }}>{hideAmounts ? '•••' : formatCurrency(totalValue, cur)}</Text>
+          <Text style={{ color: todayInfo.color, marginTop: spacing.s4 }}>{todayInfo.text}</Text>
+<Text style={{ color: rangeInfo.color, marginTop: spacing.s4 }}>{rangeInfo.text}</Text>
+          {
+  <View style={{ marginTop: spacing.s12, marginHorizontal: -spacing.s8 }}>
+    <LineChart data={visibleSeries.length ? visibleSeries : displaySeries} height={160} yAxisWidth={28} padding={{ left: 6, right: 10, bottom: 17, top: 8 }} xTickStrategy={xTickStrategy} />
+  </View>
+}
+          {/* Timeframes */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.s8, paddingVertical: spacing.s8 }} bounces={true} overScrollMode="always">
+            {(['1D','5D','1M','6M','YTD','1Y','ALL'] as const).map(k => {
+              const disabled = false;
+              const on = pfTf===k;
+              return (
+                <Pressable accessibilityRole="button" key={k} disabled={disabled} onPress={() => setPfTf(k as any)} style={{ paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill, backgroundColor: on ? (get('accent.primary') as string) : (get('surface.level2') as string) }}>
+                  <Text style={{ color: on ? (get('text.onPrimary') as string) : (get('text.primary') as string), fontWeight:'700', fontSize: 14  }}>{k}</Text>
+                </Pressable>
+              )
+            })}
+          </ScrollView>
+          </Card>
+
+        {/* Portfolios card */}
+        <PortfolioListCard
+        selectionMode={deleteMode}
+        selectedIds={selectedPids}
+        onToggleSelect={onToggleSelectPid}
+        onDeleteSelected={onDeleteSelected}
+        onStartDeleteMode={onStartDeleteMode}
+        onOpenManager={() => setShowManager(true)}
+          onOpenPortfolio={(id) => setCurrentPortfolioId(id)}
+          onCreate={() => setShowCreateSheet(true)}
+        />
+      </View>
+
+
+      {/* Bottom sheet for adding a holding via symbol search (multi-add) */}
+      <AddHoldingSheet
+        visible={showAddHolding}
+        onClose={() => {
+          setShowAddHolding(false);
+          if (modalPortfolioId) { setCurrentPortfolioId(modalPortfolioId); }
+          setModalPortfolioId(null);
+        }}
+        portfolioId={modalPortfolioId}
+        mode={addMode}
       />
-    </Screen>
+{/* Sheets */}
+      <PortfolioDetailSheet
+        portfolioId={currentPortfolioId}
+        visible={!!currentPortfolioId}
+        dimmed={showAddHolding}
+        onClose={() => {
+          if (!showAddHolding) {
+            setCurrentPortfolioId(null);
+          }
+        }}
+        onEditWatchlist={() => { const id = currentPortfolioId; setCurrentPortfolioId(null); nav.navigate('EditWatchlist' as never, { portfolioId: id } as never); }}
+        onFilterHoldings={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setShowHoldingsFilter(true); }}
+        onSortHoldings={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setShowHoldingsSort(true); }}
+        onAddHolding={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setAddMode('holdings'); setShowAddHolding(true); }}
+      onOpenManager={() => setShowManager(true)}
+      onAddWatchlist={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setAddMode('watchlist'); setShowAddHolding(true); }}
+      />
+
+      <HoldingsFilterSheet
+        visible={showHoldingsFilter}
+        onClose={() => { setShowHoldingsFilter(false); if (modalPortfolioId) { setCurrentPortfolioId(modalPortfolioId); setModalPortfolioId(null); } }}
+        valueQuery={qHold}
+        onChangeQuery={setQHold}
+        valueMinWeight={minWeight}
+        onChangeMinWeight={setMinWeight}
+        onClear={() => { setQHold(''); setMinWeight(0); }}
+      />
+
+      <HoldingsSortSheet
+        visible={showHoldingsSort}
+        onClose={() => { setShowHoldingsSort(false); if (modalPortfolioId) { setCurrentPortfolioId(modalPortfolioId); setModalPortfolioId(null); } }}
+        valueKey={sortKey}
+        valueDir={sortDir}
+        onChange={(k,d) => { setSortKey(k); setSortDir(d); }}
+      />
+
+      <PortfolioManagerModal
+        visible={showManager}
+        onClose={() => setShowManager(false)}
+        onStartDelete={() => { setShowManager(false); onStartDeleteMode(); }}
+        onRequestEdit={(id: string) => { setShowManager(false); setEditPortfolioId(id); }}
+      />
+
+      <EditPortfolioModal
+        visible={!!editPortfolioId}
+        onClose={() => setEditPortfolioId(null)}
+        portfolioId={editPortfolioId}
+      />
+
+      <CreatePortfolioModal
+        visible={showCreateSheet}
+        onClose={() => setShowCreateSheet(false)}
+        defaultCurrency={(profile?.currency || 'SGD').toUpperCase()}
+        onConfirm={async (name, currency, type, benchmark) => {
+          const id = await (useInvestStore.getState() as any).createPortfolio(name, currency, { type, benchmark: benchmark === 'NONE' ? undefined : benchmark });
+          await (useInvestStore.getState() as any).setActivePortfolio(id);
+          setShowCreateSheet(false);
+          setCurrentPortfolioId(id);
+        }}
+      />
+    </ScreenScroll>
   );
 }
+
+export default Invest;

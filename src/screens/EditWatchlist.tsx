@@ -3,15 +3,19 @@ import { View, Text, Pressable, FlatList } from 'react-native';
 import { Screen } from '../components/Screen';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import Icon from '../components/Icon';
 import { useInvestStore } from '../store/invest';
 
 type Row = { key: string; sym: string };
 
 export default function EditWatchlist() {
+  const route = useRoute<any>();
+  const portfolioId = route.params?.portfolioId as (string | undefined);
   const { get } = useThemeTokens();
   const nav = useNavigation<any>();
-  const { watchlist, setWatch } = useInvestStore();
+  const watchlist = useInvestStore(s => (portfolioId ? (s.portfolios[portfolioId]?.watchlist ?? []) : s.watchlist));
+  const setWatch = useInvestStore(s => s.setWatch);
 
   const [data, setData] = useState<Row[]>(() => watchlist.map(s => ({ key: s, sym: s })));
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -24,7 +28,7 @@ export default function EditWatchlist() {
   const danger = get('semantic.danger') as string;
 
   const onDone = async () => {
-    await setWatch(data.map(d => d.sym));
+    await setWatch(data.map(d => d.sym), { portfolioId });
     nav.goBack();
   };
 
@@ -111,11 +115,19 @@ export default function EditWatchlist() {
     <Screen>
       <View style={{ padding: spacing.s16, gap: spacing.s12, flex: 1 }}>
         <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between' }}>
-          <Text style={{ color: text, fontWeight:'700', fontSize: 18 }}>Edit watchlist</Text>
-          <Pressable onPress={onDone} style={{ backgroundColor: accent, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill }}>
-            <Text style={{ color: get('text.onPrimary') as string, fontWeight:'700' }}>Done</Text>
-          </Pressable>
-        </View>
+  <Text style={{ color: text, fontWeight:'700', fontSize: 18 }}>Edit watchlist</Text>
+  <View style={{ flexDirection:'row', alignItems:'center', gap: spacing.s8 }}>
+    <Pressable accessibilityRole="button" accessibilityLabel="Add to watchlist" onPress={() => nav.navigate('Search' as never, { intent: 'watchlist', portfolioId } as never)}
+      style={({ pressed }) => ({ width: 44, height: 44, borderRadius: radius.pill, alignItems:'center', justifyContent:'center',
+        backgroundColor: pressed ? (get('surface.level2') as string) : (get('component.button.secondary.bg') as string),
+        borderWidth: 1, borderColor: get('component.button.secondary.border') as string })}>
+      <Icon name="plus" size={18} colorToken="text.primary" />
+    </Pressable>
+    <Pressable onPress={onDone} style={{ backgroundColor: accent, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill }}>
+      <Text style={{ color: get('text.onPrimary') as string, fontWeight:'700' }}>Done</Text>
+    </Pressable>
+  </View>
+</View>
 
         <View style={{ flexDirection:'row', gap: spacing.s8 }}>
           <Pressable onPress={() => setSelected(new Set(data.map(d => d.sym)))} style={{ backgroundColor: get('surface.level2') as string, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill }}>

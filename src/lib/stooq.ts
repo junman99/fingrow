@@ -16,28 +16,38 @@ export function toStooqSymbol(userSymbol: string): string | null {
 }
 
 /** Fetch daily history bars for a single symbol from Stooq. */
-export async function fetchDailyHistoryStooq(userSymbol: string): Promise<StooqBar[]> {
+export async function fetchDailyHistoryStooq(userSymbol: string, opts?: { signal?: AbortSignal, retries?: number }): Promise<StooqBar[]> {
   const stooqSym = toStooqSymbol(userSymbol);
   if (!stooqSym) throw new Error('Bad symbol');
-  const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSym)}&i=d`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Stooq HTTP ${res.status}`);
-  const csv = await res.text();
-  const lines = csv.trim().split(/\r?\n/);
-  // Expect header: Date,Open,High,Low,Close,Volume
-  const out: StooqBar[] = [];
-  for (let i=1; i<lines.length; i++) {
-    const [dateStr, open, high, low, close, vol] = lines[i].split(',');
-    // dateStr like 2024-05-31
-    const ts = Date.parse(dateStr + 'T00:00:00Z'); // UTC midnight
-    out.push({
-      date: isNaN(ts) ? Date.now() : ts,
-      open: Number(open) || 0,
-      high: Number(high) || 0,
-      low: Number(low) || 0,
-      close: Number(close) || 0,
-      volume: Number(vol) || 0,
-    });
+  const retries = Math.max(0, Math.min(3, opts?.retries ?? 1));
+  let lastErr: any = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const bust = Date.now() + '-' + Math.floor(Math.random() * 1000);
+      const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSym)}&i=d&r=${bust}`;
+      const res = await fetch(url, { headers: { 'Cache-Control': 'no-cache' }, signal: opts?.signal } as any);
+      if (!res.ok) throw new Error(`Stooq HTTP ${res.status}`);
+      const csv = await res.text();
+      const lines = csv.trim().split(/\r?\n/);
+      const out: StooqBar[] = [];
+      for (let i=1; i<lines.length; i++) {
+        const [dateStr, open, high, low, close, vol] = lines[i].split(',');
+        const ts = Date.parse(dateStr + 'T00:00:00Z');
+        out.push({
+          date: isNaN(ts) ? Date.now() : ts,
+          open: Number(open) || 0,
+          high: Number(high) || 0,
+          low: Number(low) || 0,
+          close: Number(close) || 0,
+          volume: Number(vol) || 0,
+        });
+      }
+      if (out.length) return out;
+      throw new Error('Stooq empty');
+    } catch (e) {
+      lastErr = e;
+      await new Promise(r => setTimeout(r, 300 + Math.random()*300));
+    }
   }
-  return out;
+  throw lastErr || new Error('Stooq failed');
 }

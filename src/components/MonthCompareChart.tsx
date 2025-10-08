@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, Pressable, Modal, TouchableWithoutFeedback } from 'react-native';
 import Svg, { Rect, G, Line, Text as SvgText } from 'react-native-svg';
 import { useThemeTokens } from '../theme/ThemeProvider';
+import { ScrollContext } from './ScrollContext';
 import { spacing, radius } from '../theme/tokens';
 import { useTxStore } from '../store/transactions';
 import { useBudgetsStore } from '../store/budgets';
@@ -33,6 +34,9 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
 
 export const MonthCompareChart: React.FC = () => {
   const { get } = useThemeTokens();
+  const { setScrollEnabled } = React.useContext(ScrollContext);
+  const enableParent = React.useCallback(() => setScrollEnabled && setScrollEnabled(true), [setScrollEnabled]);
+  const disableParent = React.useCallback(() => setScrollEnabled && setScrollEnabled(false), [setScrollEnabled]);
   const nav = useNavigation<any>();
   const { transactions, hydrate } = useTxStore();
   const { hydrate: hydrateBudget } = useBudgetsStore();
@@ -88,7 +92,7 @@ export const MonthCompareChart: React.FC = () => {
   // ===== DIMENSIONS =====
   const h = 160; // original height
   const w = Math.max(1, chartW);
-  const top = 8, bottom = 20; // compact bottom for controls
+  const top = 8, bottom = 17; // compact bottom for controls
   // Y max and dynamic margins
   const rawMax = Math.max(1, ...dailyThis.slice(0, daysPlotThis), ...dailyPrev.slice(0, daysPlotPrev));
   const maxVal = niceCeilTight(rawMax);
@@ -165,7 +169,7 @@ export const MonthCompareChart: React.FC = () => {
   };
 
   return (
-    <Pressable
+    <Pressable accessibilityRole="button"
       onPress={() => { if (hoverActive) setHoverActive(false); }}
       style={{ backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s12 }}
       onLayout={e => setChartW(e.nativeEvent.layout.width)}
@@ -185,12 +189,9 @@ export const MonthCompareChart: React.FC = () => {
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: spacing.s6 }}>
         <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 18 }}>Spending</Text>
         <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>{'Total $' + sumThis.toFixed(0)}</Text>
+          <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>{'Total Spent $' + sumThis.toFixed(0)}</Text>
           <Text style={{ color: get('text.muted') as string }}>
-            {'$' + avgPerDay.toFixed(0) + '/day · '}
-            <Text style={{ color: (get(pace >= 0 ? 'semantic.danger' : 'semantic.success') as string) }}>
-              {'Δ ' + (pace >= 0 ? '+' : '') + '$' + Math.abs(pace).toFixed(0)}
-            </Text>
+            {'$' + avgPerDay.toFixed(0) + '/day'}
           </Text>
         </View>
       </View>
@@ -302,10 +303,10 @@ export const MonthCompareChart: React.FC = () => {
           onStartShouldSetResponderCapture={() => true}
           onStartShouldSetResponder={() => true}
           onMoveShouldSetResponder={() => true}
-          onResponderGrant={(e) => startScrub(e.nativeEvent.locationX, e.nativeEvent.locationY)}
+          onResponderGrant={(e) => { disableParent(); startScrub(e.nativeEvent.locationX, e.nativeEvent.locationY); }}
           onResponderMove={(e)  => moveScrub(e.nativeEvent.locationX, e.nativeEvent.locationY)}
-          onResponderRelease={(e) => endScrub(e.nativeEvent.locationX, e.nativeEvent.locationY)}
-          onResponderTerminate={() => setHoverActive(false)}
+          onResponderRelease={(e) => { endScrub(e.nativeEvent.locationX, e.nativeEvent.locationY); enableParent(); }}
+          onResponderTerminate={() => { setHoverActive(false); enableParent(); }}
         />
 
         {/* TOOLTIP (anchored high) */}

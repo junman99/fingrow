@@ -1,0 +1,197 @@
+{
+  "summary": {
+    "total_files": 149,
+    "code_files": 144,
+    "roots": [
+      "README.md",
+      "app.json",
+      "babel.config.js",
+      "index.js",
+      "package-lock.json",
+      "package.json",
+      "scripts",
+      "src",
+      "startup.sh",
+      "tmp.sh",
+      "tsconfig.json"
+    ]
+  },
+  "findings": {
+    "screen_scroll_and_flatlist": [
+      "src/screens/DCAPlanner.tsx",
+      "src/screens/Instrument.tsx",
+      "src/screens/Money.tsx",
+      "src/screens/PayoffSimulator.tsx"
+    ],
+    "keypad_times_char": {
+      "found": true,
+      "path": "src/components/Keypad.tsx",
+      "has_times": true,
+      "details": "import React from 'react';\nimport { View, Pressable, Text } from 'react-native';\nimport { useThemeTokens } from '../theme/ThemeProvider';\nimport { spacing, radius } from '../theme/tokens';\n\nexport type KeypadProps = {\n  onKey: (k: string) => void;\n  onBackspace: () => void;\n  onDone: () => void; // "
+    },
+    "expo_image_usages": [
+      "package-lock.json",
+      "package.json",
+      "startup.sh",
+      "scripts/clean-install.sh",
+      "scripts/clean_instal.sh",
+      "src/screens/ProfileEdit.tsx"
+    ],
+    "rn_image_usages": [],
+    "ellipsis_suspects": []
+  },
+  "edits_applied": [
+    {
+      "file": "src/components/BottomSheet.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/components/Button.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/components/DateTimeSheet.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/components/Keypad.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/components/MonthCompareChart.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/components/PopoverMenu.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/components/RoundAction.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/components/TransactionRow.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/components/invest/CreatePortfolioCard.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/components/invest/PortfolioManagerSheet.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/components/invest/PortfolioSwitcher.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/components/invest/WatchRow.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/components/invest/PortfolioManagerModal.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/components/invest/TransactionEditorSheet.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/Add.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/BillEditor.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/EditLot.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/EditTransaction.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/Insights.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/Instrument.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/Invest.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/Money.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/Profile.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/ProfileEdit.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/Search.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/Settings.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/Transactions.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/auth/Login.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/goals/GoalCreate.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/goals/GoalDetail.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/goals/GoalsRoot.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/groups/GroupDetail.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/groups/GroupsRoot.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/groups/ManageMembers.tsx",
+      "change": "Add accessibilityRole=button to first Pressable"
+    },
+    {
+      "file": "src/screens/DCAPlanner.tsx",
+      "change": "Insert TODO on nested lists"
+    },
+    {
+      "file": "src/screens/Instrument.tsx",
+      "change": "Insert TODO on nested lists"
+    },
+    {
+      "file": "src/screens/Money.tsx",
+      "change": "Insert TODO on nested lists"
+    },
+    {
+      "file": "src/screens/PayoffSimulator.tsx",
+      "change": "Insert TODO on nested lists"
+    }
+  ]
+}

@@ -52,7 +52,7 @@ export default function EditLot() {
             {(['buy','sell'] as const).map(k => {
               const on = side === k;
               return (
-                <Pressable key={k} onPress={() => setSide(k)} style={{ backgroundColor: on ? accent : get('surface.level2') as string, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill }}>
+                <Pressable accessibilityRole="button" key={k} onPress={() => setSide(k)} style={{ backgroundColor: on ? accent : get('surface.level2') as string, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill }}>
                   <Text style={{ color: on ? get('text.onPrimary') as string : text, fontWeight:'700' }}>{k.toUpperCase()}</Text>
                 </Pressable>
               );

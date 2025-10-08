@@ -14,6 +14,7 @@ type State = {
   addMember: (groupId: ID, input: { name: string; contact?: string }) => Promise<ID>;
   updateMember: (groupId: ID, memberId: ID, patch: Partial<Member>) => Promise<void>;
   archiveMember: (groupId: ID, memberId: ID, archived?: boolean) => Promise<void>;
+  deleteMember: (groupId: ID, memberId: ID) => Promise<void>;
   addBill: (input: {
     groupId: ID;
     title: string;
@@ -105,6 +106,14 @@ export const useGroupsStore = create<State>((set, get) => ({
     if (gi < 0) throw new Error('Group not found');
     const mi = arr[gi].members.findIndex(m => m.id === memberId);
     if (mi >= 0) { arr[gi].members[mi].archived = archived; set({ groups: arr }); await save(arr); }
+  },
+  deleteMember: async (groupId, memberId) => {
+    const arr = [...get().groups];
+    const gi = arr.findIndex(g => g.id === groupId);
+    if (gi < 0) throw new Error('Group not found');
+    arr[gi].members = arr[gi].members.filter(m => m.id !== memberId);
+    set({ groups: arr });
+    await save(arr);
   },
   addBill: async (input) => {
     const arr = [...get().groups];

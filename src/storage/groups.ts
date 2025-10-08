@@ -9,7 +9,7 @@ export async function listGroups(): Promise<Group[]> {
 }
 export async function getGroup(id: ID): Promise<Group|undefined> { const arr = await listGroups(); return arr.find(g => g.id === id); }
 export async function createGroup(name: string): Promise<ID> {
-  const arr = await listGroups(); const g: Group = { id: uid(), name, members: [], bills: [], createdAt: Date.now() };
+  const arr = await listGroups(); const g: Group = { id: uid(), name, members: [], bills: [], settlements: [], createdAt: Date.now() };
   arr.unshift(g); await AsyncStorage.setItem(GROUPS_KEY, JSON.stringify(arr)); return g.id;
 }
 export async function addMember(groupId: ID, member: Member) {
@@ -18,3 +18,19 @@ export async function addMember(groupId: ID, member: Member) {
 // stubs for future
 export async function addBill(_: any) {}
 export async function recordGroupShareToTransactions(_: ID, __: ID) {}
+export async function deleteBill(groupId: ID, billId: ID) {
+  const arr = await listGroups();
+  const i = arr.findIndex(g => g.id === groupId);
+  if (i >= 0) {
+    arr[i].bills = arr[i].bills.filter((b: any) => b.id !== billId);
+    await AsyncStorage.setItem(GROUPS_KEY, JSON.stringify(arr));
+  }
+}
+export async function deleteMember(groupId: ID, memberId: ID) {
+  const arr = await listGroups();
+  const i = arr.findIndex(g => g.id === groupId);
+  if (i >= 0) {
+    arr[i].members = arr[i].members.filter((m: any) => m.id !== memberId);
+    await AsyncStorage.setItem(GROUPS_KEY, JSON.stringify(arr));
+  }
+}

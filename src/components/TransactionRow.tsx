@@ -59,7 +59,7 @@ export const TransactionRow: React.FC<{
     <View style={{ backgroundColor: get('surface.level1') as string }}>
       {/* Delete action bg */}
       <View style={styles.actionRow}>
-        <Pressable
+        <Pressable accessibilityRole="button"
           onPress={() => remove(tx.id)}
           style={[styles.deleteBtn, { backgroundColor: get('semantic.dangerSoft') as string }]}
           hitSlop={10}

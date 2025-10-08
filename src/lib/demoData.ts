@@ -71,6 +71,9 @@ export async function simulateMonths(months = 3) {
     }
   }
 
-  await store.insertMany(items);
+  // Insert items one by one since insertMany doesn't exist
+  for (const item of items) {
+    await (store as any).addTx(item);
+  }
   await store.hydrate();
 }

@@ -98,7 +98,7 @@ export default function BillDetails() {
                 {!s.settled && (
                   <View style={{ flexDirection:'row', alignItems:'center', gap: spacing.s8 }}>
                     <Text style={{ color: get('text.muted') as string }}>Daily</Text>
-                    <Switch value={!!reminders[`${groupId}:${billId}:${s.memberId}`]} onValueChange={(v)=>requestAnimationFrame(()=>toggleReminder(s.memberId, v))} />
+                    <Switch value={!!reminders[`${groupId}:${billId}:${s.memberId}`]} onValueChange={(v)=>{ requestAnimationFrame(()=>toggleReminder(s.memberId, v)); }} />
                   </View>
                 )}
               </View>

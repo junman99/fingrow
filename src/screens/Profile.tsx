@@ -54,7 +54,7 @@ const Profile: React.FC = () => {
               </View>
             </View>
           </View>
-          <Pressable onPress={() => nav.navigate('ProfileEdit')} hitSlop={12}>
+          <Pressable accessibilityRole="button" onPress={() => nav.navigate('ProfileEdit')} hitSlop={12}>
             <Text style={{ color: get('accent.primary') as string, fontWeight: '700' }}>Edit profile →</Text>
           </Pressable>
         </View>

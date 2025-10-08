@@ -13,7 +13,7 @@ export type KeypadProps = {
 const Key: React.FC<{ label: string; onPress: () => void; onLongPress?: () => void; primary?: boolean; wide?: boolean }> = ({ label, onPress, onLongPress, primary, wide }) => {
   const { get } = useThemeTokens();
   return (
-    <Pressable onPress={onPress} onLongPress={onLongPress} style={({ pressed }) => ({
+    <Pressable accessibilityRole="button" onPress={onPress} onLongPress={onLongPress} style={({ pressed }) => ({
       height: 56,
       borderRadius: radius.lg,
       alignItems: 'center',
@@ -58,8 +58,8 @@ const Keypad: React.FC<KeypadProps> = ({ onKey, onBackspace, onDone, onOk }) => 
       <Row>
         <Key label="." onPress={() => onKey('.')} />
         <Key label="0" onPress={() => onKey('0')} />
+        <Key label="×" onPress={() => onKey('×')} />
         <Key label="Done" onPress={onDone} primary />
-        <Key label="×" onPress={() => onKey('×')} primary wide />
       </Row>
     </View>
   );

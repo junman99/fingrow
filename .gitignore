@@ -1,7 +1,7 @@
-.expo/
 # Node/Expo
 node_modules/
 .expo/
+.claude/
 .expo-shared/
 dist/
 build/
@@ -30,3 +30,8 @@ Thumbs.db
 
 # Others
 **/__MACOSX/
+
+# Your local archives/backups
+fg-src-*.tgz
+fg-src-*/        # if those are folders
+tmp/

@@ -108,7 +108,7 @@ export default function ManageMembers() {
 
         {/* Archived collapsible */}
         <View style={{ gap: spacing.s8 }}>
-          <Pressable onPress={() => setShowArchived(s => !s)}>
+          <Pressable accessibilityRole="button" onPress={() => setShowArchived(s => !s)}>
             <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
               <Text style={{ color: get('text.muted') as string, fontWeight: '700' }}>Archived ({archived.length})</Text>
               <Text style={{ color: get('text.muted') as string }}>{showArchived ? 'Hide' : 'Show'}</Text>

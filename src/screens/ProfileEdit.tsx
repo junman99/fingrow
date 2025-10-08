@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, Pressable, Alert } from 'react-native';
+import { View, Text, Pressable, Alert } from 'react-native';
 import AppHeader from '../components/AppHeader';
 import { ScreenScroll } from '../components/ScreenScroll';
 import Input from '../components/Input';
@@ -8,6 +8,7 @@ import { useThemeTokens, useTheme } from '../theme/ThemeProvider';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { useProfileStore } from '../store/profile';
+import { Image } from 'expo-image';
 
 const ProfileEdit: React.FC = () => {
   const { get } = useThemeTokens();
@@ -30,12 +31,16 @@ const ProfileEdit: React.FC = () => {
   const askPick = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) { Alert.alert('Permission needed', 'Please allow photo access to set your avatar.'); return; }
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaType.Images, allowsEditing: true, aspect: [1,1], quality: 0.9 });
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1,1], quality: 0.9 });
     if (res.canceled) return;
     const asset = res.assets[0];
     const manip = null /* removed manipulator; using picker allowsEditing */;
-    const dest = FileSystem.documentDirectory + 'avatar.jpg';
-    try { await FileSystem.copyAsync({ from: manip.uri, to: dest }); } catch {}
+    const dest = ((FileSystem as any)?.documentDirectory || '') + 'avatar.jpg';
+    try {
+      if (asset?.uri) {
+        await FileSystem.copyAsync({ from: asset.uri, to: dest });
+      }
+    } catch {}
     await setAvatar(dest);
   };
 
@@ -56,9 +61,9 @@ const ProfileEdit: React.FC = () => {
     <ScreenScroll>
       <AppHeader title="Edit Profile" />
       <View style={{ alignItems: 'center', marginTop: spacing.s16 }}>
-        <Pressable onPress={askPick}>
+        <Pressable accessibilityRole="button" onPress={askPick}>
           <View style={{ width: 100, height: 100, borderRadius: 50, overflow: 'hidden', backgroundColor: get('surface.level2') as string, alignItems: 'center', justifyContent: 'center' }}>
-            {profile.avatarUri ? <Image source={{ uri: profile.avatarUri }} style={{ width: 100, height: 100 }} /> :
+            {profile.avatarUri ? <Image source={{ uri: profile.avatarUri }} style={{ width: 100, height: 100 }}  contentFit="cover" cachePolicy="memory-disk" /> :
               <Text style={{ color: get('text.muted') as string, fontWeight: '700' }}>Add Photo</Text>}
           </View>
         </Pressable>

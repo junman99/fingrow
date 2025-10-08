@@ -14,7 +14,7 @@ export default function InvestNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="InvestHome" component={InvestHome} />
       <Stack.Screen name="Instrument" component={Instrument} />
-      <Stack.Screen name="AddLot" component={AddLot} />
+      <Stack.Screen name="AddLot" component={AddLot} options={{ presentation: 'modal' }} />
       <Stack.Screen name="Search" component={Search} />
       <Stack.Screen name="EditWatchlist" component={EditWatchlist} />
       <Stack.Screen name="EditLot" component={EditLot} />

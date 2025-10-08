@@ -12,6 +12,9 @@
       "supportsTablet": true
     },
     "jsEngine": "hermes",
-    "sdkVersion": "54.0.0"
+    "sdkVersion": "54.0.0",
+    "plugins": [
+      "expo-font"
+    ]
   }
 }

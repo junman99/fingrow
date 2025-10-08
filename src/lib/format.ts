@@ -44,3 +44,12 @@ export function symbolFor(currency: string): string {
   };
   return map[code] || code;
 }
+
+
+export function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+export function sum(arr: number[] = []): number {
+  return (arr || []).reduce((a, b) => a + ((typeof b === 'number' ? b : Number(b)) || 0), 0);
+}
