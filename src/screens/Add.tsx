@@ -1,5 +1,15 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, Dimensions, Modal, TouchableWithoutFeedback } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  Dimensions,
+  Modal,
+  TouchableWithoutFeedback,
+  ScrollView,
+} from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
@@ -21,6 +31,60 @@ import {
 
 type Mode = 'expense' | 'income';
 type Cat = { key: string; label: string; icon: React.ComponentType<any>; type: Mode };
+
+type SummaryChipProps = {
+  icon: 'category' | 'clock' | 'wallet' | 'note' | 'recurring';
+  label: string;
+  onPress?: () => void;
+  fullWidth?: boolean;
+  style?: StyleProp<ViewStyle>;
+};
+
+type RGB = { r: number; g: number; b: number };
+
+function hexToRgb(hex: string): RGB | null {
+  const normalized = hex.replace('#', '');
+  if (normalized.length === 3) {
+    const r = parseInt(normalized[0] + normalized[0], 16);
+    const g = parseInt(normalized[1] + normalized[1], 16);
+    const b = parseInt(normalized[2] + normalized[2], 16);
+    return { r, g, b };
+  }
+  if (normalized.length === 6 || normalized.length === 8) {
+    const r = parseInt(normalized.slice(0, 2), 16);
+    const g = parseInt(normalized.slice(2, 4), 16);
+    const b = parseInt(normalized.slice(4, 6), 16);
+    return { r, g, b };
+  }
+  return null;
+}
+
+function rgbaToRgb(input: string): RGB | null {
+  const match = input.match(/rgba?\((\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/i);
+  if (!match) return null;
+  const r = Math.min(255, parseInt(match[1], 10));
+  const g = Math.min(255, parseInt(match[2], 10));
+  const b = Math.min(255, parseInt(match[3], 10));
+  return { r, g, b };
+}
+
+function toRgb(color: string): RGB | null {
+  if (!color) return null;
+  if (color.startsWith('#')) return hexToRgb(color);
+  if (color.startsWith('rgb')) return rgbaToRgb(color);
+  return null;
+}
+
+function mixColor(color: string, base: string, weight: number): string {
+  const a = toRgb(color);
+  const b = toRgb(base);
+  if (!a || !b) return color;
+  const w = Math.min(Math.max(weight, 0), 1);
+  const r = Math.round(a.r * w + b.r * (1 - w));
+  const g = Math.round(a.g * w + b.g * (1 - w));
+  const bCh = Math.round(a.b * w + b.b * (1 - w));
+  return `rgb(${r},${g},${bCh})`;
+}
 
 const EXPENSE_CATS: Cat[] = [
   { key: 'food',       label: 'Food',           icon: Utensils,       type: 'expense' },
@@ -66,6 +130,9 @@ function evaluateExpression(expr: string): number {
 export default function Add() {
   const { get } = useThemeTokens();
   const nav = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const scrollRef = useRef<ScrollView | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Quick time & account selection
   const [txDate, setTxDate] = useState<Date>(new Date());
@@ -76,6 +143,7 @@ export default function Add() {
   const [noteOpen, setNoteOpen] = useState<boolean>(false);
   const [noteDraft, setNoteDraft] = useState<string>('');
   const [recMade, setRecMade] = useState<boolean>(false);
+  const [hasEvaluated, setHasEvaluated] = useState<boolean>(false);
 
   function fmtChipTime(d: Date) {
     const now = new Date();
@@ -93,14 +161,45 @@ export default function Add() {
   const [mode, setMode] = useState<Mode>('expense');
   const [category, setCategory] = useState<Cat>(EXPENSE_CATS[0]);
   const [expr, setExpr] = useState<string>('');
-  
 
   const result = useMemo(() => evaluateExpression(expr), [expr]);
   const [toast, setToast] = useState<string>('');
   const [toastVisible, setToastVisible] = useState<boolean>(false);
 
+  const surface1 = get('surface.level1') as string;
+  const surface2 = get('surface.level2') as string;
+  const backgroundDefault = get('background.default') as string;
+  const accentPrimary = get('accent.primary') as string;
+  const accentSecondary = get('accent.secondary') as string;
+  const textPrimary = get('text.primary') as string;
+  const textMuted = get('text.muted') as string;
+  const textOnPrimary = get('text.onPrimary') as string;
+  const borderSubtle = get('border.subtle') as string;
+  const heroGradientStart = mixColor(accentSecondary, backgroundDefault, 0.65);
+  const heroGradientEnd = mixColor(accentPrimary, backgroundDefault, 0.65);
+
+  const showToast = useCallback((message: string, duration = 1600) => {
+    setToast(message);
+    setToastVisible(true);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => {
+      setToastVisible(false);
+      toastTimerRef.current = null;
+    }, duration);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const onKey = (k: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (hasEvaluated) setHasEvaluated(false);
     if (k === '.') {
       const parts = expr.split(/[+\-×÷*/]/);
       const last = parts[parts.length - 1] || '';
@@ -118,11 +217,49 @@ export default function Add() {
 
   const onBackspace = () => {
     Haptics.selectionAsync();
+    if (hasEvaluated) setHasEvaluated(false);
     setExpr(prev => prev.slice(0, -1));
   };
 
   const { add: addRecurring } = useRecurringStore();
-  const cats = mode === 'expense' ? EXPENSE_CATS : INCOME_CATS;
+  const { width: screenW, height: screenH } = Dimensions.get('window');
+  const keypadHeightEstimate = 360;
+  const keypadReserve = keypadHeightEstimate + insets.bottom + spacing.s16;
+  const whenLabel = useMemo(() => fmtChipTime(txDate), [txDate]);
+  const noteChipLabel = useMemo(() => {
+    if (!note.trim()) return 'Add note';
+    return note.trim().length > 28 ? `${note.trim().slice(0, 27)}…` : note.trim();
+  }, [note]);
+  const displayValue = useMemo(() => {
+    if (!expr) return result ? result.toFixed(2) : '0';
+    return hasEvaluated ? result.toFixed(2) : expr;
+  }, [expr, hasEvaluated, result]);
+
+  const onNoteCancel = useCallback(() => {
+    setNoteDraft(note);
+    setNoteOpen(false);
+  }, [note]);
+
+  const onNoteSave = useCallback(() => {
+    const trimmed = noteDraft.trim();
+    setNote(trimmed);
+    setNoteDraft(trimmed);
+    setNoteOpen(false);
+  }, [noteDraft]);
+
+  const onNoteClear = useCallback(() => {
+    setNote('');
+    setNoteDraft('');
+  }, []);
+
+  const onEvaluate = useCallback(() => {
+    if (!expr) {
+      showToast('Enter an amount first');
+      return;
+    }
+    setHasEvaluated(true);
+    setExpr(result.toFixed(2));
+  }, [expr, result, showToast]);
 
   // --- helpers for new layout ---
   const ModeToggle = () => {
