@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, Text, Share, Alert } from 'react-native';
 import { ScreenScroll } from '../../components/ScreenScroll';
-import { AppHeader } from '../../components/AppHeader';
 import Button from '../../components/Button';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
@@ -51,8 +50,8 @@ export default function SettleUp() {
   if (!group) {
     return (
       <ScreenScroll>
-        <AppHeader title="Settle up" />
         <View style={{ padding: spacing.s16 }}>
+          <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Settle up</Text>
           <Text style={{ color: get('text.muted') as string }}>Group not found.</Text>
         </View>
       </ScreenScroll>
@@ -76,8 +75,8 @@ export default function SettleUp() {
 
   return (
     <ScreenScroll>
-      <AppHeader title="Settle up" />
       <View style={{ padding: spacing.s16, gap: spacing.s16 }}>
+        <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Settle up</Text>
         {plan.length === 0 ? (
           <Text style={{ color: get('text.muted') as string }}>Everyone is settled 🎉</Text>
         ) : (

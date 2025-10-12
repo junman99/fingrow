@@ -5,12 +5,15 @@ import { Card } from '../components/Card';
 import { useInvestStore } from '../store/invest';
 import * as Haptics from 'expo-haptics';
 import { Alert } from 'react-native';
-import { AppHeader } from '../components/AppHeader';
+// import { AppHeader } from '../components/AppHeader';
 import Button from '../components/Button';
 import { spacing, radius } from '../theme/tokens';
 import { seedFiveMonths, clearAllData } from '../lib/demo';
 import { seedInvestSixMonths, clearInvestDemo } from '../lib/demo_invest';
 import { useTheme } from '../theme/ThemeProvider';
+import ProfileHero from '../components/ProfileHero';
+import { useProfileStore } from '../store/profile';
+import { useNavigation } from '@react-navigation/native';
 
 
 const onSeedInvest = async () => {
@@ -34,6 +37,8 @@ const onClearInvest = async () => {
   catch (e: any) { console.error(e); Alert.alert('Failed to remove demo investment data', String(e?.message ?? e)); try { await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); } catch {} }
 };
 export const Settings: React.FC = () => {
+  const nav = useNavigation<any>();
+  const { profile } = useProfileStore();
   const quoteProvider = useInvestStore(s => (s.profile?.quoteProvider ?? 'auto')) as 'auto'|'yahoo'|'stooq';
   const setQuoteProvider = useInvestStore(s => s.setQuoteProvider);
   const { mode, setMode, get } = useTheme();
@@ -57,8 +62,13 @@ export const Settings: React.FC = () => {
 
   return (
     <Screen inTab>
-      <AppHeader title="Settings" />
       <View style={{ padding: spacing.s16, gap: spacing.s16 }}>
+        <Text style={{ color: primary, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Settings</Text>
+        {/* Moved Profile card to Settings top */}
+        <Pressable accessibilityRole="button" accessibilityLabel="Open profile" onPress={() => nav.navigate('ProfileModal')}>
+          <ProfileHero name={profile?.name || 'There'} email={profile?.email} avatarUri={profile?.avatarUri} variant="blend" />
+        </Pressable>
+
         <Text style={{ color: primary, fontWeight: '700', fontSize: 18 }}>Theme</Text>
         <Option label="Use device setting" value="system" />
         <Option label="Light" value="light" />

@@ -10,7 +10,6 @@ import { useRecurringStore, computeNextDue } from '../store/recurring';
 import { ensureWeeklyDigest, maybeFirePaceAlert, maybeFireThresholdAlerts, toggleWeeklyDigest } from '../lib/budgetAlerts';
 import { ProgressBar } from '../components/ProgressBar';
 import Button from '../components/Button';
-import { AppHeader } from '../components/AppHeader';
 import Input from '../components/Input';
 import { useNavigation } from '@react-navigation/native';
 import { useThemeTokens } from '../theme/ThemeProvider';
@@ -162,12 +161,13 @@ export const Budgets: React.FC = () => {
 
   return (
     <ScreenScroll>
-      <AppHeader
-        title="Budget"
-        right={<Text onPress={onSave} style={{ color: get('accent.primary') as string, fontWeight: '700' }}>Save</Text>}
-        left={<Text onPress={() => nav.goBack()} style={{ color: get('text.muted') as string }}>Close</Text>}
-      />
       <View style={{ padding: spacing.s16, gap: spacing.s16 }}>
+        <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between' }}>
+          <Text onPress={() => nav.goBack()} style={{ color: get('text.muted') as string, fontWeight: '600' }}>Close</Text>
+          <Text onPress={onSave} style={{ color: get('accent.primary') as string, fontWeight: '700' }}>Save</Text>
+        </View>
+        <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s4, marginBottom: spacing.s4 }}>Budget</Text>
+        
         {/* Export CSV */}
         <View style={{ backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s16, gap: spacing.s8 }}>
           <Text style={{ color: get('text.primary') as string, fontWeight:'700' }}>Export</Text>

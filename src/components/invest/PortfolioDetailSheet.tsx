@@ -14,6 +14,7 @@ import { Card } from '../Card';
 import PopoverMenu from '../PopoverMenu';
 import { computePnL } from '../../lib/positions';
 import { exportPortfolioCsv } from '../../lib/export';
+import CashEditorSheet from './CashEditorSheet';
 import * as Haptics from 'expo-haptics';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, runOnJS } from 'react-native-reanimated';
@@ -231,6 +232,7 @@ export default function PortfolioDetailSheet({ portfolioId, visible, onClose, on
   };
   const [editWatchMode, setEditWatchMode] = React.useState(false);
   const [selectedWatch, setSelectedWatch] = React.useState<Record<string, boolean>>({});
+  const [showCash, setShowCash] = React.useState(false);
 
   // Dropdown menu states
   const [filterMenuVisible, setFilterMenuVisible] = React.useState(false);
@@ -246,19 +248,37 @@ export default function PortfolioDetailSheet({ portfolioId, visible, onClose, on
   const settingsBtnRef = React.useRef<View>(null);
 
   React.useEffect(()=>{
-    if (visible) { setTab('Holdings'); setEditMode(false); setSelected({}); setEditWatchMode(false); setSelectedWatch({}); }
+    if (visible) {
+      setTab('Holdings');
+      setEditMode(false);
+      setSelected({});
+      setEditWatchMode(false);
+      setSelectedWatch({});
+    } else {
+      // Defensive: ensure any transient popovers/sheets are closed when hidden
+      setFilterMenuVisible(false);
+      setSortMenuVisible(false);
+      setSettingsMenuVisible(false);
+      setShowCash(false);
+    }
   }, [visible]);
 
   // Defensive lists for rendering maps
   const displayHoldSyms = React.useMemo(() => {
+    // Primary list from computed holdingsSyms (respects filters/sort and qty>0)
     const base = reorderHold ? (orderHold || []) : (holdingsSyms || []);
     let arr = Array.isArray(base) ? base : [] as string[];
     if ((!arr || arr.length === 0) && p && p.holdings) {
-      const keys = Object.keys(p.holdings || {});
-      if (keys.length) arr = keys;
+      // Fallback: derive open positions directly from portfolio holdings
+      const open = Object.values(p.holdings || {}).filter((h: any) => {
+        if (h?.archived && !editMode) return false;
+        const qty = (h?.lots || []).reduce((s: number, l: any) => s + (l.side === 'buy' ? l.qty : -l.qty), 0);
+        return qty > 0;
+      }).map((h: any) => h.symbol);
+      arr = open;
     }
     return arr;
-  }, [reorderHold, orderHold, holdingsSyms, p]);
+  }, [reorderHold, orderHold, holdingsSyms, p, editMode]);
   const displayWatchSyms = React.useMemo(() => {
     const base = reorderWatch ? (orderWatch || []) : (watchSyms || []);
     let arr = Array.isArray(base) ? base : [] as string[];
@@ -303,7 +323,9 @@ export default function PortfolioDetailSheet({ portfolioId, visible, onClose, on
       const sym = h.symbol;
       const lots = (h?.lots || []) as Array<{ side:'buy'|'sell'; qty:number }>;
       const qty = lots.reduce((s, l) => s + (l.side === 'buy' ? l.qty : -l.qty), 0);
-      if (!qty) { out.push({ sym, qty: 0, value: 0, change: 0, pnlAbs: 0, pnlPct: 0 }); return; }
+      // Only show in holdings when position is open (qty > 0).
+      // In edit mode, include zero-qty items so they can be managed.
+      if (qty <= 0) { if (editMode) { out.push({ sym, qty, value: 0, change: 0, pnlAbs: 0, pnlPct: 0 }); } return; }
       const q = (quotes || {})[sym] || {} as any;
       const last = Number(q.last || 0);
       const chg = Number(q.change || 0);
@@ -314,6 +336,9 @@ export default function PortfolioDetailSheet({ portfolioId, visible, onClose, on
       const pnlPct = cost > 0 ? (pnlAbs / cost) : 0;
       out.push({ sym, qty, value: mv, change: chg * qty, pnlAbs, pnlPct });
     });
+    // Include synthetic CASH row
+    const cashVal = Number(p?.cash || 0);
+    out.push({ sym: 'CASH', qty: 0, value: cashVal, change: 0, pnlAbs: 0, pnlPct: 0 });
     const total = out.reduce((s, x) => s + (x.value || 0), 0);
     return { list: out, totalValue: total };
   }, [p, quotes, editMode]);
@@ -328,9 +353,7 @@ export default function PortfolioDetailSheet({ portfolioId, visible, onClose, on
     } else if (holdingsFilter === 'min1') {
       if (totalValue > 0) {
         arr = arr.filter(x => (x.value / totalValue) > 0.01);
-      } else {
-        arr = [];
-      }
+      } // if totalValue is 0 (no quotes yet), keep list as-is
     }
     // custom order
     if (sortKey === 'custom' && (p?.holdingsOrder && (p.holdingsOrder as any).length)) {
@@ -501,6 +524,10 @@ export default function PortfolioDetailSheet({ portfolioId, visible, onClose, on
                     style={({ pressed }) => ({ width: 44, height: 44, borderRadius: radius.pill, alignItems:'center', justifyContent:'center', backgroundColor: pressed ? (get('surface.level2') as string) : (get('component.button.secondary.bg') as string), borderWidth: 1, borderColor: get('component.button.secondary.border') as string })}>
                     <Icon name="plus" size={18} colorToken="text.primary" />
                   </Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Adjust cash" onPress={() => setShowCash(true)}
+                    style={({ pressed }) => ({ width: 44, height: 44, borderRadius: radius.pill, alignItems:'center', justifyContent:'center', backgroundColor: pressed ? (get('surface.level2') as string) : (get('component.button.secondary.bg') as string), borderWidth: 1, borderColor: get('component.button.secondary.border') as string })}>
+                    <Icon name="wallet" size={18} colorToken="text.primary" />
+                  </Pressable>
                   <Pressable
                     ref={filterBtnRef as any}
                     accessibilityRole="button"
@@ -533,7 +560,7 @@ export default function PortfolioDetailSheet({ portfolioId, visible, onClose, on
                 </View>
               )}
             </View>
-            {holdingsSyms.length === 0 ? (
+            {displayHoldSyms.length === 0 ? (
               <Text style={{ color: muted }}>No holdings.</Text>
             ) : (
               <ScrollView
@@ -547,7 +574,13 @@ export default function PortfolioDetailSheet({ portfolioId, visible, onClose, on
               >
                 <Card padding={0}>
                   {displayHoldSyms.map((sym, i) => (
-                    <HoldingItem key={sym} sym={sym} index={i} />
+                    sym === 'CASH' ? (
+                      <View key={'CASH'} style={{ borderTopWidth: i===0 ? 0 : 1, borderColor: get('border.subtle') as string }}>
+                        <HoldingRow sym={'CASH'} portfolioId={portfolioId || undefined} variant="list" onPress={() => setShowCash(true)} />
+                      </View>
+                    ) : (
+                      <HoldingItem key={sym} sym={sym} index={i} />
+                    )
                   ))}
                 </Card>
               </ScrollView>
@@ -682,17 +715,21 @@ export default function PortfolioDetailSheet({ portfolioId, visible, onClose, on
       />
 
       {/* Settings Menu */}
-      <PopoverMenu
+  <PopoverMenu
         visible={settingsMenuVisible}
         onClose={() => setSettingsMenuVisible(false)}
         anchor={settingsMenuAnchor}
         items={[
           { key: 'edit', label: (tab==='Watchlist' ? 'Edit watchlist' : 'Edit portfolio'), onPress: () => { setSettingsMenuVisible(false); if (tab==='Watchlist') { setEditWatchMode(true); setSelectedWatch({}); } else { setEditMode(true); setSelected({}); } } },
-          { key: 'reorder', label: (tab==='Watchlist' ? 'Reorder watchlist' : 'Reorder holdings'), onPress: () => { setSettingsMenuVisible(false); if (tab==='Watchlist') { setOrderWatch([...(watchSyms || [])]); setWatchSortKey('custom'); setReorderWatch(true); } else { setOrderHold([...(holdingsSyms || [])]); setSortKey('custom'); setReorderHold(true); } } },
+          { key: 'reorder', label: (tab==='Watchlist' ? 'Reorder watchlist' : 'Reorder holdings'), onPress: () => { setSettingsMenuVisible(false); if (tab==='Watchlist') { setOrderWatch([...(watchSyms || [])]); setWatchSortKey('custom'); setReorderWatch(true); } else { setOrderHold([...(displayHoldSyms || [])]); setSortKey('custom'); setReorderHold(true); } } },
           { key: 'export', label: 'Export CSV', onPress: () => { setSettingsMenuVisible(false); if (p?.id) { try { exportPortfolioCsv(p.id); } catch {} } } },
           { key: 'archive', label: 'Archive portfolio', onPress: () => { setSettingsMenuVisible(false); if (p?.id) { try { archivePortfolio(p.id); } catch {} } } },
         ]}
       />
+      {/* Cash editor */}
+      {p ? (
+        <CashEditorSheet visible={showCash} onClose={() => setShowCash(false)} portfolioId={p.id} currency={(p.baseCurrency || 'USD').toUpperCase()} />
+      ) : null}
     </BottomSheet>
   );
 }

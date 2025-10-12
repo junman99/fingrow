@@ -47,6 +47,8 @@ export type Portfolio = {
   holdingsOrder?: string[];
   type?: 'Live' | 'Paper';
   archived?: boolean;
+  cash?: number;          // cash balance in baseCurrency
+  cashEvents?: Array<{ date: string; amount: number }>; // history of cash adjustments
   createdAt: string;
   updatedAt?: string;
 };
@@ -96,6 +98,9 @@ type State = {
   removeHolding: (symbol: string, opts?: { portfolioId?: string }) => Promise<void>;
   setHoldingsArchived: (args: { portfolioId?: string; symbols: string[]; archived: boolean }) => Promise<void>;
   setHoldingsOrder: (portfolioId: string, order: string[]) => Promise<void>;
+
+  // cash ops
+  addCash: (amount: number, opts?: { portfolioId?: string }) => Promise<void>; // positive=deposit, negative=withdraw
 
   // watchlist ops
   setWatch: (symbols: string[], opts?: { portfolioId?: string }) => Promise<void>;
@@ -210,6 +215,8 @@ export const useInvestStore = create<State>((set, get) => ({
           watchlist: parsed.watchlist || [],
           holdings: parsed.holdings || {},
           type: 'Live',
+          cash: 0,
+          cashEvents: [],
           createdAt: new Date().toISOString(),
         };
         const portfolios: Record<string, Portfolio> = { [defaultId]: portfolio };
@@ -227,6 +234,8 @@ export const useInvestStore = create<State>((set, get) => ({
           watchlist: ['AAPL','TSLA','SPY','BTC-USD'],
           holdings: {},
           type: 'Live',
+          cash: 0,
+          cashEvents: [],
           createdAt: new Date().toISOString(),
         };
         const portfolios: Record<string, Portfolio> = { [defaultId]: portfolio };
@@ -257,6 +266,8 @@ export const useInvestStore = create<State>((set, get) => ({
       type: opts?.type || 'Live',
       holdings: seed.holdings,
       watchlist: seed.watchlist,
+      cash: 0,
+      cashEvents: [],
       createdAt: now, updatedAt: now,
     };
     set({
@@ -391,6 +402,21 @@ export const useInvestStore = create<State>((set, get) => ({
     const p = portfolios[pid];
     if (!p) return;
     portfolios[pid] = { ...p, holdingsOrder: order, updatedAt: new Date().toISOString() };
+    set({ portfolios });
+    (get() as any)._syncMirrors();
+    await (get() as any).persist();
+  },
+  addCash: async (amount, opts) => {
+    const pid = opts?.portfolioId || get().activePortfolioId;
+    if (!pid) return;
+    const portfolios = { ...get().portfolios } as any;
+    const p = portfolios[pid];
+    if (!p) return;
+    const cur = Number(p.cash || 0);
+    const nextCash = Number((cur + Number(amount || 0)).toFixed(2));
+    const evs = Array.isArray(p.cashEvents) ? [...p.cashEvents] : [];
+    evs.push({ date: new Date().toISOString(), amount: Number(amount || 0) });
+    portfolios[pid] = { ...p, cash: nextCash, cashEvents: evs, updatedAt: new Date().toISOString() };
     set({ portfolios });
     (get() as any)._syncMirrors();
     await (get() as any).persist();

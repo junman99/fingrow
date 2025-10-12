@@ -33,7 +33,7 @@ const GoalCreate: React.FC = () => {
 
   return (
     <ScreenScroll contentStyle={{ padding: spacing.s16, gap: spacing.s16 }}>
-      <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 20 }}>Create goal</Text>
+      <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Create goal</Text>
       <Field label="Title">
         <TextInput value={title} onChangeText={setTitle} placeholder="e.g., Japan Trip" placeholderTextColor={get('text.muted') as string} style={inputStyle as any} />
       </Field>

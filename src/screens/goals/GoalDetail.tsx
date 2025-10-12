@@ -27,7 +27,7 @@ const GoalDetail: React.FC = () => {
   return (
     <ScreenScroll contentStyle={{ padding: spacing.s16, gap: spacing.s16 }}>
       <View style={{ gap: spacing.s4 }}>
-        <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 20 }}>{goal.icon ? goal.icon + ' ' : ''}{goal.title}</Text>
+        <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s4 }}>{goal.icon ? goal.icon + ' ' : ''}{goal.title}</Text>
         <Text style={{ color: get('text.muted') as string }}>${(goal.currentAmount||0).toFixed(0)} / ${(goal.targetAmount||0).toFixed(0)} · {pct}%</Text>
       </View>
 

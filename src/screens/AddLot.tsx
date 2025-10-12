@@ -148,7 +148,15 @@ export function AddLot() {
     };
     try {
       await store.addLot(symbol, { side, qty: qn, price: pr, date: date.toISOString() }, meta, { portfolioId });
+      // Auto-adjust cash for quick trade form
+      try {
+        const gross = qn * pr;
+        const fees = 0;
+        const cf = side === 'buy' ? -(gross + fees) : (gross - fees);
+        await (store as any).addCash(cf, { portfolioId });
+      } catch {}
       try { await store.refreshQuotes(); } catch {}
+      try { setShowTxSheet(false); } catch {}
       nav.goBack();
     } catch (e) {
       console.error(e);
@@ -255,32 +263,48 @@ export function AddLot() {
           {/* Divider */}
           <View style={{ height: 1, backgroundColor: get('border.subtle') as string, marginVertical: spacing.s12 }} />
 
-          {/* Transaction history (same card) */}
-          <View style={{ gap: spacing.s12 }}>
-            <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
-              <Text style={{ color: text, fontWeight:'800' }}>Transaction history</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Add transaction" onPress={()=> setShowTxSheet(true)}
-                style={({ pressed }) => ({ width: 36, height: 36, borderRadius: radius.pill, alignItems:'center', justifyContent:'center',
-                  backgroundColor: pressed ? (get('surface.level2') as string) : (get('component.button.secondary.bg') as string),
-                  borderWidth: 1, borderColor: get('component.button.secondary.border') as string })}>
-                <Text style={{ color: text, fontWeight:'900', fontSize:18 }}>+</Text>
-              </Pressable>
-            </View>
+          {/* Actions: Add transaction / View history */}
+          <View style={{ gap: spacing.s8 }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add transaction"
+              onPress={() => setShowTxSheet(true)}
+              style={{ backgroundColor: get('component.button.primary.bg') as string, height: 44, borderRadius: radius.lg, alignItems:'center', justifyContent:'center' }}
+            >
+              <Text style={{ color: get('text.onPrimary') as string, fontWeight:'700' }}>Add Transaction</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="View all transactions"
+              onPress={() => nav.navigate('HoldingHistory' as never, { symbol, portfolioId } as never)}
+              style={({ pressed }) => ({ height: 44, borderRadius: radius.lg, alignItems:'center', justifyContent:'center', backgroundColor: pressed ? (get('surface.level2') as string) : (get('component.button.secondary.bg') as string), borderWidth: 1, borderColor: get('component.button.secondary.border') as string })}
+            >
+              <Text style={{ color: text, fontWeight:'700' }}>View Transaction History</Text>
+            </Pressable>
+          </View>
 
-            {lots.length === 0 ? (
-              <Text style={{ color: muted }}>No transactions yet.</Text>
-            ) : (
+          {/* Recent transactions preview */}
+          {lots.length > 0 ? (
+            <View style={{ marginTop: spacing.s12 }}>
+              <Text style={{ color: text, fontWeight:'800', marginBottom: spacing.s8 }}>Recent transactions</Text>
               <View style={{ borderTopWidth: 1, borderColor: get('border.subtle') as string }}>
-                {lots.map((l:any, i:number) => (
+                {[...lots].sort((a:any,b:any)=> new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0,3).map((l:any, i:number, arr:any[]) => (
                   <View key={l.id || i}>
                     <TransactionRow lot={l} currency={cur} onEdit={onEditLot} onDelete={onDeleteLot} />
-                    {i < lots.length - 1 ? <View style={{ height: 1, backgroundColor: get('border.subtle') as string }} /> : null}
+                    {i < arr.length - 1 ? <View style={{ height: 1, backgroundColor: get('border.subtle') as string }} /> : null}
                   </View>
                 ))}
               </View>
-            )}
-          </View>
-</Card>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => nav.navigate('HoldingHistory' as never, { symbol, portfolioId } as never)}
+                style={({ pressed }) => ({ alignSelf:'flex-start', marginTop: spacing.s8, paddingHorizontal: spacing.s12, height: 36, borderRadius: radius.pill, alignItems:'center', justifyContent:'center', backgroundColor: pressed ? (get('surface.level2') as string) : (get('component.button.secondary.bg') as string), borderWidth: 1, borderColor: get('component.button.secondary.border') as string })}
+              >
+                <Text style={{ color: text, fontWeight:'700' }}>View all</Text>
+              </Pressable>
+            </View>
+          ) : null}
+        </Card>
 
         
         

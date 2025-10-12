@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Switch, Alert } from 'react-native';
 import { ScreenScroll } from '../../components/ScreenScroll';
-import { AppHeader } from '../../components/AppHeader';
 import Button from '../../components/Button';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
@@ -59,8 +58,8 @@ export default function GroupReminders() {
 
   return (
     <ScreenScroll>
-      <AppHeader title="Reminders" />
       <View style={{ padding: spacing.s16, gap: spacing.s16 }}>
+        <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Reminders</Text>
 
         {/* Global controls */}
         <View style={{ borderWidth:1, borderColor:get('border.subtle') as string, borderRadius: radius.md, padding: spacing.s12, gap: spacing.s8 }}>

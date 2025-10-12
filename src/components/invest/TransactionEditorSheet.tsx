@@ -48,6 +48,7 @@ export default function TransactionEditorSheet({ visible, onClose, symbol, portf
   const [feesInput, setFeesInput] = React.useState(initial?.fees != null ? String(initial.fees) : '');
   const [date, setDate] = React.useState<Date>(initial?.date ? new Date(initial.date) : new Date());
   const [openDate, setOpenDate] = React.useState(false);
+  const [affectCash, setAffectCash] = React.useState(mode !== 'edit');
 
   React.useEffect(() => {
     if (!visible) {
@@ -70,8 +71,22 @@ export default function TransactionEditorSheet({ visible, onClose, symbol, portf
     const cur = ((profile?.currency) || 'USD').toUpperCase();
     if (mode === 'edit' && lotId) {
       await store.updateLot(symbol, lotId, { side, qty, price, date: date.toISOString(), fees }, { portfolioId });
+      if (affectCash) {
+        try {
+          const gross = qty * price;
+          const cf = side === 'buy' ? -(gross + fees) : (gross - fees);
+          await store.addCash(cf, { portfolioId });
+        } catch {}
+      }
     } else {
       await store.addLot(symbol, { side, qty, price, date: date.toISOString(), fees }, { name: symbol, type: 'stock', currency: cur }, { portfolioId });
+      if (affectCash) {
+        try {
+          const gross = qty * price;
+          const cf = side === 'buy' ? -(gross + fees) : (gross - fees);
+          await store.addCash(cf, { portfolioId });
+        } catch {}
+      }
     }
     try { await store.refreshQuotes([symbol]); } catch {}
     onClose();
@@ -146,6 +161,14 @@ export default function TransactionEditorSheet({ visible, onClose, symbol, portf
           </View>
 
           <View style={{ height: spacing.s12 }} />
+          {/* Affect Cash toggle */}
+          <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between' }}>
+            <Text style={{ color: text, fontWeight:'700' }}>Affect cash</Text>
+            <Pressable accessibilityRole="switch" accessibilityState={{ checked: affectCash }} onPress={()=> setAffectCash(v => !v)}
+              style={({ pressed }) => ({ width: 56, height: 32, borderRadius: 999, backgroundColor: affectCash ? (get('accent.primary') as string) : (get('surface.level2') as string), alignItems: affectCash ? 'flex-end' : 'flex-start', justifyContent:'center', paddingHorizontal: 4, opacity: pressed ? 0.9 : 1, borderWidth: 1, borderColor: get('component.button.secondary.border') as string })}>
+              <View style={{ width: 24, height: 24, borderRadius: 999, backgroundColor: get('surface.level1') as string }} />
+            </Pressable>
+          </View>
         </View>
       </ScrollView>
 

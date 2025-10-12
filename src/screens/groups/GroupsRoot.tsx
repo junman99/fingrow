@@ -2,7 +2,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, View, Text, Pressable } from 'react-native';
 import { Screen } from '../../components/Screen';
-import { AppHeader } from '../../components/AppHeader';
 import Button from '../../components/Button';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -131,11 +130,11 @@ const data = useMemo(() => {
 
   return (
     <Screen>
-      <AppHeader
-        title="Groups"
-        right={<Button title="+ Add" variant="secondary" onPress={() => nav.navigate('CreateGroup')} />}
-      />
       <View style={{ padding: spacing.s16, flex: 1 }}>
+        <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between' }}>
+          <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Groups</Text>
+          <Button title="+ Add" variant="secondary" onPress={() => nav.navigate('CreateGroup')} />
+        </View>
                 {/* Top summary */}
         {(totals.youOwe > 0.009 || totals.theyOwe > 0.009) && (
           <View style={{ marginBottom: spacing.s12, flexDirection: 'row', gap: spacing.s12 }}>

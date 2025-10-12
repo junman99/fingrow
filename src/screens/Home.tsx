@@ -1,12 +1,10 @@
-import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { View, Text, Pressable, Animated } from 'react-native';
+import React, { useEffect, useRef, useCallback } from 'react';
+import { View, Text, Pressable, Image, Animated, Easing } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius, elevation } from '../theme/tokens';
 import { ScreenScroll } from '../components/ScreenScroll';
-import ProfileHero from '../components/ProfileHero';
-import RoundAction from '../components/RoundAction';
 import { MonthCompareChart } from '../components/MonthCompareChart';
 import { RecentTransactionsCard } from '../components/RecentTransactionsCard';
 import Icon from '../components/Icon';
@@ -14,110 +12,263 @@ import { useTxStore } from '../store/transactions';
 import { useProfileStore } from '../store/profile';
 import { useGroupsStore } from '../store/groups';
 
+const AnimatedText = Animated.createAnimatedComponent(Text);
+
+type AddFabProps = {
+  anim: Animated.Value;
+  accent: string;
+  textColor: string;
+  onPress: () => void;
+};
+
+const AddFabButton: React.FC<AddFabProps> = ({ anim, accent, textColor, onPress }) => {
+  const collapsedWidth = 52;
+  const expandedWidth = 188;
+  const width = anim.interpolate({ inputRange: [0, 1], outputRange: [collapsedWidth, expandedWidth] });
+  const textOpacity = anim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 0.35, 1] });
+  const textTranslate = anim.interpolate({ inputRange: [0, 1], outputRange: [8, 2] });
+  const iconSize = 22;
+  const iconBaseOffset = (collapsedWidth - iconSize) / 2;
+  const iconTargetOffset = spacing.s16 + spacing.s4;
+  const iconTranslate = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, iconTargetOffset - iconBaseOffset]
+  });
+  const height = 48;
+
+  return (
+    <Animated.View style={{
+      width,
+      height,
+      borderRadius: height / 2,
+      backgroundColor: accent,
+      overflow: 'hidden',
+      alignSelf: 'flex-end',
+      ...(elevation.level3 as any)
+    }}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => ({
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingVertical: spacing.s8,
+          paddingLeft: spacing.s16,
+          paddingRight: spacing.s12,
+          opacity: pressed ? 0.9 : 1
+        })}
+      >
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: iconBaseOffset,
+            transform: [{ translateX: iconTranslate }]
+          }}
+        >
+          <Icon name="plus-rounded" size={22} colorToken="text.onPrimary" />
+        </Animated.View>
+        <AnimatedText
+          numberOfLines={1}
+          style={{
+            color: textColor,
+            fontWeight: '700',
+            textAlign: 'center',
+            opacity: textOpacity,
+            transform: [{ translateX: textTranslate }]
+          }}
+        >
+          Add transaction
+        </AnimatedText>
+      </Pressable>
+    </Animated.View>
+  );
+};
+
 export const Home: React.FC = () => {
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { get } = useThemeTokens();
 
   // stores
-  const { transactions, hydrate: hydrateTx } = useTxStore();
+  const { hydrate: hydrateTx } = useTxStore();
   const { profile, hydrate: hydrateProfile } = useProfileStore();
   const { hydrate: hydrateGroups } = useGroupsStore();
 
   useEffect(() => { hydrateProfile(); hydrateTx(); hydrateGroups(); }, []);
 
-  const fabOpacity = useRef(new Animated.Value(0)).current;
-  // scroll state for inline->floating Add
-  const [showFab, setShowFab] = useState(false);
-  const onHomeScroll = useCallback((e:any) => {
-    const y = e?.nativeEvent?.contentOffset?.y ?? 0;
-    setShowFab(y > 96); // threshold; tune if needed
-  }, []);
+  const accentPrimary = get('accent.primary') as string;
+  const accentSecondary = get('accent.secondary') as string;
+  const textPrimary = get('text.primary') as string;
+  const muted = get('text.muted') as string;
+  const surface1 = get('surface.level1') as string;
+  const surface2 = get('surface.level2') as string;
+  const borderSubtle = get('border.subtle') as string;
+  const textOnPrimary = get('text.onPrimary') as string;
+
+  const collapseAnim = useRef(new Animated.Value(1)).current;
+  const fabTargetRef = useRef(1);
+  const collapseTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const animateFab = useCallback((to: number) => {
+    if (fabTargetRef.current === to) return;
+    fabTargetRef.current = to;
+    collapseAnim.stopAnimation();
+    Animated.timing(collapseAnim, {
+      toValue: to,
+      duration: to === 0 ? 220 : 200,
+      easing: to === 0 ? Easing.out(Easing.cubic) : Easing.out(Easing.quad),
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (finished) collapseAnim.setValue(to);
+    });
+  }, [collapseAnim]);
+
+  const onHomeScroll = useCallback((event: any) => {
+    animateFab(0);
+    if (collapseTimeout.current) clearTimeout(collapseTimeout.current);
+    collapseTimeout.current = setTimeout(() => {
+      animateFab(1);
+    }, 160);
+  }, [animateFab]);
 
   useEffect(() => {
-    Animated.timing(fabOpacity, { toValue: showFab ? 1 : 0, duration: 140, useNativeDriver: true }).start();
-  }, [showFab]);
+    return () => {
+      if (collapseTimeout.current) clearTimeout(collapseTimeout.current);
+    };
+  }, []);
 
-  const monthTotals = useMemo(() => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const last7 = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
-    let mtd = 0, last = 0;
-    (transactions || []).forEach((t:any) => {
-      const d = new Date(t.date);
-      if (t.type === 'expense') {
-        if (d >= start) mtd += t.amount;
-        if (d >= last7) last += t.amount;
-      }
-    });
-    return { mtd, last7: last };
-  }, [transactions]);
+  const handleAddPress = useCallback(() => nav.navigate('Add'), [nav]);
 
-  const SummaryCard = () => (
-    <View style={{ backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s16, ...elevation.level1 as any }}>
-      <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>This month</Text>
-      <Text style={{ color: get('text.muted') as string, marginTop: spacing.s8 }}>You spent ${(monthTotals.mtd || 0).toFixed(0)}</Text>
-    </View>
-  );
+  const quickActions = [
+    {
+      key: 'groups',
+      icon: 'users-2' as const,
+      label: 'Shared bills',
+      onPress: () => nav.navigate('Groups', { screen: 'GroupsRoot' }),
+      accent: get('accent.secondary') as string
+    },
+    {
+      key: 'goal',
+      icon: 'target' as const,
+      label: 'Savings goals',
+      onPress: () => nav.navigate('Goals', { screen: 'GoalsRoot' }),
+      accent: get('accent.primary') as string
+    },
+    {
+      key: 'budget',
+      icon: 'wallet' as const,
+      label: 'Budgets',
+      onPress: () => nav.navigate('BudgetModal'),
+      accent: get('semantic.warning') as string
+    },
+    {
+      key: 'history',
+      icon: 'history' as const,
+      label: 'History',
+      onPress: () => nav.navigate('TransactionsModal'),
+      accent: get('semantic.success') as string
+    }
+  ];
 
-  const Recent = () => (
-    <View style={{ marginTop: spacing.s16 }}>
-      <RecentTransactionsCard />
-    </View>
-  );
+  const avatarInitials = (() => {
+    const n = profile?.name?.trim();
+    if (!n) return '👤';
+    const parts = n.split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '👤';
+    if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? '👤';
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  })();
 
   return (
     <View style={{ flex: 1 }}>
-      <ScreenScroll inTab onScroll={onHomeScroll} scrollEventThrottle={16} contentStyle={{ padding: spacing.s16 }}>
-        {/* Top pinned header area content lives visually first in the scroll, but we keep only ONE profile hero */}
-        <Pressable accessibilityRole="button" accessibilityLabel="Open profile" onPress={() => nav.navigate('ProfileEdit')} style={{ marginBottom: spacing.s16 }}>
-          <ProfileHero name={profile?.name || 'There'} email={profile?.email} avatarUri={profile?.avatarUri} variant="blend" />
-        </Pressable>
-
-        <MonthCompareChart />
-
-        {/* Quick actions row */}
-        <View style={{ flexDirection: 'row', columnGap: spacing.s12, rowGap: spacing.s12, marginTop: spacing.s12 }}>
-          <RoundAction iconName="plus-circle" label="Add" primary onPress={() => nav.navigate('Add')} />
-          <RoundAction iconName="users-2" label="Groups" onPress={() => nav.navigate('Groups', { screen: 'GroupsRoot' })} />
-          <RoundAction iconName="target" label="Goal" onPress={() => nav.navigate('Goals', { screen: 'GoalsRoot' })} />
-          <RoundAction iconName="wallet" label="Budget" onPress={() => nav.navigate('BudgetModal')} />
-          <RoundAction iconName="history" label="History" onPress={() => nav.navigate('TransactionsModal')} />
+      <ScreenScroll
+        inTab
+        onScroll={onHomeScroll}
+        scrollEventThrottle={16}
+        contentStyle={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, paddingBottom: spacing.s32 }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
+          <Text style={{ fontSize: 28, fontWeight: '800', color: textPrimary }}>Spending</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+            onPress={() => nav.navigate('ProfileModal')}
+            style={({ pressed }) => ({
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              overflow: 'hidden',
+              backgroundColor: surface2,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: pressed ? 0.8 : 1
+            })}
+          >
+            {profile?.avatarUri ? (
+              <Image source={{ uri: profile.avatarUri }} style={{ width: 44, height: 44 }} />
+            ) : (
+              <Text style={{ color: textPrimary, fontWeight: '700' }}>{avatarInitials}</Text>
+            )}
+          </Pressable>
         </View>
 
-        
+        <View style={{ marginTop: spacing.s8 }}>
+          <MonthCompareChart />
+        </View>
 
-        
-        <Recent />
+        <View style={{ marginTop: spacing.s16 }}>
+          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16, marginBottom: spacing.s8 }}>Shortcuts</Text>
+          <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
+            {quickActions.map(action => (
+              <Pressable
+                key={action.key}
+                accessibilityRole="button"
+                onPress={action.onPress}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: pressed ? 0.82 : 1
+                })}
+              >
+                <View style={{
+                  width: '100%',
+                  paddingVertical: spacing.s10,
+                  borderRadius: radius.lg,
+                  backgroundColor: action.accent,
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Icon name={action.icon} size={26} colorToken="text.onPrimary" />
+                  <Text style={{ color: get('text.onPrimary') as string, fontWeight: '700', marginTop: spacing.s4, fontSize: 12 }}>
+                    {action.label}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <View style={{ marginTop: spacing.s16 }}>
+          <RecentTransactionsCard />
+        </View>
       </ScreenScroll>
 
       {/* Floating Add button at bottom-left when scrolled */}
-      <Animated.View pointerEvents={showFab ? 'auto' : 'none'} style={{ opacity: fabOpacity }}>
-  <Pressable
-    accessibilityRole="button"
-    accessibilityLabel="Add transaction"
-    onPress={() => nav.navigate('Add')}
-    style={({ pressed }) => ({
-      position: 'absolute',
-      left: 16,
-      bottom: Math.max(insets.bottom, 12) + 12,
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: get('accent.primary') as string,
-      opacity: pressed ? 0.9 : 1,
-      ...(elevation.level2 as any),
-    })}
-  >
-    {/* Same look/feel as RoundAction's icon-only circle */}
-    {/* We reuse the same Feather icon mapping via Icon component */}
-    {/** Using plus-circle to match existing visuals */}
-    {/* If you prefer a plain plus, we can add it to Icon.tsx map */}
-    <Icon name={'plus-circle'} size={24} colorToken={'text.onPrimary'} />
-  </Pressable>
-</Animated.View>
+      <View
+        style={{
+          position: 'absolute',
+          right: spacing.s16,
+          bottom: Math.max(insets.bottom, spacing.s16)
+        }}
+      >
+        <AddFabButton
+          anim={collapseAnim}
+          accent={accentSecondary}
+          textColor={textOnPrimary}
+          onPress={handleAddPress}
+        />
+      </View>
     </View>
   );
 };

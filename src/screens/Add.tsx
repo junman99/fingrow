@@ -1,15 +1,19 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, Dimensions, Alert } from 'react-native';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { View, Text, TextInput, Pressable, Dimensions, Modal, TouchableWithoutFeedback } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { Screen } from '../components/Screen';
-import { AppHeader } from '../components/AppHeader';
-import { spacing, radius } from '../theme/tokens';
+import Keypad from '../components/Keypad';
+import DateTimeSheet from '../components/DateTimeSheet';
+import Icon from '../components/Icon';
+
+import { spacing, radius, elevation } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { useTxStore, TxType } from '../store/transactions';
 import { useRecurringStore } from '../store/recurring';
-import { useNavigation } from '@react-navigation/native';
-import * as Haptics from 'expo-haptics';
-import Keypad from '../components/Keypad';
-import DateTimeSheet from '../components/DateTimeSheet';
 import {
   Utensils, ShoppingBasket, Bus, Fuel, Ticket, ShoppingBag, Wallet, Plane, HeartPulse, Dumbbell, House, Gift,
   TrendingUp, Repeat, ArrowLeftRight, GraduationCap, PawPrint, Plug, Droplets, MoreHorizontal
@@ -65,10 +69,12 @@ export default function Add() {
 
   // Quick time & account selection
   const [txDate, setTxDate] = useState<Date>(new Date());
-  const [timeOpen, setTimeOpen] = useState<boolean>(false);
   const [dtOpen, setDtOpen] = useState<boolean>(false);
-  const [account, setAccount] = useState<string>('Default');
+  const [account, setAccount] = useState<string>('Wallet');
   const [accountOpen, setAccountOpen] = useState<boolean>(false);
+  const [note, setNote] = useState<string>('');
+  const [noteOpen, setNoteOpen] = useState<boolean>(false);
+  const [noteDraft, setNoteDraft] = useState<string>('');
   const [recMade, setRecMade] = useState<boolean>(false);
 
   function fmtChipTime(d: Date) {
@@ -87,8 +93,7 @@ export default function Add() {
   const [mode, setMode] = useState<Mode>('expense');
   const [category, setCategory] = useState<Cat>(EXPENSE_CATS[0]);
   const [expr, setExpr] = useState<string>('');
-  const [notes, setNotes] = useState<string>('');
-  const [notesOpen, setNotesOpen] = useState<boolean>(false);
+  
 
   const result = useMemo(() => evaluateExpression(expr), [expr]);
   const [toast, setToast] = useState<string>('');
@@ -116,265 +121,468 @@ export default function Add() {
     setExpr(prev => prev.slice(0, -1));
   };
 
-  const onSave = async () => {
-    const amt = Math.max(0, Number(result.toFixed(2)));
-    if (!amt) return;
-    await addTx({
-      type: mode as TxType,
-      amount: amt,
-      category: category?.label || (mode === 'expense' ? 'Expense' : 'Income'),
-      date: txDate.toISOString(),
-      note: notes || undefined,
-      
-    });
-    nav.goBack();
-  };
-
   const { add: addRecurring } = useRecurringStore();
-
-  const onMakeRecurringQuick = async () => {
-    try {
-      const amt = Math.max(0, Number(result.toFixed(2)));
-      if (!amt || !isFinite(amt)) {
-        setToast('Enter an amount first');
-        setToastVisible(true);
-        setTimeout(() => setToastVisible(false), 1200);
-        return;
-      }
-      const label = notes || (category?.label || 'Bill');
-      const cat = category?.label || 'Bills';
-      const payload = {
-        amount: amt,
-        label,
-        category: cat,
-        freq: 'monthly',
-        anchorISO: new Date().toISOString()
-      };
-      await addRecurring(payload as any);
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setToast('Saved as recurring');
-      setToastVisible(true);
-      setTimeout(() => setToastVisible(false), 1200);
-      setRecMade(true);
-    } catch (e) {
-      setToast('Could not save recurring');
-      setToastVisible(true);
-      setTimeout(() => setToastVisible(false), 1200);
-    }
-  };
-
-  const onOkAdd = async () => {
-    const amt = Math.max(0, Number(result.toFixed(2)));
-    if (!amt) return;
-    await addTx({
-      type: mode as TxType,
-      amount: amt,
-      category: category?.label || (mode === 'expense' ? 'Expense' : 'Income'),
-      date: txDate.toISOString(),
-      note: notes || undefined,
-      
-    });
-    setToast(`$${amt.toFixed(2)} • ${category?.label || ''} added`);
-    setToastVisible(true);
-    setTimeout(() => setToastVisible(false), 3000);
-    setExpr('');
-    setNotes('');
-  };
-  const onDoneClose = async () => {
-    const amt = Math.max(0, Number(result.toFixed(2)));
-    if (!amt) return;
-    await addTx({
-      type: mode as TxType,
-      amount: amt,
-      category: category?.label || (mode === 'expense' ? 'Expense' : 'Income'),
-      date: txDate.toISOString(),
-      note: notes || undefined,
-      
-    });
-    nav.goBack();
-  };
-
-
-
   const cats = mode === 'expense' ? EXPENSE_CATS : INCOME_CATS;
 
-  // --- UI building blocks ---
+  // --- helpers for new layout ---
   const ModeToggle = () => {
-    const Seg = (m: Mode, label: string) => {
-      const on = mode === m;
+    const Option = (value: Mode, label: string) => {
+      const active = mode === value;
       return (
-        <Pressable accessibilityRole="button" onPress={() => setMode(m)} style={({ pressed }) => ({
-          height: 52,
-          borderRadius: radius.pill,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: on ? (get('accent.primary') as string) : (get('surface.level2') as string),
-          opacity: pressed ? 0.9 : 1,
-          flex: 1,
-        })}>
-          <Text style={{ color: on ? (get('text.onPrimary') as string) : (get('text.primary') as string), fontWeight: '700' }}>
-            {label}
-          </Text>
+        <Pressable
+          key={value}
+          accessibilityRole="button"
+          onPress={() => setMode(value)}
+          style={({ pressed }) => ({
+            paddingHorizontal: spacing.s8,
+            paddingVertical: spacing.s4,
+            borderRadius: radius.pill,
+            backgroundColor: active ? 'rgba(255,255,255,0.22)' : 'transparent',
+            opacity: pressed ? 0.9 : 1,
+            minWidth: 48,
+            alignItems: 'center',
+          })}
+        >
+          <Text style={{ color: 'rgba(255,255,255,0.9)', fontWeight: '700', letterSpacing: 0.6 }}>{label}</Text>
         </Pressable>
       );
     };
+
     return (
-      <View style={{ flexDirection: 'row', gap: spacing.s8, paddingHorizontal: spacing.s16 }}>
-        {Seg('expense', 'Expense')}
-        {Seg('income', 'Income')}
+      <View
+        style={{
+          flexDirection: 'row',
+          backgroundColor: 'rgba(255,255,255,0.12)',
+          borderRadius: radius.pill,
+          paddingHorizontal: spacing.s4,
+          paddingVertical: spacing.s4,
+          gap: spacing.s2,
+        }}
+      >
+        {Option('expense', 'EXP')}
+        {Option('income', 'INC')}
       </View>
     );
   };
 
-  const { width: screenW } = Dimensions.get('window');
-  const pagePad = spacing.s16;
-  const gap = spacing.s12;
-  const itemW = Math.floor((screenW - pagePad*2 - gap*3) / 4);
+  const SummaryChip = ({ icon, label, onPress, fullWidth, style }: SummaryChipProps) => {
+    const iconName =
+      icon === 'category'
+        ? 'receipt'
+        : icon === 'clock'
+        ? 'history'
+        : icon === 'wallet'
+        ? 'wallet'
+        : icon === 'note'
+        ? 'edit'
+        : 'plus-circle';
 
-  const renderCat = ({ item }: { item: Cat }) => {
-    const Icon = item.icon as any;
-    const on = category?.key === item.key;
     return (
       <Pressable
-        onPress={() => setCategory(item)}
-        style={({ pressed }) => ({
-          width: itemW,
-          alignItems: 'center',
-          marginBottom: spacing.s16,
-          opacity: pressed ? 0.9 : 1,
-        })}
+        disabled={!onPress}
+        onPress={onPress}
+        style={({ pressed }) => [
+          {
+            opacity: pressed ? 0.85 : 1,
+            alignSelf: fullWidth ? 'stretch' : undefined,
+          },
+          style,
+        ]}
       >
-        <View style={{
-          width: 44, height: 44, borderRadius: 22,
-          alignItems: 'center', justifyContent: 'center',
-          backgroundColor: on ? (get('accent.primary') as string) : (get('surface.level2') as string)
-        }}>
-          <Icon size={20} color={on ? (get('text.onPrimary') as string) : (get('icon.default') as string)} />
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.s6,
+            paddingHorizontal: spacing.s10,
+            paddingVertical: spacing.s6,
+            borderRadius: radius.pill,
+            backgroundColor: 'rgba(255,255,255,0.12)',
+          }}
+        >
+          <Icon name={iconName} size={14} colorToken="text.onSurface" />
+          <Text style={{ color: 'rgba(250,250,252,0.95)', fontWeight: '600', fontSize: 12 }}>{label}</Text>
         </View>
-        <Text numberOfLines={1} style={{ marginTop: spacing.s8, color: get('text.primary') as string }}>
-          {item.label}
-        </Text>
       </Pressable>
     );
   };
 
-  return (
-    <Screen>
-      <AppHeader title="Add" />
+  const containerPad = spacing.s16;
+  const gridGap = spacing.s8;
+  const availableWidth = Math.max(0, screenW - containerPad * 2);
+  const numColumns = availableWidth >= 320 ? 4 : 3;
+  const itemWidth = Math.floor((availableWidth - gridGap * (numColumns - 1)) / numColumns);
+  const tileMaxHeight = Math.max(240, screenH - keypadHeightEstimate - insets.bottom - spacing.s32);
 
-      {/* Sticky top toggle */}
-      <View style={{ marginTop: spacing.s16 }}>
-        <ModeToggle />
-      </View>
+  const renderCat = (item: Cat, index: number) => {
+    const IconComp = item.icon as any;
+    const selected = category?.key === item.key;
+    const base = mixColor(surface1, '#0e121f', 0.6);
+    const bg = selected ? mixColor(accentPrimary, base, 0.5) : base;
+    const border = selected ? mixColor(accentPrimary, '#0a0c14', 0.5) : 'rgba(255,255,255,0.08)';
+    const labelColor = selected ? accentPrimary : textPrimary;
 
-      {/* Categories scroll only */}
-      <View style={{ flex: 1, paddingHorizontal: spacing.s16, marginTop: spacing.s16 }}>
-        <FlatList
-          data={cats}
-          renderItem={renderCat}
-          keyExtractor={(it) => it.key}
-          numColumns={4}
-          columnWrapperStyle={{ justifyContent: 'space-between' }}
-          contentContainerStyle={{ paddingBottom: spacing.s24 }}
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-        />
-      </View>
-
-      {/* Sticky compose block above keypad */}
-      <View style={{ padding: spacing.s16, paddingTop: 0 }}>
-        {/* Chips row */}
-        <View style={{ flexDirection: 'row', gap: spacing.s8, marginTop: spacing.s12, marginBottom: spacing.s4 }}>
-          <Pressable onPress={() => setDtOpen(true)} style={{ backgroundColor: get('surface.level1') as string, borderRadius: radius.pill, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}>
-  <Text style={{ color: get('text.primary') as string }}>Time: {fmtChipTime(txDate)}</Text>
-</Pressable>
-          <Pressable style={{ backgroundColor: get('surface.level2') as string, borderRadius: radius.pill, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}>
-            <Text style={{ color: get('text.primary') as string }}>Account: {account}</Text>
-          </Pressable>
-          <Pressable onPress={onMakeRecurringQuick} style={{ backgroundColor: get('surface.level1') as string, borderRadius: radius.pill, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}>
-            <Text style={{ color: get('text.primary') as string }}>{recMade ? 'Recurring added' : 'Make recurring'}</Text>
-          </Pressable>
-        </View>
-        {/* Quick pick panels */}
-        {timeOpen ? (
-          <View style={{ backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s12, gap: spacing.s8 }}>
-            <View style={{ flexDirection:'row', gap: spacing.s8, flexWrap:'wrap' }}>
-              <Pressable onPress={() => { setTxDate(new Date()); setTimeOpen(false); }} style={{ backgroundColor: get('surface.level2') as string, borderRadius: radius.lg, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}>
-                <Text style={{ color: get('text.primary') as string }}>Now</Text>
-              </Pressable>
-              <Pressable onPress={() => { const d=new Date(); d.setHours(20,0,0,0); setTxDate(d); setTimeOpen(false);} } style={{ backgroundColor: get('surface.level2') as string, borderRadius: radius.lg, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}>
-                <Text style={{ color: get('text.primary') as string }}>Tonight 8:00</Text>
-              </Pressable>
-              <Pressable onPress={() => { const d=new Date(Date.now()+86400000); d.setHours(9,0,0,0); setTxDate(d); setTimeOpen(false);} } style={{ backgroundColor: get('surface.level2') as string, borderRadius: radius.lg, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}>
-                <Text style={{ color: get('text.primary') as string }}>Tomorrow 9:00</Text>
-              </Pressable>
-              <Pressable onPress={() => { const d=new Date(txDate.getTime()+7*86400000); setTxDate(d); setTimeOpen(false);} } style={{ backgroundColor: get('surface.level2') as string, borderRadius: radius.lg, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}>
-                <Text style={{ color: get('text.primary') as string }}>+1 week</Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : null}
-
-        {accountOpen ? (
-          <View style={{ backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s12, gap: spacing.s8 }}>
-            <View style={{ flexDirection:'row', gap: spacing.s8, flexWrap:'wrap' }}>
-              {['Default','Cash','Card','Savings'].map(a => (
-                <Pressable key={a} onPress={() => { setAccount(a); setAccountOpen(false);} } style={{ backgroundColor: get('surface.level2') as string, borderRadius: radius.lg, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}>
-                  <Text style={{ color: get('text.primary') as string }}>{a}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ) : null}
-
-
-        {/* Notes */}
-        <TextInput
-          placeholder="Notes (optional)"
-          placeholderTextColor={get('text.muted') as string}
-          style={{ backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s12, color: get('text.primary') as string, marginBottom: spacing.s4 }}
-          value={notes}
-          onChangeText={setNotes}
-          onFocus={() => setNotesOpen(true)}
-          onBlur={() => setNotesOpen(false)}
-        />
-
-        {/* Amount */}
-        {(/[+\-×÷*/]/.test(expr)) && (
-          <Text style={{ color: get('text.muted') as string, marginBottom: spacing.s4 }}>{expr}</Text>
-        )}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.s4 }}>
-          <Text style={{ color: get('text.primary') as string, fontSize: 40, fontWeight: '800' }}>
-            ${result.toFixed(2)}
+    return (
+      <Pressable
+        key={item.key}
+        onPress={() => setCategory(item)}
+        style={({ pressed }) => ({
+          width: itemWidth,
+          alignItems: 'center',
+          marginRight: index % numColumns === numColumns - 1 ? 0 : gridGap,
+          marginBottom: gridGap,
+          opacity: pressed ? 0.85 : 1,
+        })}
+      >
+        <View
+          style={{
+            width: '100%',
+            borderRadius: radius.lg,
+            paddingVertical: spacing.s10,
+            paddingHorizontal: spacing.s6,
+            backgroundColor: bg,
+            borderWidth: 1,
+            borderColor: border,
+            alignItems: 'center',
+            justifyContent: 'center',
+            ...(selected ? elevation.level2 : elevation.level1),
+          }}
+        >
+          <IconComp size={20} color={labelColor} />
+          <Text style={{ marginTop: spacing.s6, color: labelColor, fontWeight: '600' }} numberOfLines={1}>
+            {item.label}
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
-            <Pressable onPress={onBackspace} style={{ paddingHorizontal: spacing.s8, paddingVertical: spacing.s8 }}><Text style={{ color: get('text.muted') as string, fontSize: 18 }}>⌫</Text></Pressable>
-            <Pressable onPress={onOkAdd} style={{ backgroundColor: get('accent.primary') as string, borderRadius: radius.pill, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}>
-              <Text style={{ color: get('text.onPrimary') as string, fontWeight: '700' }}>OK</Text>
-            </Pressable>
-          </View>
         </View>
+      </Pressable>
+    );
+  };
+
+  const onMakeRecurringQuick = async () => {
+    try {
+      const amt = Math.max(0, Number(result.toFixed(2)));
+      if (!amt || !Number.isFinite(amt)) {
+        showToast('Enter an amount first');
+        return;
+      }
+      const payload = {
+        amount: amt,
+        label: note?.trim() || category?.label || 'Recurring',
+        category: category?.label || 'Bills',
+        freq: 'monthly' as const,
+        anchorISO: new Date().toISOString(),
+      };
+      await addRecurring(payload as any);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setRecMade(true);
+      showToast('Saved as recurring');
+    } catch {
+      showToast('Could not save recurring');
+    }
+  };
+
+  const addTxCommon = async () => {
+    const amt = Math.max(0, Number(result.toFixed(2)));
+    if (!amt) {
+      showToast('Enter an amount first');
+      return false;
+    }
+    await addTx({
+      type: mode as TxType,
+      amount: amt,
+      category: category?.label || (mode === 'expense' ? 'Expense' : 'Income'),
+      date: txDate.toISOString(),
+      note: note.trim() ? note.trim() : undefined,
+      account,
+    });
+    return true;
+  };
+
+  const onAddAndStay = async () => {
+    const ok = await addTxCommon();
+    if (!ok) return;
+    showToast(`${mode === 'expense' ? '-' : '+'}$${result.toFixed(2)} added`, 2000);
+    setExpr('');
+    setHasEvaluated(false);
+  };
+
+  const onSaveAndClose = async () => {
+    const ok = await addTxCommon();
+    if (!ok) return;
+    setHasEvaluated(false);
+    nav.goBack();
+  };
+
+  const keypadHeader = (
+    <View style={{ gap: spacing.s6 }}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, paddingRight: spacing.s4 }}
+      >
+        <SummaryChip
+          icon="category"
+          label={category?.label || 'Category'}
+          onPress={() => {
+            scrollRef.current?.scrollTo({ y: 0, animated: true });
+          }}
+        />
+        <SummaryChip
+          icon="clock"
+          label={whenLabel}
+          onPress={() => {
+            setAccountOpen(false);
+            setDtOpen(true);
+          }}
+        />
+        <SummaryChip
+          icon="wallet"
+          label={account}
+          onPress={() => setAccountOpen(true)}
+        />
+        <SummaryChip
+          icon="recurring"
+          label={recMade ? 'Recurring saved' : 'Recurring'}
+          onPress={onMakeRecurringQuick}
+        />
+      </ScrollView>
+
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <ModeToggle />
+        <Text style={{ color: 'rgba(255,255,255,0.96)', fontSize: 32, fontWeight: '800' }}>${displayValue}</Text>
       </View>
 
-      {/* Keypad at absolute bottom; hidden when notes focused */}
-      {toastVisible && (
-        <View style={{ position: 'absolute', left: spacing.s16, right: spacing.s16, bottom: 220, backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s12 }}>
-          <Text style={{ color: get('text.primary') as string, fontWeight: '600' }}>{toast}</Text>
+      <SummaryChip
+        icon="note"
+        label={noteChipLabel}
+        onPress={() => {
+          setNoteDraft(note);
+          setNoteOpen(true);
+        }}
+        fullWidth
+      />
+    </View>
+  );
+
+  return (
+    <Screen style={{ paddingBottom: 0 }} inTab>
+      <View style={{ flex: 1 }}>
+        <LinearGradient
+          colors={[heroGradientStart, heroGradientEnd, backgroundDefault]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0.2, y: 1 }}
+          style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 320 }}
+        />
+
+        <View style={{ flex: 1, paddingTop: spacing.s8, paddingHorizontal: containerPad, paddingBottom: keypadReserve }}>
+          <View style={{ marginBottom: spacing.s12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View>
+                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Choose a category</Text>
+                <Text style={{ color: textMuted, marginTop: spacing.s4 }}>Tailor budgets and insights by tagging spend.</Text>
+              </View>
+              <Pressable
+                onPress={() => setCategory((mode === 'expense' ? EXPENSE_CATS : INCOME_CATS)[0])}
+                style={({ pressed }) => ({
+                  paddingHorizontal: spacing.s10,
+                  paddingVertical: spacing.s6,
+                  borderRadius: radius.pill,
+                  backgroundColor: surface2,
+                  opacity: pressed ? 0.88 : 1,
+                })}
+              >
+                <Text style={{ color: textMuted, fontWeight: '600', fontSize: 12 }}>Reset</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView
+              ref={scrollRef}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingTop: spacing.s8, paddingBottom: spacing.s12 }}
+              style={{ maxHeight: tileMaxHeight }}
+            >
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>{(mode === 'expense' ? EXPENSE_CATS : INCOME_CATS).map((item, index) => renderCat(item, index))}</View>
+            </ScrollView>
+          </View>
         </View>
-      )}
-      
-      {false && !notesOpen && (
-        <View style={{ paddingHorizontal: spacing.s16, paddingBottom: spacing.s8 }}>
-          <Pressable onPress={onMakeRecurringQuick}
-            style={{ alignSelf:'flex-end', backgroundColor: recMade ? (get('accent.primary') as string) : (get('surface.level2') as string), borderRadius: radius.lg, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}>
-            <Text style={{ color: recMade ? (get('text.onPrimary') as string) : (get('text.primary') as string), fontWeight: '700' }}>{recMade ? 'Recurring added' : 'Make recurring'}</Text>
-          </Pressable>
+
+        {toastVisible ? (
+          <View
+            style={{
+              position: 'absolute',
+              left: spacing.s16,
+              right: spacing.s16,
+              bottom: insets.bottom + 220,
+              borderRadius: radius.lg,
+              paddingVertical: spacing.s12,
+              paddingHorizontal: spacing.s16,
+              backgroundColor: mixColor(accentPrimary, surface1, 0.5),
+              ...(elevation.level1 as any),
+            }}
+          >
+            <Text style={{ color: textPrimary, fontWeight: '700' }}>{toast}</Text>
+          </View>
+        ) : null}
+
+        <DateTimeSheet
+          visible={dtOpen}
+          date={txDate}
+          onCancel={() => setDtOpen(false)}
+          onConfirm={(d) => {
+            setTxDate(d);
+            setDtOpen(false);
+          }}
+        />
+
+        <Modal visible={accountOpen} transparent animationType="fade" onRequestClose={() => setAccountOpen(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(8,10,18,0.72)', justifyContent: 'center', alignItems: 'center', padding: spacing.s16 }}>
+            <TouchableWithoutFeedback onPress={() => setAccountOpen(false)}>
+              <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }} />
+            </TouchableWithoutFeedback>
+            <View
+              style={{
+                width: '100%',
+                maxWidth: 360,
+                borderRadius: radius.xl,
+                padding: spacing.s16,
+                backgroundColor: 'rgba(11,13,22,0.88)',
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.18)',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
+                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 18 }}>Choose account</Text>
+                <Pressable onPress={() => setAccountOpen(false)} hitSlop={12}>
+                  <Text style={{ color: textMuted, fontWeight: '600' }}>Close</Text>
+                </Pressable>
+              </View>
+
+              <View style={{ gap: spacing.s8 }}>
+                {['Wallet', 'Cash', 'Credit card', 'Savings'].map((name) => {
+                  const active = account === name;
+                  return (
+                    <Pressable
+                      key={name}
+                      onPress={() => {
+                        setAccount(name);
+                        setAccountOpen(false);
+                      }}
+                      style={({ pressed }) => ({
+                        paddingVertical: spacing.s10,
+                        paddingHorizontal: spacing.s12,
+                        borderRadius: radius.lg,
+                        backgroundColor: active ? mixColor(accentPrimary, surface1, 0.4) : surface2,
+                        opacity: pressed ? 0.9 : 1,
+                      })}
+                    >
+                      <Text style={{ color: textPrimary, fontWeight: active ? '700' : '500' }}>{name}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal visible={noteOpen} transparent animationType="fade" onRequestClose={onNoteCancel}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(8,10,18,0.72)', justifyContent: 'center', alignItems: 'center', padding: spacing.s16 }}>
+            <TouchableWithoutFeedback onPress={onNoteCancel}>
+              <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }} />
+            </TouchableWithoutFeedback>
+            <View
+              style={{
+                width: '100%',
+                maxWidth: 360,
+                borderRadius: radius.xl,
+                padding: spacing.s16,
+                backgroundColor: 'rgba(11,13,22,0.88)',
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.18)',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
+                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 18 }}>Add note</Text>
+                <Pressable onPress={onNoteCancel} hitSlop={12}>
+                  <Text style={{ color: textMuted, fontWeight: '600' }}>Close</Text>
+                </Pressable>
+              </View>
+              <TextInput
+                value={noteDraft}
+                onChangeText={setNoteDraft}
+                placeholder="Add a quick note"
+                placeholderTextColor={`${textMuted}99`}
+                multiline
+                autoFocus
+                returnKeyType="done"
+                blurOnSubmit
+                onSubmitEditing={onNoteSave}
+                style={{
+                  minHeight: 96,
+                  borderRadius: radius.lg,
+                  borderWidth: 1,
+                  borderColor: borderSubtle,
+                  padding: spacing.s12,
+                  backgroundColor: surface2,
+                  color: textPrimary,
+                  fontSize: 16,
+                  textAlignVertical: 'top',
+                }}
+              />
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.s8, marginTop: spacing.s12 }}>
+                {noteDraft.length > 0 || note.length > 0 ? (
+                  <Pressable
+                    onPress={onNoteClear}
+                    style={({ pressed }) => ({
+                      paddingHorizontal: spacing.s10,
+                      paddingVertical: spacing.s6,
+                      borderRadius: radius.pill,
+                      borderWidth: 1,
+                      borderColor: borderSubtle,
+                      opacity: pressed ? 0.85 : 1,
+                    })}
+                  >
+                    <Text style={{ color: textMuted, fontWeight: '600' }}>Clear</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  onPress={onNoteCancel}
+                  style={({ pressed }) => ({
+                    paddingHorizontal: spacing.s12,
+                    paddingVertical: spacing.s8,
+                    borderRadius: radius.pill,
+                    backgroundColor: surface2,
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Text style={{ color: textMuted, fontWeight: '600' }}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={onNoteSave}
+                  style={({ pressed }) => ({
+                    paddingHorizontal: spacing.s12,
+                    paddingVertical: spacing.s8,
+                    borderRadius: radius.pill,
+                    backgroundColor: accentPrimary,
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Text style={{ color: textOnPrimary, fontWeight: '700' }}>Save</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}>
+          <Keypad
+            onKey={onKey}
+            onBackspace={onBackspace}
+            onDone={onSaveAndClose}
+            onOk={onAddAndStay}
+            onEvaluate={onEvaluate}
+            header={keypadHeader}
+          />
         </View>
-      )}
-<DateTimeSheet visible={dtOpen} date={txDate} onCancel={() => setDtOpen(false)} onConfirm={(d)=>{ setTxDate(d); setDtOpen(false); }} />
-{!notesOpen && (<Keypad onKey={onKey} onBackspace={onBackspace} onDone={onDoneClose} onOk={onOkAdd} />)}
+      </View>
     </Screen>
   );
 }

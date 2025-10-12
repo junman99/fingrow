@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Switch, Share, Alert } from 'react-native';
 import { ScreenScroll } from '../../components/ScreenScroll';
-import { AppHeader } from '../../components/AppHeader';
 import Button from '../../components/Button';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
@@ -36,8 +35,8 @@ export default function BillDetails() {
   if (!group || !bill) {
     return (
       <ScreenScroll>
-        <AppHeader title="Bill" />
         <View style={{ padding: spacing.s16 }}>
+          <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Bill</Text>
           <Text style={{ color: get('text.muted') as string }}>Bill not found.</Text>
         </View>
       </ScreenScroll>
@@ -75,8 +74,8 @@ export default function BillDetails() {
 
   return (
     <ScreenScroll>
-      <AppHeader title="Bill details" />
       <View style={{ padding: spacing.s16, gap: spacing.s16 }}>
+        <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Bill details</Text>
         <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>{bill.title}</Text>
         <Text style={{ color: get('text.muted') as string }}>{fmtDate(bill.createdAt)}</Text>
 

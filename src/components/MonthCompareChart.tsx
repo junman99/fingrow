@@ -1,6 +1,6 @@
 
-import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, Pressable, Modal, TouchableWithoutFeedback } from 'react-native';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { View, Text, Pressable, Modal, TouchableWithoutFeedback, Animated, Easing } from 'react-native';
 import Svg, { Rect, G, Line, Text as SvgText } from 'react-native-svg';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { ScrollContext } from './ScrollContext';
@@ -8,6 +8,8 @@ import { spacing, radius } from '../theme/tokens';
 import { useTxStore } from '../store/transactions';
 import { useBudgetsStore } from '../store/budgets';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import Icon from './Icon';
 
 // ---- helpers for axis ----
 const niceCeilTight = (value: number, headroom = 0.08) => {
@@ -44,19 +46,40 @@ export const MonthCompareChart: React.FC = () => {
   useEffect(() => { hydrate(); hydrateBudget(); }, []);
 
   const now = new Date();
+  const nowYear = now.getFullYear();
+  const nowMonth = now.getMonth();
   const [offset, setOffset] = useState(0);
   const [chartW, setChartW] = useState(0);
   const [labelW, setLabelW] = useState(0);
 
-  // scrub state
+  const transactionsArray = Array.isArray(transactions) ? transactions : [];
+  const earliestTxDate = useMemo(() => {
+    const valid = transactionsArray
+      .map((t: any) => new Date(t?.date))
+      .filter(d => Number.isFinite(d?.getTime?.()) && d.getTime() <= now.getTime()) as Date[];
+    if (!valid.length) return new Date(nowYear, nowMonth, 1);
+    valid.sort((a, b) => a.getTime() - b.getTime());
+    const first = valid[0];
+    return new Date(first.getFullYear(), first.getMonth(), 1);
+  }, [transactions, nowYear, nowMonth]);
+  const minYear = earliestTxDate.getFullYear();
+  const minMonth = earliestTxDate.getMonth();
+
+  // scrub state & transitions
+  const minOffset = Math.min(0, (minYear - nowYear) * 12 + (minMonth - nowMonth));
+
   const [hoverActive, setHoverActive] = useState(false);
   const [hoverI, setHoverI] = useState(0);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
+  const gestureStart = useRef({ x: 0, y: 0 });
+  const slide = useRef(new Animated.Value(0)).current;
+  const [animating, setAnimating] = useState(false);
 
   // month picker modal
   const [mpOpen, setMpOpen] = useState(false);
-  const ref = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-  const [mpYear, setMpYear] = useState(ref.getFullYear());
+  const ref = new Date(nowYear, nowMonth + offset, 1);
+  const initialYear = Math.max(minYear, ref.getFullYear());
+  const [mpYear, setMpYear] = useState(initialYear);
 
   const Y = ref.getFullYear(); const M = ref.getMonth();
   const prevRef = new Date(Y, M - 1, 1);
@@ -72,8 +95,9 @@ export const MonthCompareChart: React.FC = () => {
   const daysPlotPrev = isCurrent ? Math.min(daysPrev, idxToday + 1) : daysPrev;
 
   const daily = (txs: any[], y: number, m: number, len: number) => {
+    const source = Array.isArray(txs) ? txs : [];
     const arr = Array.from({ length: len }, () => 0);
-    for (const t of txs) {
+    for (const t of source) {
       const d = new Date(t.date);
       if (sameMonth(d, y, m) && t.type === 'expense') arr[d.getDate() - 1] += Math.abs(Number(t.amount) || 0);
     }
@@ -88,6 +112,550 @@ export const MonthCompareChart: React.FC = () => {
   const sumPrev = sum(dailyPrev, daysPlotPrev);
   const avgPerDay = sumThis / Math.max(1, daysPlotThis);
   const pace = sumThis - sumPrev;
+
+// ===== DIMENSIONS =====
+  const h = 180;
+  const w = Math.max(1, chartW);
+  const top = 18, bottom = 22;
+  const rawMax = Math.max(1, ...dailyThis.slice(0, daysPlotThis), ...dailyPrev.slice(0, daysPlotPrev));
+  const maxVal = niceCeilTight(rawMax);
+  const left = Math.max(32, Math.min(42, labelW + 4));
+  const right = 36;
+
+  const innerW = Math.max(1, w - left - right);
+  const innerH = Math.max(1, h - top - bottom);
+
+  const xForIndex = (i: number) => left + (i * (innerW / Math.max(1, daysPlotThis)));
+  const seg = innerW / Math.max(1, daysPlotThis);
+  const bwNow = seg * 0.56;
+  const bwPrev = seg * 0.28;
+
+  const totalDaysVisible = isCurrent ? daysPlotThis : daysCurr;
+  const parts = 3;
+  const baseTicks = Array.from({ length: parts + 1 }, (_, i) =>
+    clamp(Math.round(1 + i * ((totalDaysVisible - 1) / parts)), 1, totalDaysVisible)
+  );
+  const ticksX = Array.from(new Set(baseTicks));
+
+  const insidePlot = (x: number, y: number) =>
+    x >= left && x <= left + innerW && y >= top && y <= top + innerH;
+
+  const idxFromX = (x: number) => clamp(Math.round((x - left) / seg), 0, daysPlotThis - 1);
+  const centerX   = (i: number) => left + i * seg + seg / 2;
+
+  const requestOffsetChange = (delta: number) => {
+    if (delta === 0 || animating) return;
+    const target = Math.max(minOffset, Math.min(0, offset + delta));
+    const steps = target - offset;
+    if (steps === 0) return;
+    // Skip animation for multi-month jumps or when width not yet measured
+    if (Math.abs(steps) > 1 || chartW === 0) {
+      setHoverActive(false);
+      slide.setValue(0);
+      setOffset(target);
+      return;
+    }
+    const direction = steps > 0 ? -1 : 1;
+    setHoverActive(false);
+    setAnimating(true);
+    slide.stopAnimation();
+    slide.setValue(0);
+    Animated.timing(slide, {
+      toValue: direction,
+      duration: 200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true
+    }).start(() => {
+      setOffset(target);
+      slide.setValue(-direction);
+      Animated.timing(slide, {
+        toValue: 0,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true
+      }).start(() => {
+        setAnimating(false);
+      });
+    });
+  };
+
+  const startScrub = (x: number, y: number) => {
+    if (animating) return;
+    if (!insidePlot(x, y)) { setHoverActive(false); return; }
+    const i = idxFromX(x);
+    gestureStart.current = { x, y };
+    setHoverActive(true);
+    setHoverI(i);
+    setHoverPos({ x: centerX(i), y: top + 6 });
+  };
+
+  const moveScrub = (x: number, y: number) => {
+    if (animating) return;
+    if (!insidePlot(x, y)) return;
+    const i = idxFromX(x);
+    if (i !== hoverI) {
+      setHoverI(i);
+      setHoverPos({ x: centerX(i), y: top + 6 });
+    }
+  };
+
+  const endScrub = (x: number, y: number) => {
+    const dx = x - gestureStart.current.x;
+    const dy = y - gestureStart.current.y;
+    const swipeThreshold = 80;
+    const verticalTolerance = 60;
+    const isStrongSwipe = Math.abs(dx) > swipeThreshold && Math.abs(dy) < verticalTolerance;
+    if (isStrongSwipe) {
+      if (dx > 0) {
+        requestOffsetChange(-1);
+      } else if (dx < 0) {
+        requestOffsetChange(1);
+      }
+      return;
+    }
+    if (!insidePlot(x, y)) setHoverActive(false);
+  };
+
+  const tipW = 152;
+  const tipX = clamp(hoverPos.x - tipW / 2, left, left + innerW - tipW);
+  const tipY = top + 6;
+
+  const day = hoverI + 1;
+  const dateLabel = new Date(Y, M, day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const daySpend = dailyThis[hoverI] || 0;
+  const mtdAtDay = sum(dailyThis, hoverI + 1);
+
+  const openMonthPicker = () => {
+    setMpYear(Math.max(minYear, Y));
+    setMpOpen(true);
+  };
+
+  const selectMonth = (yr: number, mIdx: number) => {
+    const newOffset = (yr - nowYear) * 12 + (mIdx - nowMonth);
+    if (newOffset > 0 || newOffset < minOffset) return;
+    setMpOpen(false);
+    if (newOffset === offset) return;
+    requestOffsetChange(newOffset - offset);
+  };
+
+  const backgroundHex = (get('background.default') as string || '').toLowerCase();
+  const isLightTheme = backgroundHex.includes('#f7') || backgroundHex.includes('#f8') || backgroundHex.includes('fff');
+  const gradientColors = isLightTheme
+    ? ['#1a1f33', '#262b46']
+    : ['rgba(13,16,30,0.92)', 'rgba(33,27,58,0.9)'];
+  const cardBg = isLightTheme ? 'rgba(247,248,252,0.94)' : 'rgba(14,16,24,0.94)';
+  const heroText = '#f5f8ff';
+  const softOnPrimary = 'rgba(245,248,255,0.78)';
+  const gridColor = 'rgba(255,255,255,0.16)';
+  const prevBar = 'rgba(255,255,255,0.26)';
+  const currBar = 'rgba(255,255,255,0.9)';
+  const legendBg = 'rgba(255,255,255,0.18)';
+  const paceColor = pace > 0 ? (get('semantic.danger') as string) : (pace < 0 ? (get('semantic.success') as string) : softOnPrimary);
+  const slideRange = Math.max(chartW || 0, 240);
+  const translateX = slide.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: [-slideRange, 0, slideRange],
+  });
+  const chartTransform = chartW
+    ? [{ translateX: translateX }]
+    : undefined;
+  const leftDisabled = animating || chartW === 0 || offset <= minOffset;
+  const rightDisabled = animating || chartW === 0 || offset >= 0;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => { if (hoverActive) setHoverActive(false); }}
+      style={({ pressed }) => {
+        const base: any = {
+          borderRadius: radius.xl,
+          overflow: 'hidden',
+          opacity: pressed ? 0.97 : 1,
+        };
+        if (pressed) base.transform = [{ translateY: 1 }];
+        return base;
+      }}
+    >
+      <LinearGradient
+        colors={gradientColors}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s10, paddingBottom: spacing.s8 }}
+        onLayout={e => setChartW(e.nativeEvent.layout.width)}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s10 }}>
+          <View style={{ flex: 1, paddingRight: spacing.s10 }}>
+            <Text style={{ color: softOnPrimary, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8 }}>Month pace</Text>
+            <Text style={{ color: heroText, fontSize: 26, fontWeight: '800', marginTop: spacing.s2 }}>${sumThis.toFixed(0)}</Text>
+            <View style={{ flexDirection: 'row', gap: spacing.s6, marginTop: spacing.s6 }}>
+              <View style={{ backgroundColor: legendBg, borderRadius: radius.pill, paddingHorizontal: spacing.s10, paddingVertical: spacing.s6 }}>
+                <Text style={{ color: softOnPrimary, fontSize: 12 }}>{`Avg ${avgPerDay ? `$${avgPerDay.toFixed(0)}/day` : '$0/day'}`}</Text>
+              </View>
+              <View style={{ backgroundColor: legendBg, borderRadius: radius.pill, paddingHorizontal: spacing.s10, paddingVertical: spacing.s6 }}>
+                <Text style={{ color: softOnPrimary, fontSize: 12 }}>{`Prev ${sumPrev ? `$${sumPrev.toFixed(0)}` : '$0'}`}</Text>
+              </View>
+            </View>
+          </View>
+          <View style={{ alignItems: 'flex-end', gap: spacing.s4 }}>
+            <Pressable
+              onPress={openMonthPicker}
+              hitSlop={10}
+              style={({ pressed }) => ({
+                borderRadius: radius.pill,
+                paddingHorizontal: spacing.s10,
+                paddingVertical: spacing.s6,
+                backgroundColor: legendBg,
+                opacity: pressed ? 0.85 : 1
+              })}
+            >
+              <Text style={{ color: heroText, fontWeight: '700' }}>
+                {new Date(Y, M, 1).toLocaleString(undefined, { month: 'short', year: 'numeric' })}
+              </Text>
+            </Pressable>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={{ color: softOnPrimary, fontSize: 12 }}>vs last month</Text>
+              <Text style={{ color: paceColor, fontWeight: '700' }}>
+                {pace === 0 ? 'Even' : `${pace > 0 ? '+' : '-'}$${Math.abs(pace).toFixed(0)}`}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, marginBottom: spacing.s4 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
+            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: currBar }} />
+            <Text style={{ color: softOnPrimary, fontSize: 11 }}>This month</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
+            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: prevBar }} />
+            <Text style={{ color: softOnPrimary, fontSize: 11 }}>Last month</Text>
+          </View>
+        </View>
+
+        <Animated.View style={chartTransform ? { transform: chartTransform } : undefined}>
+        <View style={{ position: 'relative' }}>
+          <Svg width={w} height={h}>
+            <G>
+              <Line x1={left} y1={top} x2={left} y2={top + innerH} stroke={gridColor} strokeWidth={1} />
+              <Line x1={left} y1={top + innerH} x2={left + innerW} y2={top + innerH} stroke={gridColor} strokeWidth={1} />
+
+              {[0, 0.25, 0.5, 0.75, 1].map((t, idx) => {
+                const y = top + innerH * (1 - t);
+                const val = Math.round(maxVal * t);
+                return (
+                  <G key={`gl-${idx}`}>
+                    <Line x1={left} y1={y} x2={left + innerW} y2={y} stroke={gridColor} strokeDasharray="3 3" strokeWidth={1} />
+                    <SvgText
+                      x={left - 4}
+                      y={y + 4 + (idx === 0 ? 4 : 0)}
+                      fontSize="10"
+                      fill={softOnPrimary}
+                      textAnchor="end"
+                    >
+                      {fmtMoneyShort(val)}
+                    </SvgText>
+                  </G>
+                );
+              })}
+
+              {Array.from({ length: daysPlotPrev }).map((_, i) => {
+                const v = dailyPrev[i] || 0;
+                const barH = (v / Math.max(1, maxVal)) * innerH;
+                const x = xForIndex(i) + (seg - bwPrev) / 2;
+                const y = top + innerH - barH;
+                return (
+                  <Rect
+                    key={`p-${i}`}
+                    x={x}
+                    y={y}
+                    width={bwPrev}
+                    height={barH}
+                    rx={Math.min(6, radius.sm / 2)}
+                    ry={Math.min(6, radius.sm / 2)}
+                    fill={prevBar}
+                    opacity={0.72}
+                  />
+                );
+              })}
+
+              {Array.from({ length: daysPlotThis }).map((_, i) => {
+                const v = dailyThis[i] || 0;
+                const barH = (v / Math.max(1, maxVal)) * innerH;
+                const x = xForIndex(i) + (seg - bwNow) / 2;
+                const y = top + innerH - barH;
+                const isActive = hoverActive && i === hoverI;
+                return (
+                  <Rect
+                    key={`t-${i}`}
+                    x={x}
+                    y={y}
+                    width={bwNow}
+                    height={barH}
+                    rx={Math.min(6, radius.sm / 2)}
+                    ry={Math.min(6, radius.sm / 2)}
+                    fill={currBar}
+                    opacity={isActive ? 1 : 0.92}
+                    stroke={isActive ? heroText : 'none'}
+                    strokeWidth={isActive ? 1.5 : 0}
+                  />
+                );
+              })}
+
+              {hoverActive && (
+                <Line
+                  x1={centerX(hoverI)}
+                  y1={top}
+                  x2={centerX(hoverI)}
+                  y2={top + innerH}
+                  stroke={heroText}
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                  opacity={0.6}
+                />
+              )}
+
+              {ticksX.map((d) => {
+                const i = clamp(d - 1, 0, daysPlotThis - 1);
+                const xCenter = xForIndex(i) + seg / 2;
+                return (
+                  <SvgText key={`x-${d}`} x={xCenter} y={top + innerH + 14} fontSize="10" fill={softOnPrimary} textAnchor="middle">
+                    {d}
+                  </SvgText>
+                );
+              })}
+            </G>
+          </Svg>
+
+          <View
+            style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+            pointerEvents="box-only"
+            onStartShouldSetResponderCapture={() => true}
+            onStartShouldSetResponder={() => true}
+            onMoveShouldSetResponder={() => true}
+            onResponderGrant={(e) => { disableParent(); startScrub(e.nativeEvent.locationX, e.nativeEvent.locationY); }}
+            onResponderMove={(e)  => moveScrub(e.nativeEvent.locationX, e.nativeEvent.locationY)}
+            onResponderRelease={(e) => { endScrub(e.nativeEvent.locationX, e.nativeEvent.locationY); enableParent(); }}
+            onResponderTerminate={() => { setHoverActive(false); enableParent(); }}
+          />
+
+          {hoverActive && (
+            <View
+              style={{
+                position: 'absolute',
+                left: tipX,
+                top: tipY,
+                width: tipW,
+                borderRadius: radius.md,
+                paddingVertical: 8,
+                paddingHorizontal: spacing.s10,
+                backgroundColor: 'rgba(0,0,0,0.35)',
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.35)'
+              }}
+            >
+              <Text style={{ color: softOnPrimary, fontSize: 11 }}>{dateLabel}</Text>
+              <Text style={{ color: heroText, fontWeight: '700' }}>{`$${daySpend.toFixed(0)} spent`}</Text>
+              <Text style={{ color: softOnPrimary, fontSize: 11 }}>{`MTD $${mtdAtDay.toFixed(0)}`}</Text>
+            </View>
+          )}
+        </View>
+        </Animated.View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.s2 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={leftDisabled}
+              onPress={() => requestOffsetChange(-1)}
+              hitSlop={10}
+              style={({ pressed }) => ({
+                width: 40,
+                height: 40,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: leftDisabled ? 0.35 : pressed ? 0.7 : 1
+              })}
+            >
+              <Icon name="arrow-bold-left" size={24} colorToken="icon.onPrimary" />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={rightDisabled}
+              onPress={() => requestOffsetChange(1)}
+              hitSlop={10}
+              style={({ pressed }) => ({
+                width: 40,
+                height: 40,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: rightDisabled ? 0.35 : pressed ? 0.7 : 1
+              })}
+            >
+              <Icon name="arrow-bold-right" size={24} colorToken="icon.onPrimary" />
+            </Pressable>
+          </View>
+          <Pressable onPress={() => nav.navigate('InsightsModal')} hitSlop={12} style={({ pressed }) => ({
+            paddingVertical: spacing.s6,
+            paddingHorizontal: spacing.s10,
+            borderRadius: radius.pill,
+            backgroundColor: 'rgba(0,0,0,0.25)',
+            opacity: pressed ? 0.85 : 1
+          })}>
+            <Text style={{ color: heroText, fontWeight: '700' }}>See insights</Text>
+          </Pressable>
+        </View>
+      </LinearGradient>
+
+      <Modal visible={mpOpen} transparent animationType="fade" onRequestClose={() => setMpOpen(false)}>
+        <TouchableWithoutFeedback onPress={() => setMpOpen(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(8,10,18,0.72)', justifyContent: 'center', alignItems: 'center', padding: spacing.s16 }}>
+            <TouchableWithoutFeedback>
+              <View style={{ width: '100%', maxWidth: 360, backgroundColor: cardBg, borderRadius: radius.xl, padding: spacing.s16, ...{ shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 10 } }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
+                  <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 16 }}>Select month</Text>
+                  <Pressable onPress={() => setMpOpen(false)} hitSlop={8}>
+                    <Text style={{ color: get('text.muted') as string, fontSize: 16 }}>Close</Text>
+                  </Pressable>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
+                  <Pressable
+                    onPress={() => setMpYear(prev => (prev <= minYear ? prev : prev - 1))}
+                    hitSlop={8}
+                    style={{ padding: spacing.s8, opacity: mpYear <= minYear ? 0.3 : 1 }}
+                    disabled={mpYear <= minYear}
+                  >
+                    <Text style={{ color: get('text.primary') as string, fontSize: 20 }}>‹</Text>
+                  </Pressable>
+                  <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 18 }}>{mpYear}</Text>
+                  <Pressable
+                    onPress={() => setMpYear(prev => (prev >= nowYear ? prev : prev + 1))}
+                    hitSlop={8}
+                    style={{ padding: spacing.s8, opacity: mpYear >= nowYear ? 0.4 : 1 }}
+                    disabled={mpYear >= nowYear}
+                  >
+                    <Text style={{ color: get('text.primary') as string, fontSize: 20 }}>›</Text>
+                  </Pressable>
+                </View>
+
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
+                  {MONTHS.map((lbl, idx) => {
+                    const beforeEarliest = (mpYear < minYear) || (mpYear === minYear && idx < minMonth);
+                    const afterNow = (mpYear > nowYear) || (mpYear === nowYear && idx > nowMonth);
+                    const disabled = beforeEarliest || afterNow;
+                    const isSelected = (mpYear === Y && idx === M);
+                    return (
+                      <Pressable
+                        key={lbl}
+                        onPress={() => { if (!disabled) selectMonth(mpYear, idx); }}
+                        disabled={disabled}
+                        style={{
+                          width: '23%',
+                          paddingVertical: spacing.s10,
+                          borderRadius: radius.lg,
+                          alignItems: 'center',
+                          backgroundColor: isSelected ? get('surface.level2') : get('surface.level1'),
+                          borderWidth: isSelected ? 2 : 1,
+                          borderColor: isSelected ? get('accent.primary') : get('border.subtle'),
+                          opacity: disabled ? 0.35 : 1
+                        }}
+                      >
+                        <Text style={{ color: get('text.primary') as string, fontWeight: isSelected ? '700' : '500' }}>{lbl}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+    </Pressable>
+  );
+};
+
+export const MonthCompareChartClassic: React.FC = () => {
+  const { get } = useThemeTokens();
+  const { setScrollEnabled } = React.useContext(ScrollContext);
+  const enableParent = React.useCallback(() => setScrollEnabled && setScrollEnabled(true), [setScrollEnabled]);
+  const disableParent = React.useCallback(() => setScrollEnabled && setScrollEnabled(false), [setScrollEnabled]);
+  const nav = useNavigation<any>();
+  const { transactions, hydrate } = useTxStore();
+  const { hydrate: hydrateBudget } = useBudgetsStore();
+
+  useEffect(() => { hydrate(); hydrateBudget(); }, []);
+
+  const now = new Date();
+  const nowYear = now.getFullYear();
+  const nowMonth = now.getMonth();
+  const [offset, setOffset] = useState(0);
+  const [chartW, setChartW] = useState(0);
+  const [labelW, setLabelW] = useState(0);
+
+  const transactionsArray = Array.isArray(transactions) ? transactions : [];
+  const earliestTxDate = useMemo(() => {
+    const valid = transactionsArray
+      .map((t: any) => new Date(t?.date))
+      .filter(d => Number.isFinite(d?.getTime?.()) && d.getTime() <= now.getTime()) as Date[];
+    if (!valid.length) return new Date(nowYear, nowMonth, 1);
+    valid.sort((a, b) => a.getTime() - b.getTime());
+    const first = valid[0];
+    return new Date(first.getFullYear(), first.getMonth(), 1);
+  }, [transactions, nowYear, nowMonth]);
+  const minYear = earliestTxDate.getFullYear();
+  const minMonth = earliestTxDate.getMonth();
+  const minOffset = Math.min(0, (minYear - nowYear) * 12 + (minMonth - nowMonth));
+
+  // scrub state
+  const [hoverActive, setHoverActive] = useState(false);
+  const [hoverI, setHoverI] = useState(0);
+  const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
+
+  // month picker modal
+  const [mpOpen, setMpOpen] = useState(false);
+  const ref = new Date(nowYear, nowMonth + offset, 1);
+  const initialYear = Math.max(minYear, ref.getFullYear());
+  const [mpYear, setMpYear] = useState(initialYear);
+
+  const Y = ref.getFullYear(); const M = ref.getMonth();
+  const prevRef = new Date(Y, M - 1, 1);
+  const pY = prevRef.getFullYear(); const pM = prevRef.getMonth();
+
+  const sameMonth = (d: Date, y: number, m: number) => d.getFullYear() === y && d.getMonth() === m;
+  const daysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+  const daysCurr = daysInMonth(Y, M);
+  const daysPrev = daysInMonth(pY, pM);
+  const isCurrent = offset === 0;
+  const idxToday = isCurrent ? clamp(now.getDate() - 1, 0, daysCurr - 1) : daysCurr - 1;
+  const daysPlotThis = isCurrent ? Math.min(daysCurr, idxToday + 1) : daysCurr;
+  const daysPlotPrev = isCurrent ? Math.min(daysPrev, idxToday + 1) : daysPrev;
+
+  const daily = (txs: any[], y: number, m: number, len: number) => {
+    const source = Array.isArray(txs) ? txs : [];
+    const arr = Array.from({ length: len }, () => 0);
+    for (const t of source) {
+      const d = new Date(t.date);
+      if (sameMonth(d, y, m) && t.type === 'expense') arr[d.getDate() - 1] += Math.abs(Number(t.amount) || 0);
+    }
+    return arr;
+  };
+
+  const dailyThis = useMemo(() => daily(transactions, Y, M, daysCurr), [transactions, Y, M, daysCurr]);
+  const dailyPrev = useMemo(() => daily(transactions, pY, pM, daysPrev), [transactions, pY, pM, daysPrev]);
+
+  const sum = (arr: number[], n: number) => arr.slice(0, n).reduce((a, b) => a + b, 0);
+  const sumThis = sum(dailyThis, daysPlotThis);
+  const sumPrev = sum(dailyPrev, daysPlotPrev);
+  const avgPerDay = sumThis / Math.max(1, daysPlotThis);
+  const pace = sumThis - sumPrev;
+
+  const leftDisabledClassic = offset <= minOffset;
+  const rightDisabledClassic = offset >= 0;
+  const changeOffsetClassic = (delta: number) => {
+    const next = Math.max(minOffset, Math.min(0, offset + delta));
+    if (next === offset) return;
+    setOffset(next);
+  };
 
   // ===== DIMENSIONS =====
   const h = 160; // original height
@@ -157,15 +725,15 @@ export const MonthCompareChart: React.FC = () => {
 
   // month picker helpers
   const openMonthPicker = () => {
-    setMpYear(Y);
+    setMpYear(Math.max(minYear, Y));
     setMpOpen(true);
   };
 
   const selectMonth = (yr: number, mIdx: number) => {
-    const newOffset = (yr - now.getFullYear()) * 12 + (mIdx - now.getMonth());
-    if (newOffset > 0) return; // disallow future months
-    setOffset(newOffset);
+    const newOffset = (yr - nowYear) * 12 + (mIdx - nowMonth);
+    if (newOffset > 0 || newOffset < minOffset) return;
     setMpOpen(false);
+    setOffset(newOffset);
   };
 
   return (
@@ -185,9 +753,8 @@ export const MonthCompareChart: React.FC = () => {
         {'$' + maxVal}
       </Text>
 
-      {/* Header row: Title (left), Stats (right) */}
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: spacing.s6 }}>
-        <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 18 }}>Spending</Text>
+      {/* Header row: Stats only (title moved to page header) */}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'flex-end', marginBottom: spacing.s6 }}>
         <View style={{ alignItems: 'flex-end' }}>
           <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>{'Total Spent $' + sumThis.toFixed(0)}</Text>
           <Text style={{ color: get('text.muted') as string }}>
@@ -336,8 +903,13 @@ export const MonthCompareChart: React.FC = () => {
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.s4 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: get('surface.level2') as string, borderRadius: 999 }}>
-            <Pressable onPress={() => setOffset(offset - 1)} hitSlop={10} style={{ paddingVertical: 6, paddingHorizontal: spacing.s8 }}>
-              <Text style={{ color: get('text.primary') as string, fontSize: 14 }}>‹</Text>
+            <Pressable
+              onPress={() => changeOffsetClassic(-1)}
+              disabled={leftDisabledClassic}
+              hitSlop={10}
+              style={({ pressed }) => ({ paddingVertical: 6, paddingHorizontal: spacing.s8, opacity: leftDisabledClassic ? 0.4 : pressed ? 0.7 : 1 })}
+            >
+              <Icon name="arrow-bold-left" size={18} colorToken="icon.default" />
             </Pressable>
             <Pressable onPress={openMonthPicker} hitSlop={10} style={{ paddingVertical: 6, paddingHorizontal: spacing.s10 }}>
               <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>
@@ -345,12 +917,12 @@ export const MonthCompareChart: React.FC = () => {
               </Text>
             </Pressable>
             <Pressable
-              onPress={() => { if (isCurrent) return; setOffset(offset + 1); }}
-              disabled={isCurrent}
+              onPress={() => changeOffsetClassic(1)}
+              disabled={rightDisabledClassic}
               hitSlop={10}
-              style={{ paddingVertical: 6, paddingHorizontal: spacing.s8, opacity: isCurrent ? 0.4 : 1 }}
+              style={({ pressed }) => ({ paddingVertical: 6, paddingHorizontal: spacing.s8, opacity: rightDisabledClassic ? 0.4 : pressed ? 0.7 : 1 })}
             >
-              <Text style={{ color: get('text.primary') as string, fontSize: 14 }}>›</Text>
+              <Icon name="arrow-bold-right" size={18} colorToken="icon.default" />
             </Pressable>
           </View>
         </View>

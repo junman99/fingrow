@@ -80,9 +80,26 @@ const onStartDeleteMode = React.useCallback(() => { setDeleteMode(true); setSele
     }, 0);
   }, [symbols, effectiveHoldings, quotes]);
 
+  // Include portfolio cash balances (converted to USD baseline)
+  const cashUSD = React.useMemo(() => {
+    const rates = fxRates?.rates || {} as Record<string, number>;
+    let sum = 0;
+    Object.values(portfolios || {}).forEach((p: any) => {
+      const cash = Number(p?.cash || 0);
+      if (!cash) return;
+      const cur = String(p?.baseCurrency || 'USD').toUpperCase();
+      if (cur === 'USD') sum += cash;
+      else {
+        const r = Number(rates[cur] || 0);
+        sum += r ? (cash / r) : cash; // fallback assume ~USD if missing
+      }
+    });
+    return sum;
+  }, [portfolios, fxRates]);
+
   const cur = ((profile?.currency) || 'USD').toUpperCase();
   const rate = fxRates?.rates?.[cur] || (cur==='USD'?1:undefined);
-  const totalValue = rate ? totalUSD * rate : totalUSD;
+  const totalValue = rate ? (totalUSD + cashUSD) * rate : (totalUSD + cashUSD);
 
   const portfolioLine = React.useMemo(() => {
     const syms = Object.keys(effectiveHoldings);
@@ -120,6 +137,23 @@ const onStartDeleteMode = React.useCallback(() => { setDeleteMode(true); setSele
     // Collect union of all dates present across symbols
     const allDates = new Set<string>();
     Object.values(priceMaps).forEach(m => Object.keys(m).forEach(d => allDates.add(d)));
+    // Include cash event dates across portfolios (converted to USD later)
+    const cashEventMapUSD: Record<string, number> = {};
+    try {
+      const rates = fxRates?.rates || {} as Record<string, number>;
+      Object.values(portfolios || {}).forEach((p: any) => {
+        const base = String(p?.baseCurrency || 'USD').toUpperCase();
+        const r = Number(rates[base] || 0);
+        const toUSD = (amt: number) => base==='USD' || !r ? amt : (amt / r);
+        (p?.cashEvents || []).forEach((ev: any) => {
+          const d = new Date(ev.date);
+          const key = isNaN(d.getTime()) ? undefined : d.toISOString().slice(0,10);
+          if (!key) return;
+          cashEventMapUSD[key] = (cashEventMapUSD[key] || 0) + toUSD(Number(ev.amount || 0));
+          allDates.add(key);
+        });
+      });
+    } catch {}
     const dates = Array.from(allDates).sort(); // 'YYYY-MM-DD'
 
     // Build a forward-filled price map per symbol (no back-fill before first price)
@@ -145,6 +179,14 @@ const onStartDeleteMode = React.useCallback(() => { setDeleteMode(true); setSele
       ff[sym] = dst;
     });
 
+    // Running cash balance in USD across all portfolios by date
+    const cashByDateUSD: Record<string, number> = {};
+    let run = 0;
+    for (const d of dates) {
+      if (Object.prototype.hasOwnProperty.call(cashEventMapUSD, d)) run += cashEventMapUSD[d];
+      cashByDateUSD[d] = run;
+    }
+
     const points: Array<{t:number; v:number}> = dates.map(d => {
       let total = 0;
       syms.forEach(sym => {
@@ -156,10 +198,12 @@ const onStartDeleteMode = React.useCallback(() => { setDeleteMode(true); setSele
           if (qty) total += qty * price;
         }
       });
+      // add cash (USD baseline)
+      total += cashByDateUSD[d] || 0;
       return { t: new Date(d).getTime(), v: (rate || 1) * total };
     });
     return points.slice(-520); // keep it light
-  }, [effectiveHoldings, quotes, rate]);
+  }, [effectiveHoldings, quotes, rate, portfolios, fxRates]);
 
 // Always have something to render for the chart (placeholder if empty)
 const displaySeries = React.useMemo(() => {
@@ -290,6 +334,61 @@ const text = get('text.primary') as string;
           </Card>
 
         {/* Portfolios card */}
+        {/* Allocation chips across all portfolios (top 3 including cash) */}
+        {(() => {
+          try {
+            const positions: Record<string, number> = {};
+            Object.values(portfolios || {}).forEach((p:any) => {
+              Object.values((p?.holdings||{}) as any).forEach((h:any) => {
+                const qty = (h?.lots||[]).reduce((s:number,l:any)=> s + (l.side==='buy'?l.qty:-l.qty),0);
+                if (qty>0) positions[h.symbol] = (positions[h.symbol]||0) + qty;
+              });
+            });
+            const syms = Object.keys(positions);
+            let total = syms.reduce((acc, sym) => {
+              const last = quotes[sym]?.last || 0;
+              return acc + last * positions[sym];
+            }, 0);
+            // add cash (USD baseline) across portfolios
+            let cashAll = 0;
+            const rates = fxRates?.rates || {} as Record<string, number>;
+            Object.values(portfolios || {}).forEach((p:any)=>{
+              const cash = Number(p?.cash||0);
+              if (!cash) return;
+              const cur = String(p?.baseCurrency||'USD').toUpperCase();
+              const r = Number(rates[cur]||0);
+              cashAll += (cur==='USD'||!r) ? cash : (cash / r);
+            });
+            total += cashAll;
+            const arr = [
+              ...syms.map(sym => {
+                const last = quotes[sym]?.last || 0;
+                const val = last * positions[sym];
+                return { sym, wt: total>0 ? (val/total) : 0 };
+              }),
+              ...(cashAll ? [{ sym: 'CASH', wt: total>0 ? (cashAll/total) : 0 }] : [])
+            ].sort((a,b)=> b.wt - a.wt).slice(0,3);
+            if (!arr.length) return null;
+            return (
+              <Card style={{ padding: spacing.s12 }}>
+                <Text style={{ color: text, fontWeight:'700', marginBottom: spacing.s8 }}>Top allocation</Text>
+                <View style={{ flexDirection:'row', gap: spacing.s8, flexWrap:'wrap' }}>
+                  {arr.map(x => (
+                    <View key={x.sym} style={{ paddingVertical: spacing.s4, paddingHorizontal: spacing.s12, borderRadius: 999, borderWidth:1, borderColor: get('border.subtle') as string }}>
+                      <Text style={{ color: get('text.onSurface') as string }}>{x.sym} {(x.wt*100).toFixed(0)}%</Text>
+                    </View>
+                  ))}
+                </View>
+              </Card>
+            );
+          } catch { return null; }
+        })()}
+
+        
+        
+        
+        
+        
         <PortfolioListCard
         selectionMode={deleteMode}
         selectedIds={selectedPids}

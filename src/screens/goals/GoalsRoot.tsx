@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, Pressable, FlatList } from 'react-native';
 import { Screen } from '../../components/Screen';
-import { AppHeader } from '../../components/AppHeader';
 import Button from '../../components/Button';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeTokens } from '../../theme/ThemeProvider';
@@ -34,8 +33,11 @@ const GoalsRoot: React.FC = () => {
 
   return (
     <Screen>
-      <AppHeader title="Goals" right={<Button title="+ New" onPress={() => nav.navigate('GoalCreate')} />} />
-      <View style={{ gap: spacing.s12 }}>
+      <View style={{ padding: spacing.s16, gap: spacing.s12 }}>
+        <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between' }}>
+          <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Goals</Text>
+          <Button title="+ New" onPress={() => nav.navigate('GoalCreate')} />
+        </View>
         <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 20 }}>Your goals</Text>
         <Pressable onPress={() => nav.navigate('GoalCreate')} style={{ alignSelf: 'flex-start', backgroundColor: get('accent.primary') as string, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.md }}>
           <Text style={{ color: get('text.onPrimary') as string, fontWeight: '600' }}>+ Create goal</Text>

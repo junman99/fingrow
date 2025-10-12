@@ -104,8 +104,11 @@ const runwayDays = avgDaily > 0 ? Math.floor(totalCash / avgDaily) : 0;
       totalUSD += q * qty;
       changeUSD += ch * qty;
     }
-    // Convert to user's FX if available (keep simple, use fx base rates if present)
-    // For now we display USD-formatted for consistency
+    // Add active portfolio cash (assume active portfolio currency ~USD here)
+    try {
+      const p = (useInvestStore.getState().activePortfolio?.() as any);
+      if (p && typeof p.cash === 'number') totalUSD += Number(p.cash || 0);
+    } catch {}
     return { totalUSD, changeUSD };
   }, [holdings, quotes]);
 
@@ -152,7 +155,7 @@ const runwayDays = avgDaily > 0 ? Math.floor(totalCash / avgDaily) : 0;
   return (
     <Screen>
       <View style={{ padding: spacing.s16, gap: spacing.s16 }}>
-        <Text style={{ color: text, fontSize: 24, fontWeight: '800' }}>Money</Text>
+        <Text style={{ color: text, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Money</Text>
         <Segmented value={seg} onChange={setSeg} />
 
         {seg === 'Summary' ? (
@@ -191,18 +194,24 @@ const runwayDays = avgDaily > 0 ? Math.floor(totalCash / avgDaily) : 0;
 {/* Allocation chips */}
 {Object.keys(holdings||{}).length > 0 ? (() => {
   const syms = Object.keys(holdings||{});
-  const totalUSD = syms.reduce((acc, sym) => {
+  let totalUSD = syms.reduce((acc, sym) => {
     const q = quotes[sym]?.last || 0;
     const qty = (holdings[sym]?.lots || []).reduce((s,l)=> s + (l.side==='buy'? l.qty : -l.qty), 0);
     return acc + q * qty;
   }, 0);
-  const arr = syms.map(sym => {
-    const q = quotes[sym]?.last || 0;
-    const qty = (holdings[sym]?.lots || []).reduce((s,l)=> s + (l.side==='buy'? l.qty : -l.qty), 0);
-    const val = q * qty;
-    const wt = totalUSD > 0 ? val/totalUSD : 0;
-    return { sym, wt };
-  }).sort((a,b)=> b.wt - a.wt).slice(0, 3);
+  let cash = 0;
+  try { const p = (useInvestStore.getState().activePortfolio?.() as any); cash = Number(p?.cash || 0); } catch {}
+  totalUSD += cash;
+  const arr = [
+    ...syms.map(sym => {
+      const q = quotes[sym]?.last || 0;
+      const qty = (holdings[sym]?.lots || []).reduce((s,l)=> s + (l.side==='buy'? l.qty : -l.qty), 0);
+      const val = q * qty;
+      const wt = totalUSD > 0 ? val/totalUSD : 0;
+      return { sym, wt };
+    }),
+    ...(cash ? [{ sym: 'CASH', wt: totalUSD > 0 ? (cash/totalUSD) : 0 }] : [])
+  ].sort((a,b)=> b.wt - a.wt).slice(0, 3);
   return (
     <View style={{ flexDirection:'row', gap: spacing.s8, flexWrap:'wrap' }}>
       {arr.map(x => (

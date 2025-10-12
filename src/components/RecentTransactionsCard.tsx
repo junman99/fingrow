@@ -1,8 +1,9 @@
 
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useThemeTokens } from '../theme/ThemeProvider';
-import { spacing, radius } from '../theme/tokens';
+import { spacing, radius, elevation } from '../theme/tokens';
+import Icon from '../components/Icon';
 import { useTxStore } from '../store/transactions';
 import { useNavigation } from '@react-navigation/native';
 
@@ -64,21 +65,36 @@ export const RecentTransactionsCard: React.FC = () => {
 
 
   return (
-    <View style={{ backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s16,  }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s8 }}>
-        <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 18 }}>Recent Transactions</Text>
-        <Text onPress={() => nav.navigate('TransactionsModal')} style={{ color: get('accent.primary') as string, fontWeight: '600' }}>See all</Text>
+        <View style={{
+      borderRadius: radius.lg,
+      overflow: 'hidden',
+      backgroundColor: get('surface.level1') as string,
+      ...elevation.level1 as any
+    }}>
+      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s12, backgroundColor: get('surface.level1') as string, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 16 }}>Recent Activity</Text>
+        <Pressable onPress={() => nav.navigate('TransactionsModal')} style={({ pressed }) => ({
+          width: 36,
+          height: 36,
+          borderRadius: radius.md,
+          backgroundColor: get('surface.level2') as string,
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: pressed ? 0.85 : 1
+        })}>
+          <Icon name="arrow-bold-right" size={18} colorToken="icon.muted" />
+        </Pressable>
       </View>
 
       {items.length === 0 ? (
-        <Text style={{ color: get('text.muted') as string }}>No transactions yet.</Text>
+        <Text style={{ color: get('text.muted') as string, padding: spacing.s16 }}>No transactions yet.</Text>
       ) : (
-        <View>
+        <View style={{ paddingHorizontal: spacing.s16, paddingBottom: spacing.s16 }}>
           
           {groups.map((group, gIdx) => (
             <View key={group.key}>
               {/* Date header */}
-              <Text style={{ color: get('text.muted') as string, fontSize: 12, marginTop: spacing.s12 }}>
+              <Text style={{ color: get('text.muted') as string, fontSize: 12, marginTop: spacing.s10 }}>
                 {group.label}
               </Text>
 
@@ -99,16 +115,22 @@ export const RecentTransactionsCard: React.FC = () => {
                       borderBottomColor: get('border.subtle') as string
                     }}
                   >
-                    {/* left color bar */}
+                    {/* left icon */}
                     <View
                       style={{
-                        width: 3,
-                        height: 18,
-                        borderRadius: radius.pill,
-                        backgroundColor: isIncome ? (get('semantic.success') as string) : (get('semantic.danger') as string),
-                        marginRight: spacing.s12
+                        width: 40,
+                        height: 40,
+                        borderRadius: radius.md,
+                        backgroundColor: isIncome ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+                        marginRight: spacing.s12,
+                        alignItems: 'center',
+                        justifyContent: 'center'
                       }}
-                    />
+                    >
+                      <Text style={{ color: isIncome ? (get('semantic.success') as string) : (get('semantic.danger') as string), fontWeight: '700' }}>
+                        {item.category.slice(0, 1).toUpperCase()}
+                      </Text>
+                    </View>
 
                     {/* middle */}
                     <View style={{ flex: 1 }}>

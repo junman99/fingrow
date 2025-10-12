@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable } from 'react-native';
 import { ScreenScroll } from '../components/ScreenScroll';
-import { AppHeader } from '../components/AppHeader';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import Button from '../components/Button';
@@ -69,8 +68,8 @@ export default function BillEditor() {
 
   return (
     <ScreenScroll allowBounce>
-      <AppHeader title={editing ? 'Edit bill' : 'Add bill'} onBack={() => nav.goBack()} />
       <View style={{ padding: spacing.s16, gap: spacing.s16 }}>
+        <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>{editing ? 'Edit bill' : 'Add bill'}</Text>
         <Input label="Label" placeholder="e.g., Rent, Spotify" value={label} onChangeText={setLabel} />
         <Input label="Category" placeholder="bills" value={category} onChangeText={setCategory} />
         <Input label="Amount (S$)" keyboardType="numeric" value={amount} onChangeText={setAmount} />

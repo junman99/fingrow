@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, Pressable, FlatList, Alert } from 'react-native';
 import { Screen } from '../components/Screen';
-import { AppHeader } from '../components/AppHeader';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import Button from '../components/Button';
@@ -55,8 +54,8 @@ export default function BillsList() {
 
   return (
     <Screen>
-      <AppHeader title="Bills" onBack={() => nav.goBack()} />
       <View style={{ padding: spacing.s16, gap: spacing.s12 }}>
+        <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Bills</Text>
         <Button title="Add bill" variant="primary" onPress={() => nav.navigate('BillEditor')} />
         {(!items || items.length === 0) ? (
           <View style={{ backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s16 }}>

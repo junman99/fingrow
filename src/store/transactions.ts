@@ -3,12 +3,28 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type TxType = 'expense' | 'income';
-export type Transaction = { id: string; type: TxType; amount: number; category: string; date: string; note?: string; title?: string; };
+export type Transaction = {
+  id: string;
+  type: TxType;
+  amount: number;
+  category: string;
+  date: string;
+  note?: string;
+  title?: string;
+  account?: string;
+};
 
 type State = {
   transactions: Transaction[];
   ready: boolean;
-  add: (input: { type: TxType; amount: number | string; category: string; date?: string; note?: string }) => Promise<void>;
+  add: (input: {
+    type: TxType;
+    amount: number | string;
+    category: string;
+    date?: string;
+    note?: string;
+    account?: string;
+  }) => Promise<void>;
   remove: (id: string) => Promise<void>;
   clearAll: () => Promise<void>;
   hydrate: () => Promise<void>;
@@ -30,7 +46,16 @@ export const useTxStore = create<State>((set, get) => ({
     const amount = Number.isFinite(amountNum) ? amountNum : 0;
     const date = (input as any).date ? String((input as any).date) : new Date().toISOString();
     const note = (input as any).note ?? '';
-    const tx: Transaction = { id: uid(), type: type as TxType, amount, category, date, note };
+    const account = (input as any).account ?? undefined;
+    const tx: Transaction = {
+      id: uid(),
+      type: type as TxType,
+      amount,
+      category,
+      date,
+      note,
+      account,
+    };
     const arr = [tx, ...(get().transactions || [])];
     set({ transactions: arr });
     await AsyncStorage.setItem(KEY, JSON.stringify(arr));

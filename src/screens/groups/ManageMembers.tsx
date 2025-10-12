@@ -2,7 +2,6 @@
 import React from 'react';
 import { View, Text, Alert, Pressable } from 'react-native';
 import { Screen } from '../../components/Screen';
-import { AppHeader } from '../../components/AppHeader';
 import Button from '../../components/Button';
 import { spacing, radius } from '../../theme/tokens';
 import { useThemeTokens } from '../../theme/ThemeProvider';
@@ -23,8 +22,10 @@ export default function ManageMembers() {
   if (!group) {
     return (
       <Screen>
-        <AppHeader title="Members" />
-        <View style={{ padding: spacing.s16 }}><Text style={{ color: get('text.muted') as string }}>Group not found.</Text></View>
+        <View style={{ padding: spacing.s16 }}>
+          <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Members</Text>
+          <Text style={{ color: get('text.muted') as string }}>Group not found.</Text>
+        </View>
       </Screen>
     );
   }
@@ -90,13 +91,11 @@ export default function ManageMembers() {
 
   return (
     <Screen>
-      <AppHeader
-        title={`Members (${active.length})`}
-        right={
-          <Button title="+ Add" variant="secondary" onPress={() => nav.navigate('AddMember', { groupId: group.id })} />
-        }
-      />
       <View style={{ padding: spacing.s16, gap: spacing.s16, flex: 1 }}>
+        <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between' }}>
+          <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>{`Members (${active.length})`}</Text>
+          <Button title="+ Add" variant="secondary" onPress={() => nav.navigate('AddMember', { groupId: group.id })} />
+        </View>
         {/* Active */}
         <View style={{ borderWidth: 1, borderColor: get('border.subtle') as string, borderRadius: radius.md, backgroundColor: get('surface.level1') as string }}>
           {active.length === 0 ? (

@@ -4,7 +4,6 @@ import { View, Text, ScrollView, Pressable, Alert, StyleSheet } from 'react-nati
 import { Swipeable } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import { Screen } from '../../components/Screen';
-import { AppHeader } from '../../components/AppHeader';
 import Button from '../../components/Button';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useThemeTokens } from '../../theme/ThemeProvider';
@@ -45,8 +44,8 @@ export default function GroupDetail() {
   if (!group) {
     return (
       <Screen>
-        <AppHeader title="Group" />
         <View style={{ padding: spacing.s16 }}>
+          <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Group</Text>
           <Text style={{ color: get('text.muted') as string }}>Group not found.</Text>
         </View>
       </Screen>
@@ -122,7 +121,9 @@ export default function GroupDetail() {
 
   return (
     <Screen>
-      <AppHeader title={group.name} />
+      <View style={{ paddingHorizontal: spacing.s16 }}>
+        <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>{group.name}</Text>
+      </View>
       {/* Updated label */}
       {updatedLabel ? (
         <View style={{ paddingHorizontal: spacing.s16, marginTop: 4 }}>

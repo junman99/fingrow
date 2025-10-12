@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Alert, Switch } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ScreenScroll } from '../../components/ScreenScroll';
-import { AppHeader } from '../../components/AppHeader';
 import Button from '../../components/Button';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
@@ -55,8 +54,8 @@ export default function CreateGroup() {
 
   return (
     <ScreenScroll>
-      <AppHeader title="Create Group" />
       <View style={{ padding: spacing.s16, gap: spacing.s16 }}>
+        <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Create Group</Text>
         <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>Details</Text>
         <TextInput value={name} onChangeText={setName} placeholder="Group name" placeholderTextColor={get('text.muted') as string}
           style={{ borderWidth:1, borderColor:get('border.subtle') as string, borderRadius: radius.md, padding: spacing.s12, color:get('text.primary') as string, backgroundColor:get('surface.level1') as string }} />

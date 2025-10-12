@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Alert } from 'react-native';
+import { View, Text, Alert } from 'react-native';
 import { ScreenScroll } from '../../components/ScreenScroll';
-import { AppHeader } from '../../components/AppHeader';
+import { useThemeTokens } from '../../theme/ThemeProvider';
 import Input from '../../components/Input';
 import Button from '../../components/Button';
 import { spacing } from '../../theme/tokens';
@@ -9,6 +9,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { useGroupsStore } from '../../store/groups';
 
 export default function AddMember() {
+  const { get } = useThemeTokens();
   const route = useRoute<any>();
   const nav = useNavigation<any>();
   const { groupId, memberId, archiveToggle } = (route?.params ?? {}) as { groupId: string; memberId?: string; archiveToggle?: boolean };
@@ -38,8 +39,8 @@ export default function AddMember() {
 
   return (
     <ScreenScroll>
-      <AppHeader title={member ? 'Edit member' : 'Add member'} />
       <View style={{ padding: spacing.s16, gap: spacing.s16 }}>
+        <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>{member ? 'Edit member' : 'Add member'}</Text>
         <Input label="Name" value={name} onChangeText={setName} placeholder="e.g. Alice" />
         <Input label="Contact (optional)" value={contact} onChangeText={setContact} placeholder="@telegram or phone" />
         <Button title="Save" onPress={onSave} />

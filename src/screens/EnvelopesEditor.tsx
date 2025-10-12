@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text } from 'react-native';
 import { ScreenScroll } from '../components/ScreenScroll';
-import { AppHeader } from '../components/AppHeader';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import Input from '../components/Input';
@@ -27,7 +26,9 @@ export default function EnvelopesEditor() {
 
   return (
     <ScreenScroll allowBounce>
-      <AppHeader title="Edit envelopes" onBack={() => nav.goBack()} />
+      <View style={{ padding: spacing.s16 }}>
+        <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Edit envelopes</Text>
+      </View>
       <View style={{ padding: spacing.s16, gap: spacing.s12 }}>
         <View style={{ backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s16, gap: spacing.s8 }}>
           <Text style={{ color: get('text.muted') as string }}>Set a manual cap per category. Leave blank to keep Auto.</Text>
