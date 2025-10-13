@@ -8,6 +8,9 @@ import {
   Modal,
   TouchableWithoutFeedback,
   ScrollView,
+  Switch,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -182,8 +185,10 @@ export default function Add() {
   const textMuted = get('text.muted') as string;
   const textOnPrimary = get('text.onPrimary') as string;
   const borderSubtle = get('border.subtle') as string;
-  const heroGradientStart = mixColor(accentSecondary, backgroundDefault, 0.65);
-  const heroGradientEnd = mixColor(accentPrimary, backgroundDefault, 0.65);
+  // Use an even darker purple background for the category selection area
+  // to give a stronger, more solid backdrop behind the header and chips.
+  const heroGradientStart = '#16051f';
+  const heroGradientEnd = '#210828';
 
   const showToast = useCallback((message: string, duration = 1600) => {
     setToast(message);
@@ -423,6 +428,58 @@ export default function Add() {
     }
   };
 
+  // Recurring editor modal state
+  const [recurringOpen, setRecurringOpen] = useState<boolean>(false);
+  const [recLabel, setRecLabel] = useState<string>(note?.trim() || category?.label || 'Recurring');
+  const [recFreq, setRecFreq] = useState<'monthly' | 'biweekly' | 'weekly'>('monthly');
+  const [recStart, setRecStart] = useState<Date>(new Date());
+  const [recEndEnabled, setRecEndEnabled] = useState<boolean>(false);
+  const [recEndDate, setRecEndDate] = useState<Date>(new Date());
+  const [recAutoPost, setRecAutoPost] = useState<boolean>(false);
+  const [recRemind, setRecRemind] = useState<boolean>(true);
+  const [recDateOpen, setRecDateOpen] = useState<boolean>(false);
+  const [recEndDateOpen, setRecEndDateOpen] = useState<boolean>(false);
+  const [recAmount, setRecAmount] = useState<string>('0.00');
+
+  const openRecurringEditor = () => {
+    setRecLabel(note?.trim() || category?.label || 'Recurring');
+    setRecFreq('monthly');
+    setRecStart(new Date());
+    setRecEndEnabled(false);
+    setRecEndDate(new Date());
+    setRecAutoPost(false);
+    setRecRemind(true);
+    setRecAmount(result ? result.toFixed(2) : '0.00');
+    setRecurringOpen(true);
+  };
+
+  const onSaveRecurring = async () => {
+    try {
+      const parsed = parseFloat(recAmount || '0');
+      const amt = Math.max(0, Number(isFinite(parsed) ? parsed : 0));
+      if (!amt) {
+        showToast('Enter an amount first');
+        return;
+      }
+      const payload: any = {
+        label: recLabel || (category?.label || 'Recurring'),
+        category: category?.label || 'Bills',
+        amount: amt,
+        freq: recFreq,
+        anchorISO: recStart.toISOString(),
+        autoPost: recAutoPost,
+        remind: recRemind,
+      };
+      if (recEndEnabled) payload.endISO = recEndDate.toISOString();
+      await addRecurring(payload);
+      setRecurringOpen(false);
+      setRecMade(true);
+      showToast('Saved recurring');
+    } catch (err) {
+      showToast('Could not save recurring');
+    }
+  };
+
   const addTxCommon = async () => {
     const amt = Math.max(0, Number(result.toFixed(2)));
     if (!amt) {
@@ -485,7 +542,10 @@ export default function Add() {
         <SummaryChip
           icon="recurring"
           label={recMade ? 'Recurring saved' : 'Recurring'}
-          onPress={onMakeRecurringQuick}
+          onPress={() => {
+            // open detailed recurring editor instead of quick save
+            openRecurringEditor();
+          }}
         />
       </ScrollView>
 
@@ -513,7 +573,8 @@ export default function Add() {
           colors={[heroGradientStart, heroGradientEnd, backgroundDefault]}
           start={{ x: 0, y: 0 }}
           end={{ x: 0.2, y: 1 }}
-          style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 320 }}
+          // increased height so gradient covers header and the summary chips row
+          style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 520 }}
         />
 
         <View style={{ flex: 1, paddingTop: spacing.s8, paddingHorizontal: containerPad, paddingBottom: keypadReserve }}>
@@ -715,16 +776,176 @@ export default function Add() {
           </View>
         </Modal>
 
-        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}>
-          <Keypad
-            onKey={onKey}
-            onBackspace={onBackspace}
-            onDone={onSaveAndClose}
-            onOk={onAddAndStay}
-            onEvaluate={onEvaluate}
-            header={keypadHeader}
-          />
-        </View>
+        <Modal visible={recurringOpen} transparent animationType="fade" onRequestClose={() => setRecurringOpen(false)}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(8,10,18,0.72)', justifyContent: 'center', alignItems: 'center', padding: spacing.s16 }}>
+              <TouchableWithoutFeedback onPress={() => setRecurringOpen(false)}>
+                <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }} />
+              </TouchableWithoutFeedback>
+              <View
+                style={{
+                  width: '100%',
+                  maxWidth: 460,
+                  borderRadius: radius.xl,
+                  padding: spacing.s16,
+                  backgroundColor: 'rgba(11,13,22,0.98)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.06)',
+                  maxHeight: Math.max(520, Math.min(820, Dimensions.get('window').height - 80)),
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
+                  <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 18 }}>Add recurring</Text>
+                  <Pressable onPress={() => setRecurringOpen(false)} hitSlop={12}>
+                    <Text style={{ color: textMuted, fontWeight: '600' }}>Close</Text>
+                  </Pressable>
+                </View>
+
+                <View style={{ gap: spacing.s10 }}>
+                  <View>
+                    <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>Name</Text>
+                    <TextInput
+                      value={recLabel}
+                      onChangeText={setRecLabel}
+                      placeholder="e.g. Rent, Netflix"
+                      placeholderTextColor={`${textMuted}88`}
+                      style={{
+                        borderRadius: radius.lg,
+                        borderWidth: 1,
+                        borderColor: borderSubtle,
+                        padding: spacing.s10,
+                        backgroundColor: surface2,
+                        color: textPrimary,
+                      }}
+                    />
+                  </View>
+
+                  <View>
+                    <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>Amount</Text>
+                    <TextInput
+                      value={recAmount}
+                      onChangeText={(t) => setRecAmount(t.replace(/[^0-9.]/g, ''))}
+                      placeholder="0.00"
+                      placeholderTextColor={`${textMuted}88`}
+                      keyboardType="decimal-pad"
+                      style={{
+                        borderRadius: radius.lg,
+                        borderWidth: 1,
+                        borderColor: borderSubtle,
+                        padding: spacing.s10,
+                        backgroundColor: surface2,
+                        color: textPrimary,
+                        fontWeight: '700',
+                        fontSize: 16,
+                      }}
+                    />
+                  </View>
+
+                  <View>
+                    <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>Frequency</Text>
+                    <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
+                      {(['monthly','biweekly','weekly'] as any[]).map((f) => (
+                        <Pressable
+                          key={f}
+                          onPress={() => setRecFreq(f)}
+                          style={({ pressed }) => ({
+                            paddingHorizontal: spacing.s10,
+                            paddingVertical: spacing.s8,
+                            borderRadius: radius.pill,
+                            backgroundColor: recFreq === f ? mixColor(accentPrimary, surface1, 0.35) : surface2,
+                            opacity: pressed ? 0.9 : 1,
+                          })}
+                        >
+                          <Text style={{ color: recFreq === f ? textOnPrimary : textPrimary, fontWeight: recFreq === f ? '700' : '600' }}>{f[0].toUpperCase() + f.slice(1)}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View>
+                    <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>Start date</Text>
+                    <Pressable onPress={() => setRecDateOpen(true)} style={{ padding: spacing.s10, borderRadius: radius.lg, backgroundColor: surface2, borderWidth: 1, borderColor: borderSubtle }}>
+                      <Text style={{ color: textPrimary }}>{recStart.toLocaleDateString()}</Text>
+                    </Pressable>
+                  </View>
+
+                  <View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <View>
+                        <Text style={{ color: textMuted, fontSize: 12 }}>End</Text>
+                        <Text style={{ color: textMuted, fontSize: 12 }}>{recEndEnabled ? 'Ends on selected date' : 'Never'}</Text>
+                      </View>
+                      <Switch value={recEndEnabled} onValueChange={setRecEndEnabled} thumbColor={recEndEnabled ? accentPrimary : undefined} />
+                    </View>
+                    {recEndEnabled ? (
+                      <Pressable onPress={() => setRecEndDateOpen(true)} style={{ marginTop: spacing.s8, padding: spacing.s10, borderRadius: radius.lg, backgroundColor: surface2, borderWidth: 1, borderColor: borderSubtle }}>
+                        <Text style={{ color: textPrimary }}>{recEndDate.toLocaleDateString()}</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.s8 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: textMuted, fontSize: 12 }}>Auto post</Text>
+                      <Text style={{ color: textMuted, fontSize: 12 }}>Automatically create transaction on due</Text>
+                    </View>
+                    <Switch value={recAutoPost} onValueChange={setRecAutoPost} thumbColor={recAutoPost ? accentPrimary : undefined} />
+                  </View>
+
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.s8 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: textMuted, fontSize: 12 }}>Reminders</Text>
+                      <Text style={{ color: textMuted, fontSize: 12 }}>Notify me when a payment is due</Text>
+                    </View>
+                    <Switch value={recRemind} onValueChange={setRecRemind} thumbColor={recRemind ? accentPrimary : undefined} />
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.s8, marginTop: spacing.s12 }}>
+                  <Pressable onPress={() => setRecurringOpen(false)} style={({ pressed }) => ({ paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill, backgroundColor: surface2, opacity: pressed ? 0.85 : 1 })}>
+                    <Text style={{ color: textMuted, fontWeight: '600' }}>Cancel</Text>
+                  </Pressable>
+                  <Pressable onPress={onSaveRecurring} style={({ pressed }) => ({ paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill, backgroundColor: accentPrimary, opacity: pressed ? 0.85 : 1 })}>
+                    <Text style={{ color: textOnPrimary, fontWeight: '700' }}>Save</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        <DateTimeSheet
+          visible={recDateOpen}
+          date={recStart}
+          onCancel={() => setRecDateOpen(false)}
+          onConfirm={(d) => {
+            setRecStart(d);
+            setRecDateOpen(false);
+          }}
+        />
+
+        <DateTimeSheet
+          visible={recEndDateOpen}
+          date={recEndDate}
+          onCancel={() => setRecEndDateOpen(false)}
+          onConfirm={(d) => {
+            setRecEndDate(d);
+            setRecEndDateOpen(false);
+          }}
+        />
+
+        {!recurringOpen && !noteOpen && !accountOpen && !dtOpen && !recDateOpen && !recEndDateOpen ? (
+          <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}>
+            <Keypad
+              onKey={onKey}
+              onBackspace={onBackspace}
+              onDone={onSaveAndClose}
+              onOk={onAddAndStay}
+              onEvaluate={onEvaluate}
+              header={keypadHeader}
+            />
+          </View>
+        ) : null}
       </View>
     </Screen>
   );
