@@ -86,6 +86,13 @@ function mixColor(color: string, base: string, weight: number): string {
   return `rgb(${r},${g},${bCh})`;
 }
 
+function withAlpha(color: string, alpha: number): string {
+  const rgb = toRgb(color);
+  if (!rgb) return color;
+  const clamped = Math.min(Math.max(alpha, 0), 1);
+  return `rgba(${rgb.r},${rgb.g},${rgb.b},${clamped})`;
+}
+
 const EXPENSE_CATS: Cat[] = [
   { key: 'food',       label: 'Food',           icon: Utensils,       type: 'expense' },
   { key: 'groceries',  label: 'Groceries',      icon: ShoppingBasket, type: 'expense' },
@@ -354,10 +361,9 @@ export default function Add() {
   const renderCat = (item: Cat, index: number) => {
     const IconComp = item.icon as any;
     const selected = category?.key === item.key;
-    const base = mixColor(surface1, '#0e121f', 0.6);
-    const bg = selected ? mixColor(accentPrimary, base, 0.5) : base;
-    const border = selected ? mixColor(accentPrimary, '#0a0c14', 0.5) : 'rgba(255,255,255,0.08)';
-    const labelColor = selected ? accentPrimary : textPrimary;
+    const base = withAlpha(mixColor(surface1, '#0e121f', 0.6), 0.2);
+    const bg = selected ? withAlpha(accentPrimary, 0.2) : base;
+    const border = selected ? withAlpha(accentPrimary, 0.35) : 'rgba(255,255,255,0.18)';
 
     return (
       <Pressable
@@ -385,8 +391,8 @@ export default function Add() {
             ...(selected ? elevation.level2 : elevation.level1),
           }}
         >
-          <IconComp size={20} color={labelColor} />
-          <Text style={{ marginTop: spacing.s6, color: labelColor, fontWeight: '600' }} numberOfLines={1}>
+          <IconComp size={20} color={selected ? accentPrimary : textPrimary} />
+          <Text style={{ marginTop: spacing.s6, color: selected ? accentPrimary : textPrimary, fontWeight: '600' }} numberOfLines={1}>
             {item.label}
           </Text>
         </View>
