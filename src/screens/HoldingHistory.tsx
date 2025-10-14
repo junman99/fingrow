@@ -79,35 +79,59 @@ export default function HoldingHistory() {
         keyboardDismissMode="on-drag"
         contentContainerStyle={{ padding: spacing.s16, gap: spacing.s16 }}
       >
-        {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.s8 }}>
-          <Text style={{ color: text, fontWeight: '800', fontSize: 22 }}>{symbol}</Text>
-          <View style={{ flexDirection:'row', gap: spacing.s8 }}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Export CSV"
-              onPress={async () => { try { if (portfolioId) await exportHoldingTxCsv(portfolioId, symbol); } catch {} }}
-              style={({ pressed }) => ({ height: 40, paddingHorizontal: spacing.s12, borderRadius: radius.pill, alignItems:'center', justifyContent:'center', backgroundColor: pressed ? (get('surface.level2') as string) : (get('component.button.secondary.bg') as string), borderWidth: 1, borderColor: get('component.button.secondary.border') as string })}
-            >
-              <Text style={{ color: text, fontWeight: '700' }}>Export CSV</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Add transaction"
-              onPress={() => { setEditLotState(null); setShowTxSheet(true); }}
-              style={({ pressed }) => ({
-                height: 40,
-                paddingHorizontal: spacing.s12,
-                borderRadius: radius.pill,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: pressed ? (get('surface.level2') as string) : (get('component.button.primary.bg') as string),
-              })}
-            >
-              <Text style={{ color: get('text.onPrimary') as string, fontWeight: '700' }}>Add Transaction</Text>
-            </Pressable>
+        {/* Hero header */}
+        <Card>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.s12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+              <View style={{ width: 64, height: 64, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: get('surface.level2') as string }}>
+                <Text style={{ fontSize: 26, fontWeight: '900', color: get('text.primary') as string }}>{symbol?.slice(0,1)}</Text>
+              </View>
+              <View>
+                <Text style={{ color: text, fontWeight: '900', fontSize: 20 }}>{symbol}</Text>
+                <Text style={{ color: muted }}>Transaction History</Text>
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Export CSV"
+                onPress={async () => { try { if (portfolioId) await exportHoldingTxCsv(portfolioId, symbol); } catch {} }}
+                style={({ pressed }) => ({ height: 40, paddingHorizontal: spacing.s12, borderRadius: radius.pill, alignItems:'center', justifyContent:'center', backgroundColor: pressed ? (get('surface.level2') as string) : (get('component.button.secondary.bg') as string), borderWidth: 1, borderColor: get('component.button.secondary.border') as string })}
+              >
+                <Text style={{ color: text, fontWeight: '700' }}>Export CSV</Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Add transaction"
+                onPress={() => { setEditLotState(null); setShowTxSheet(true); }}
+                style={({ pressed }) => ({
+                  height: 40,
+                  paddingHorizontal: spacing.s12,
+                  borderRadius: radius.pill,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: pressed ? (get('surface.level2') as string) : (get('component.button.primary.bg') as string),
+                })}
+              >
+                <Text style={{ color: get('text.onPrimary') as string, fontWeight: '700' }}>Add</Text>
+              </Pressable>
+            </View>
           </View>
-        </View>
+
+          {/* Quick stats */}
+          <View style={{ marginTop: spacing.s12, flexDirection: 'row', gap: spacing.s12, alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: get('text.muted') as string }}>Total transactions</Text>
+              <Text style={{ color: text, fontWeight: '800', fontSize: 18 }}>{lots.length}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: get('text.muted') as string }}>Realized / Unrealized</Text>
+              <Text style={{ color: (pnl.realized >= 0 ? get('semantic.success') : get('semantic.danger')) as string, fontWeight: '800' }}>{formatCurrency(pnl.realized, cur)} / {formatCurrency(pnl.unrealized, cur)}</Text>
+            </View>
+          </View>
+        </Card>
 
         {/* Summary */}
         <Card>

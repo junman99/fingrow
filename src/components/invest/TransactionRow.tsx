@@ -4,6 +4,7 @@ import { View, Text, Pressable } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
+import Icon from '../../components/Icon';
 
 type Lot = { id: string; side: 'buy'|'sell'; qty: number; price: number; date: string; fees?: number };
 type Props = {
@@ -57,14 +58,21 @@ export default function TransactionRow({ lot, currency, onEdit, onDelete }: Prop
       rightThreshold={56}
       overshootRight={false}
     >
-      <View style={{ paddingVertical: spacing.s8, paddingHorizontal: spacing.s12, flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
-        <View style={{ flex: 1 }}>
-          <Text style={{ color: lot.side === 'buy' ? success : danger, fontWeight:'800' }}>{(lot.side || 'buy').toUpperCase()}</Text>
-          <Text style={{ color: muted, fontSize: 12 }}>{new Date(lot.date).toDateString()}</Text>
-        </View>
-        <View style={{ minWidth: 140, alignItems:'flex-end' }}>
-          <Text style={{ color: text, fontWeight:'700' }}>{lot.qty} @ {Intl.NumberFormat(undefined, { style:'currency', currency }).format(lot.price)}</Text>
-          {typeof lot.fees === 'number' && lot.fees !== 0 ? <Text style={{ color: muted, fontSize:12 }}>Fees: {Intl.NumberFormat(undefined, { style:'currency', currency }).format(lot.fees || 0)}</Text> : null}
+      <View style={{ paddingVertical: spacing.s8, paddingHorizontal: spacing.s12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+          <View style={{ width: 44, height: 44, borderRadius: 22, alignItems:'center', justifyContent:'center', backgroundColor: lot.side === 'buy' ? (get('semantic.success') as string) : (get('semantic.danger') as string) }}>
+            <Icon name={lot.side === 'buy' ? 'plus' : 'archive'} size={18} colorToken={lot.side === 'buy' ? 'text.onPrimary' : 'text.onPrimary'} />
+          </View>
+
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ color: text, fontWeight: '800' }}>{lot.qty} • {Intl.NumberFormat(undefined, { style:'currency', currency }).format(lot.price)}</Text>
+            <Text style={{ color: muted, fontSize: 12, marginTop: 2 }}>{new Date(lot.date).toLocaleString()}</Text>
+          </View>
+
+          <View style={{ alignItems:'flex-end' }}>
+            <Text style={{ color: lot.side === 'buy' ? success : danger, fontWeight:'800' }}>{(lot.side || 'buy').toUpperCase()}</Text>
+            {typeof lot.fees === 'number' && lot.fees !== 0 ? <Text style={{ color: muted, fontSize:12, marginTop: 4 }}>Fees: {Intl.NumberFormat(undefined, { style:'currency', currency }).format(lot.fees || 0)}</Text> : null}
+          </View>
         </View>
       </View>
     </Swipeable>
