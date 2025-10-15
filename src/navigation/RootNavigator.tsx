@@ -74,7 +74,7 @@ export default function RootNavigator() {
       <Root.Navigator screenOptions={{ headerShown: false }}>
         <Root.Screen name="Tabs" component={BottomTabs} />
         <Root.Screen name="Groups" component={GroupsNavigator} options={{ presentation: 'modal' }} />
-        <Root.Screen name="Goals" component={GoalsNavigator} />
+        <Root.Screen name="Goals" component={GoalsNavigator} options={{ presentation: 'modal' }} />
         <Root.Screen name="TransactionsModal" component={Transactions} options={{ presentation: 'modal' }} />
         <Root.Screen name="Add" component={Add} options={{ presentation: 'modal' }} />
         <Root.Screen name="BudgetModal" component={Budgets} options={{ presentation: 'modal' }} />

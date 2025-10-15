@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useCallback } from 'react';
-import { View, Text, Pressable, Image, Animated, Easing } from 'react-native';
+import React, { useEffect, useRef, useCallback, useMemo } from 'react';
+import { View, Text, Pressable, Image, Animated, Easing, InteractionManager } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius, elevation } from '../theme/tokens';
 import { ScreenScroll } from '../components/ScreenScroll';
@@ -108,6 +108,22 @@ export const Home: React.FC = () => {
   const collapseAnim = useRef(new Animated.Value(1)).current;
   const fabTargetRef = useRef(1);
   const collapseTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const interactionHandleRef = useRef<ReturnType<typeof InteractionManager.runAfterInteractions> | null>(null);
+  const navDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFocused = useIsFocused();
+  const isFocusedRef = useRef(isFocused);
+  useEffect(() => { isFocusedRef.current = isFocused; }, [isFocused]);
+
+  const clearPendingNavigation = useCallback(() => {
+    if (interactionHandleRef.current) {
+      interactionHandleRef.current.cancel();
+      interactionHandleRef.current = null;
+    }
+    if (navDelayRef.current) {
+      clearTimeout(navDelayRef.current);
+      navDelayRef.current = null;
+    }
+  }, []);
 
   const animateFab = useCallback((to: number) => {
     if (fabTargetRef.current === to) return;
@@ -136,39 +152,64 @@ export const Home: React.FC = () => {
       if (collapseTimeout.current) clearTimeout(collapseTimeout.current);
     };
   }, []);
+  useEffect(() => {
+    return () => {
+      clearPendingNavigation();
+    };
+  }, [clearPendingNavigation]);
 
-  const handleAddPress = useCallback(() => nav.navigate('Add'), [nav]);
+  const navigateWhenIdle = useCallback((fn: () => void) => {
+    clearPendingNavigation();
+    const attempt = () => {
+      interactionHandleRef.current = null;
+      if (isFocusedRef.current) {
+        fn();
+        return;
+      }
+      navDelayRef.current = setTimeout(() => {
+        navDelayRef.current = null;
+        interactionHandleRef.current = InteractionManager.runAfterInteractions(attempt);
+      }, 80);
+    };
+    interactionHandleRef.current = InteractionManager.runAfterInteractions(attempt);
+  }, [clearPendingNavigation]);
 
-  const quickActions = [
+  const handleAddPress = useCallback(() => {
+    navigateWhenIdle(() => nav.navigate('Add'));
+  }, [nav, navigateWhenIdle]);
+
+  const warningAccent = get('semantic.warning') as string;
+  const successAccent = get('semantic.success') as string;
+  const quickActions = useMemo(() => ([
     {
       key: 'groups',
       icon: 'users-2' as const,
       label: 'Shared bills',
-      onPress: () => nav.navigate('Groups', { screen: 'GroupsRoot' }),
-      accent: get('accent.secondary') as string
+      onPress: () => navigateWhenIdle(() => nav.navigate('Groups', { screen: 'GroupsRoot' })),
+      accent: accentSecondary
     },
     {
       key: 'goal',
       icon: 'target' as const,
       label: 'Savings goals',
-      onPress: () => nav.navigate('Goals', { screen: 'GoalsRoot' }),
-      accent: get('accent.primary') as string
+      onPress: () => navigateWhenIdle(() => nav.navigate('Goals', { screen: 'GoalsRoot' })),
+      accent: accentPrimary
     },
     {
       key: 'budget',
       icon: 'wallet' as const,
       label: 'Budgets',
-      onPress: () => nav.navigate('BudgetModal'),
-      accent: get('semantic.warning') as string
+      onPress: () => navigateWhenIdle(() => nav.navigate('BudgetModal')),
+      accent: warningAccent
     },
     {
       key: 'history',
       icon: 'history' as const,
       label: 'History',
-      onPress: () => nav.navigate('TransactionsModal'),
-      accent: get('semantic.success') as string
+      onPress: () => navigateWhenIdle(() => nav.navigate('TransactionsModal')),
+      accent: successAccent
     }
-  ];
+  ]), [accentSecondary, accentPrimary, warningAccent, successAccent, nav, navigateWhenIdle]);
 
   const avatarInitials = (() => {
     const n = profile?.name?.trim();

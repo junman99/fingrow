@@ -1,54 +1,73 @@
-
 import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, View, Text, Pressable } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import Button from '../../components/Button';
+import Icon, { IconName } from '../../components/Icon';
 import { useThemeTokens } from '../../theme/ThemeProvider';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { spacing, radius, elevation } from '../../theme/tokens';
 import { useGroupsStore } from '../../store/groups';
 import { useProfileStore } from '../../store/profile';
 import { formatCurrency, sum } from '../../lib/format';
 
 export default function GroupsRoot() {
-  const { get } = useThemeTokens();
+  const { get, isDark } = useThemeTokens();
   const nav = useNavigation<any>();
   const { groups, hydrate, balances } = useGroupsStore();
 
   useFocusEffect(useCallback(() => { hydrate(); }, [hydrate]));
 
-    const [filterTab, setFilterTab] = useState<'all'|'unsettled'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | 'unsettled'>('all');
   const meName = (useProfileStore.getState().profile.name || '').trim().toLowerCase();
-const data = useMemo(() => {
+
+  const accentPrimary = get('accent.primary') as string;
+  const textOnPrimary = get('text.onPrimary') as string;
+  const textPrimary = get('text.primary') as string;
+  const textMuted = get('text.muted') as string;
+  const surface1 = get('surface.level1') as string;
+  const surface2 = get('surface.level2') as string;
+  const borderSubtle = get('border.subtle') as string;
+  const heroGradient = isDark
+    ? (['#0d101e', '#19152c'] as const)
+    : (['#5c55ff', '#8a6bff'] as const);
+  const heroMetricBg = isDark ? withAlpha('#12162a', 0.88) : withAlpha('#ffffff', 0.14);
+  const heroMetricIconBg = isDark ? withAlpha('#1f1a36', 0.85) : withAlpha('#ffffff', 0.22);
+  const heroButtonBg = isDark ? withAlpha('#ffffff', 0.08) : withAlpha('#ffffff', 0.16);
+  const heroButtonBorder = isDark ? withAlpha('#ffffff', 0.12) : withAlpha('#ffffff', 0.24);
+  const heroChipBg = isDark ? withAlpha('#ffffff', 0.08) : withAlpha(heroGradient[0], 0.18);
+  const heroText = isDark ? '#eef3ff' : textOnPrimary;
+  const heroTextSoft = withAlpha(heroText, 0.82);
+  const heroTextMuted = withAlpha(heroText, 0.7);
+  const heroIconColorToken = isDark ? 'text.primary' : 'text.onPrimary';
+
+  const data = useMemo(() => {
     const arr = [...groups].map(g => {
-      // compute unsettled: sum of positive balances (== total that needs to move)
       const bal = balances(g.id);
       const pos = Object.values(bal || {}).filter(v => v > 0);
       const unsettled = sum(pos.map(v => Math.abs(v)));
-      // last activity
       const lastBill = Math.max(0, ...(g.bills || []).map(b => b.createdAt || 0));
       const lastSettle = Math.max(0, ...(g.settlements || []).map(s => s.createdAt || 0));
       const last = Math.max(g.createdAt || 0, lastBill, lastSettle);
       return { ...g, unsettled, last };
     });
-    // Sort: unsettled > 0 first, then most recent
     return arr.sort((a: any, b: any) => {
       const aU = a.unsettled > 0.009 ? 1 : 0;
       const bU = b.unsettled > 0.009 ? 1 : 0;
-      if (aU !== bU) return bU - aU; // unsettled first
-      return (b.last || 0) - (a.last || 0); // recent first
+      if (aU !== bU) return bU - aU;
+      return (b.last || 0) - (a.last || 0);
     });
   }, [groups, balances]);
 
   const filteredData = useMemo(() => (
-    filterTab === 'unsettled' ? data.filter((g:any)=>g.unsettled > 0.009) : data
+    filterTab === 'unsettled' ? data.filter((g: any) => g.unsettled > 0.009) : data
   ), [data, filterTab]);
 
   const totals = useMemo(() => {
     let youOwe = 0, theyOwe = 0, matched = 0;
     for (const g of data) {
       const bal = balances(g.id);
-      const me = (g.members || []).find((m:any)=> (m.name||'').trim().toLowerCase() === meName);
+      const me = (g.members || []).find((m: any) => (m.name || '').trim().toLowerCase() === meName);
       if (!me) continue;
       matched++;
       const v = bal[me.id] || 0;
@@ -58,23 +77,55 @@ const data = useMemo(() => {
     return { youOwe, theyOwe, matched };
   }, [data, balances, meName]);
 
+  const summary = useMemo(() => {
+    const unsettledGroups = data.filter(g => g.unsettled > 0.009);
+    const totalOutstanding = sum(data.map(g => g.unsettled));
+    return { unsettledCount: unsettledGroups.length, totalOutstanding };
+  }, [data]);
+
+  const MetricCard = ({ icon, label, value, caption }: { icon: IconName; label: string; value: string; caption?: string }) => (
+    <View
+      style={{
+        flexGrow: 1,
+        minWidth: 150,
+        padding: spacing.s12,
+        borderRadius: radius.lg,
+        backgroundColor: heroMetricBg
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.s6 }}>
+        <View style={{
+          width: 32, height: 32, borderRadius: 16,
+          backgroundColor: heroMetricIconBg,
+          alignItems: 'center', justifyContent: 'center', marginRight: spacing.s8
+        }}>
+          <Icon name={icon} size={18} colorToken={heroIconColorToken} />
+        </View>
+        <Text style={{ color: heroTextSoft, fontWeight: '600' }}>{label}</Text>
+      </View>
+      <Text style={{ color: heroText, fontSize: 20, fontWeight: '800' }}>{value}</Text>
+      {caption ? <Text style={{ color: heroTextMuted, marginTop: 4, fontSize: 12 }}>{caption}</Text> : null}
+    </View>
+  );
 
   const renderAvatarStack = (names: string[]) => {
-    const cols = [get('surface.level2') as string, get('surface.level2') as string, get('surface.level2') as string];
+    const cols = isDark
+      ? [withAlpha('#171c2f', 0.92), withAlpha('#221b3a', 0.88), withAlpha('#2f244d', 0.78)]
+      : [withAlpha(heroGradient[0], 0.24), withAlpha(heroGradient[1], 0.2), withAlpha('#ffffff', 0.32)];
     return (
-      <View style={{ width: 40, alignItems: 'center', justifyContent: 'center' }}>
-        {names.slice(0,3).map((n, i) => {
-          const initials = n.trim().split(/\s+/).slice(0,2).map(p => p[0]?.toUpperCase() || '').join('');
+      <View style={{ width: 60, height: 48, alignItems: 'center', justifyContent: 'center' }}>
+        {names.slice(0, 3).map((n, i) => {
+          const initials = n.trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase() || '').join('');
           return (
             <View key={i} style={{
               position: 'absolute',
-              left: i * 12,
-              width: 28, height: 28, borderRadius: 14,
+              left: i * 14,
+              width: 32, height: 32, borderRadius: 16,
               backgroundColor: cols[i],
               alignItems: 'center', justifyContent: 'center',
-              borderWidth: 1, borderColor: get('border.subtle') as string,
+              borderWidth: 1, borderColor: isDark ? withAlpha('#ffffff', 0.16) : withAlpha('#ffffff', 0.6),
             }}>
-              <Text style={{ color: get('text.primary') as string, fontSize: 11, fontWeight: '700' }}>{initials}</Text>
+              <Text style={{ color: textPrimary, fontSize: 12, fontWeight: '700' }}>{initials}</Text>
             </View>
           );
         })}
@@ -82,45 +133,125 @@ const data = useMemo(() => {
     );
   };
 
-  const Row = ({ item }: any) => {
+  const Row = ({ item }: { item: any }) => {
     const activeMembers = item.members.filter((m: any) => !m.archived);
     const settled = item.unsettled <= 0.009;
     const meta = `${activeMembers.length} members`;
+    const balanceMap = balances(item.id) || {};
+    const me = (activeMembers || []).find((m: any) => (m.name || '').trim().toLowerCase() === meName);
+    const myShare = me ? balanceMap[me.id] || 0 : 0;
+    const myShareLabel = !me
+      ? 'Add yourself to this group to track your share.'
+      : myShare > 0.009
+        ? `You are owed ${formatCurrency(myShare)}`
+        : myShare < -0.009
+          ? `You owe ${formatCurrency(Math.abs(myShare))}`
+          : 'You are settled in this group';
+    const myShareColor = myShare > 0.009
+      ? get('semantic.success') as string
+      : myShare < -0.009
+        ? get('semantic.warning') as string
+        : textMuted;
+    const lastActive = item.last ? timeAgo(item.last) : 'Just created';
+    const billCount = item.bills?.length ?? 0;
+    const chipBg = settled ? surface2 : heroChipBg;
+    const chipColor = settled ? textMuted : (isDark ? heroText : accentPrimary);
+    const borderColor = settled ? borderSubtle : withAlpha(heroGradient[0], 0.35);
 
     return (
-      <Pressable accessibilityRole="button"
+      <Pressable
+        accessibilityRole="button"
         onPress={() => nav.navigate('GroupDetail', { groupId: item.id })}
-        style={{
-          backgroundColor: get('surface.level1') as string,
-          borderRadius: radius.lg, paddingVertical: spacing.s12, paddingHorizontal: spacing.s12,
-          ...(elevation.level1 as any),
-          marginBottom: spacing.s12, flexDirection: 'row', alignItems: 'center'
-        }}
+        style={({ pressed }) => [
+          {
+            backgroundColor: surface1,
+            borderRadius: radius.xl,
+            paddingVertical: spacing.s16,
+            paddingHorizontal: spacing.s16,
+            marginBottom: spacing.s16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            overflow: 'hidden',
+            borderWidth: 1,
+            borderColor,
+            opacity: pressed ? 0.95 : 1
+          },
+          elevation.level1 as any
+        ]}
       >
-        {renderAvatarStack(activeMembers.map((m:any)=>m.name))}
-        <View style={{ flex: 1, marginLeft: spacing.s8 }}>
-          <Text style={{ color: get('text.primary') as string, fontWeight: '700' }} numberOfLines={1}>{item.name}</Text>
-          <Text style={{ color: settled ? get('text.muted') as string : get('semantic.warning') as string }} numberOfLines={1}>{meta}</Text>
-        </View>
-
-        <View style={{ alignItems: 'flex-end', gap: spacing.s8 }}>
-          {/* status pill */}
+        {!settled && (
           <View style={{
-            paddingHorizontal: spacing.s8, paddingVertical: 4,
-            borderRadius: radius.pill,
-            backgroundColor: settled ? (get('surface.level2') as string) : (get('surface.level2') as string),
-            borderWidth: 1, borderColor: settled ? (get('border.subtle') as string) : (get('border.subtle') as string),
-          }}>
-            <Text style={{ color: settled ? (get('text.muted') as string) : (get('text.primary') as string), fontSize: 12 }}>
-              {settled ? 'Settled' : `Unsettled ${formatCurrency(item.unsettled)}`}
-            </Text>
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            bottom: 0,
+            width: 6,
+            backgroundColor: heroGradient[1]
+          }} />
+        )}
+        {renderAvatarStack(activeMembers.map((m: any) => m.name))}
+        <View style={{ flex: 1, marginLeft: spacing.s12 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <View style={{ flex: 1, paddingRight: spacing.s8 }}>
+              <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 16 }} numberOfLines={1}>{item.name}</Text>
+              <Text style={{ color: textMuted, marginTop: spacing.s4 }} numberOfLines={1}>{`${meta} • ${lastActive}`}</Text>
+            </View>
+            <View style={{
+              paddingHorizontal: spacing.s10,
+              paddingVertical: spacing.s6,
+              borderRadius: radius.pill,
+              backgroundColor: chipBg
+            }}>
+              <Text style={{ color: chipColor, fontWeight: '700', fontSize: 12 }}>
+                {settled ? 'Settled up' : `${formatCurrency(item.unsettled)} unsettled`}
+              </Text>
+            </View>
           </View>
 
-          {/* quick actions */}
-          <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-            <Button size="sm" variant="secondary" title="Add bill" onPress={() => nav.navigate('AddBill', { groupId: item.id })} />
+          <View style={{
+            marginTop: spacing.s12,
+            padding: spacing.s12,
+            borderRadius: radius.lg,
+            backgroundColor: settled ? surface2 : heroChipBg
+          }}>
+            <Text style={{ color: myShareColor, fontWeight: '600' }}>{myShareLabel}</Text>
+          </View>
+
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8, marginTop: spacing.s12 }}>
+            <View style={{
+              paddingHorizontal: spacing.s10,
+              paddingVertical: spacing.s6,
+              borderRadius: radius.pill,
+              backgroundColor: surface2
+            }}>
+              <Text style={{ color: textMuted, fontWeight: '600', fontSize: 12 }}>{billCount} bills logged</Text>
+            </View>
+            <View style={{
+              paddingHorizontal: spacing.s10,
+              paddingVertical: spacing.s6,
+              borderRadius: radius.pill,
+              backgroundColor: surface2
+            }}>
+              <Text style={{ color: textMuted, fontWeight: '600', fontSize: 12 }}>{activeMembers.length} active members</Text>
+            </View>
+          </View>
+
+          <View style={{ flexDirection: 'row', gap: spacing.s8, marginTop: spacing.s12 }}>
+            <Button
+              size="sm"
+              variant="secondary"
+              title="Add bill"
+              onPress={() => nav.navigate('AddBill', { groupId: item.id })}
+              style={{ flex: 1 }}
+            />
             {!settled && (
-              <Button size="sm" variant="primary" title="Settle up" onPress={() => nav.navigate('SettleUp', { groupId: item.id })} />
+              <Button
+                size="sm"
+                variant="primary"
+                title="Settle up"
+                onPress={() => nav.navigate('SettleUp', { groupId: item.id })}
+                style={{ flex: 1 }}
+              />
             )}
           </View>
         </View>
@@ -130,62 +261,163 @@ const data = useMemo(() => {
 
   return (
     <Screen>
-      <View style={{ padding: spacing.s16, flex: 1 }}>
-        <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between' }}>
-          <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Groups</Text>
-          <Button title="+ Add" variant="secondary" onPress={() => nav.navigate('CreateGroup')} />
-        </View>
-                {/* Top summary */}
-        {(totals.youOwe > 0.009 || totals.theyOwe > 0.009) && (
-          <View style={{ marginBottom: spacing.s12, flexDirection: 'row', gap: spacing.s12 }}>
-            <View style={{ backgroundColor: get('surface.level2') as string, borderRadius: radius.pill, paddingVertical: 6, paddingHorizontal: spacing.s12 }}>
-              <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>{'You owe ' + formatCurrency(totals.youOwe)}</Text>
-            </View>
-            <View style={{ backgroundColor: get('surface.level2') as string, borderRadius: radius.pill, paddingVertical: 6, paddingHorizontal: spacing.s12 }}>
-              <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>{'They owe you ' + formatCurrency(totals.theyOwe)}</Text>
+      <FlatList
+        data={filteredData}
+        keyExtractor={(item: any) => item.id}
+        renderItem={({ item }) => <Row item={item} />}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: spacing.s16, paddingBottom: spacing.s32 }}
+        ListHeaderComponentStyle={{ marginBottom: spacing.s16 }}
+        ListHeaderComponent={(
+          <View>
+            <LinearGradient
+              colors={heroGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{
+                borderRadius: radius.xl,
+                padding: spacing.s16,
+                marginTop: spacing.s8
+              }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <View style={{ flex: 1, paddingRight: spacing.s8 }}>
+                  <Text style={{ color: heroText, fontSize: 24, fontWeight: '800' }}>Shared bills</Text>
+                  <Text style={{ color: heroTextSoft, marginTop: spacing.s4 }}>
+                    Keep tabs on every group balance and settle up with confidence.
+                  </Text>
+                </View>
+                <Button
+                  title="+ New group"
+                  size="sm"
+                  variant="secondary"
+                  onPress={() => nav.navigate('CreateGroup')}
+                  style={{
+                    backgroundColor: heroButtonBg,
+                    borderColor: heroButtonBorder
+                  }}
+                />
+              </View>
+
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s12, marginTop: spacing.s16 }}>
+                <MetricCard
+                  icon="users-2"
+                  label="Groups"
+                  value={`${data.length}`}
+                  caption={summary.unsettledCount > 0 ? `${summary.unsettledCount} need attention` : 'All squared up'}
+                />
+                <MetricCard
+                  icon="receipt"
+                  label="Outstanding"
+                  value={formatCurrency(summary.totalOutstanding)}
+                  caption={summary.unsettledCount > 0 ? `Across ${summary.unsettledCount} group(s)` : 'Nothing unsettled'}
+                />
+                <MetricCard
+                  icon="wallet"
+                  label="You owe"
+                  value={totals.youOwe > 0.009 ? formatCurrency(totals.youOwe) : 'All clear'}
+                  caption={totals.youOwe > 0.009 ? 'Plan a settle-up soon' : 'No paybacks pending'}
+                />
+                <MetricCard
+                  icon="trending-up"
+                  label="Owed to you"
+                  value={totals.theyOwe > 0.009 ? formatCurrency(totals.theyOwe) : 'All clear'}
+                  caption={totals.theyOwe > 0.009 ? 'Give your pals a nudge' : 'Nothing outstanding'}
+                />
+              </View>
+            </LinearGradient>
+
+            <View style={{
+              marginTop: spacing.s16,
+              backgroundColor: surface1,
+              borderRadius: radius.pill,
+              padding: spacing.s4,
+              flexDirection: 'row',
+              alignSelf: 'flex-start',
+              borderWidth: 1,
+              borderColor: borderSubtle
+            }}>
+              <Pressable
+                onPress={() => setFilterTab('all')}
+                style={({ pressed }) => ({
+                  paddingVertical: spacing.s6,
+                  paddingHorizontal: spacing.s16,
+                  borderRadius: radius.pill,
+                  backgroundColor: filterTab === 'all' ? accentPrimary : surface1,
+                  opacity: pressed ? 0.85 : 1
+                })}
+              >
+                <Text style={{ color: filterTab === 'all' ? textOnPrimary : textPrimary, fontWeight: '600' }}>
+                  All groups ({data.length})
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setFilterTab('unsettled')}
+                style={({ pressed }) => ({
+                  paddingVertical: spacing.s6,
+                  paddingHorizontal: spacing.s16,
+                  borderRadius: radius.pill,
+                  backgroundColor: filterTab === 'unsettled' ? accentPrimary : surface1,
+                  opacity: pressed ? 0.85 : 1
+                })}
+              >
+                <Text style={{ color: filterTab === 'unsettled' ? textOnPrimary : textPrimary, fontWeight: '600' }}>
+                  Needs attention ({summary.unsettledCount})
+                </Text>
+              </Pressable>
             </View>
           </View>
         )}
-        {/* Filter chips */}
-        <View style={{ flexDirection: 'row', gap: spacing.s8, marginBottom: spacing.s12 }}>
-          <Pressable onPress={() => setFilterTab('all')} style={{ borderRadius: radius.pill, paddingVertical: 6, paddingHorizontal: spacing.s12, backgroundColor: filterTab==='all' ? get('accent.primary') as string : get('surface.level2') as string }}>
-            <Text style={{ color: filterTab==='all' ? get('text.onPrimary') as string : get('text.primary') as string, fontWeight: '600' }}>All</Text>
-          </Pressable>
-          <Pressable onPress={() => setFilterTab('unsettled')} style={{ borderRadius: radius.pill, paddingVertical: 6, paddingHorizontal: spacing.s12, backgroundColor: filterTab==='unsettled' ? get('accent.primary') as string : get('surface.level2') as string }}>
-            <Text style={{ color: filterTab==='unsettled' ? get('text.onPrimary') as string : get('text.primary') as string, fontWeight: '600' }}>Unsettled</Text>
-          </Pressable>
-        </View>
-{data.length === 0 ? (
-          <View style={{
-            borderRadius: radius.lg,
-            backgroundColor: get('surface.level1') as string, padding: spacing.s16,
-            ...(elevation.level1 as any)
-          }}>
-            <Text style={{ color: get('text.primary') as string, fontWeight: '700', marginBottom: spacing.s8 }}>No groups yet</Text>
-            <Text style={{ color: get('text.muted') as string, marginBottom: spacing.s12 }}>Create a group to track shared bills and settle up easily.</Text>
-            <Button title="Create group" onPress={() => nav.navigate('CreateGroup')} />
+        ListEmptyComponent={() => (
+          <View style={{ marginTop: spacing.s24 }}>
+            <View style={{
+              borderRadius: radius.xl,
+              backgroundColor: surface1,
+              padding: spacing.s16,
+              borderWidth: 1,
+              borderColor: borderSubtle,
+              ...(elevation.level1 as any)
+            }}>
+              <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 18, marginBottom: spacing.s8 }}>
+                {data.length === 0 ? 'Create your first group' : 'Everything is settled'}
+              </Text>
+              <Text style={{ color: textMuted, marginBottom: spacing.s16 }}>
+                {data.length === 0
+                  ? 'Start a group to split shared bills and track balances in one beautiful view.'
+                  : 'No groups need attention right now. Switch back to all groups to keep exploring.'}
+              </Text>
+              {data.length === 0 ? (
+                <Button title="Create group" onPress={() => nav.navigate('CreateGroup')} />
+              ) : (
+                <Button variant="secondary" title="View all groups" onPress={() => setFilterTab('all')} />
+              )}
+            </View>
           </View>
-        ) : (
-          <FlatList
-            data={filteredData}
-            keyExtractor={(i:any) => i.id}
-            renderItem={({ item }) => <Row item={item} />}
-            contentContainerStyle={{ paddingBottom: spacing.s24 }}
-          />
         )}
-      </View>
+      />
     </Screen>
   );
 }
 
 function timeAgo(ts: number) {
   const diff = Date.now() - ts;
-  const s = Math.floor(diff/1000);
-  const m = Math.floor(s/60);
-  const h = Math.floor(m/60);
-  const d = Math.floor(h/24);
+  const s = Math.floor(diff / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  const d = Math.floor(h / 24);
   if (d >= 1) return d === 1 ? '1 day ago' : `${d} days ago`;
   if (h >= 1) return h === 1 ? '1 hour ago' : `${h} hours ago`;
   if (m >= 1) return m === 1 ? '1 min ago' : `${m} mins ago`;
   return 'just now';
+}
+
+function withAlpha(hex: string, alpha: number) {
+  if (!hex || typeof hex !== 'string') return hex;
+  if (hex.startsWith('#')) {
+    const clean = hex.slice(1, 7);
+    const padded = clean.length === 6 ? clean : clean.padEnd(6, '0');
+    const a = Math.round(Math.min(Math.max(alpha, 0), 1) * 255).toString(16).padStart(2, '0');
+    return `#${padded}${a}`;
+  }
+  return hex;
 }

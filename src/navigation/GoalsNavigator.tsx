@@ -7,7 +7,7 @@ import GoalDetail from '../screens/goals/GoalDetail';
 export type GoalsStackParamList = {
   GoalsRoot: undefined;
   GoalCreate: undefined;
-  GoalDetail: { goalId: string };
+  GoalDetail: { goalId: string; mode?: 'journey' | 'add' };
 };
 
 const Stack = createNativeStackNavigator<GoalsStackParamList>();

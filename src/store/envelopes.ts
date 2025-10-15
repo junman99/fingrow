@@ -9,6 +9,8 @@ type State = {
   hydrate: () => Promise<void>;
   setOverride: (category: string, cap: number | null) => Promise<void>; // null to clear
   resetAll: () => Promise<void>;
+  addEnvelope: (category: string, cap?: number | null) => Promise<void>;
+  deleteEnvelope: (category: string) => Promise<void>;
 };
 
 const KEY = 'fingrow/envelopes/overrides';
@@ -43,5 +45,23 @@ export const useEnvelopesStore = create<State>((set, get) => ({
   resetAll: async () => {
     set({ overrides: {} });
     await AsyncStorage.setItem(KEY, JSON.stringify({}));
+  },
+  addEnvelope: async (category, cap) => {
+    const name = category.trim();
+    if (!name) return;
+    const curr = { ...get().overrides };
+    const value = cap == null ? 0 : Math.max(0, Math.round(Number(cap) || 0));
+    curr[name] = value;
+    set({ overrides: curr });
+    await AsyncStorage.setItem(KEY, JSON.stringify(curr));
+  },
+  deleteEnvelope: async (category) => {
+    const name = category.trim();
+    if (!name) return;
+    const curr = { ...get().overrides };
+    if (curr[name] === undefined) return;
+    delete curr[name];
+    set({ overrides: curr });
+    await AsyncStorage.setItem(KEY, JSON.stringify(curr));
   }
 }));

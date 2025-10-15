@@ -1,15 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, FlatList } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Screen } from '../components/Screen';
 import Icon from '../components/Icon';
 import Input from '../components/Input';
-import Sparkline from '../components/Sparkline';
+import PopoverMenu from '../components/PopoverMenu';
 import { useThemeTokens } from '../theme/ThemeProvider';
-import { spacing, radius, elevation } from '../theme/tokens';
+import { spacing, radius } from '../theme/tokens';
 import { useTxStore } from '../store/transactions';
 import { Swipeable } from 'react-native-gesture-handler';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Tx = ReturnType<typeof useTxStore.getState>['transactions'][number];
 
@@ -20,6 +22,49 @@ type Section = {
   totalSpent: number;
   totalNet: number;
 };
+
+const RANGE_SEQUENCE = ['ALL', '7D', '30D', 'MONTH', 'CUSTOM'] as const;
+const RANGE_LABELS: Record<typeof RANGE_SEQUENCE[number], string> = {
+  ALL: 'All time',
+  '7D': 'Last 7 days',
+  '30D': 'Last 30 days',
+  MONTH: 'This month',
+  CUSTOM: 'Custom range',
+};
+
+function withOpacity(color: string, opacity: number) {
+  if (!color) return color;
+  if (color.startsWith('#')) {
+    if (color.length === 4) {
+      const hex = color.slice(1).split('').map((c) => c + c).join('');
+      const alpha = Math.round(Math.min(Math.max(opacity, 0), 1) * 255).toString(16).padStart(2, '0');
+      return `#${hex}${alpha}`;
+    }
+    if (color.length === 7) {
+      const alpha = Math.round(Math.min(Math.max(opacity, 0), 1) * 255).toString(16).padStart(2, '0');
+      return `${color}${alpha}`;
+    }
+  }
+  if (color.startsWith('rgb')) {
+    const parts = color.replace(/rgba?\(/, '').replace(')', '').split(',').map((part) => Number(part.trim()));
+    if (parts.length >= 3 && parts.every((n) => !Number.isNaN(n))) {
+      const [r, g, b] = parts;
+      return `rgba(${r},${g},${b},${opacity})`;
+    }
+  }
+  return color;
+}
+
+const TYPE_OPTIONS: { label: string; value: 'all' | 'income' | 'expense'; description?: string }[] = [
+  { label: 'All activity', value: 'all', description: 'Display every transaction' },
+  { label: 'Income only', value: 'income', description: 'Focus on credits and inflows' },
+  { label: 'Spending only', value: 'expense', description: 'Show just your outflows' },
+];
+
+const RANGE_OPTIONS: { label: string; value: typeof RANGE_SEQUENCE[number] }[] = RANGE_SEQUENCE.map((key) => ({
+  label: RANGE_LABELS[key],
+  value: key,
+}));
 
 const Row = ({ item, onRemove }: { item: Tx; onRemove: () => void }) => {
   const { get } = useThemeTokens();
@@ -90,25 +135,63 @@ function groupByDate(items: Tx[]): Section[] {
 
 
 export const Transactions: React.FC = () => {
-  const nav = useNavigation<any>();
   const { get } = useThemeTokens();
   const { transactions, remove } = useTxStore();
+  const insets = useSafeAreaInsets();
   const [filter, setFilter] = useState<'all'|'income'|'expense'>('all');
-  const [range, setRange] = useState<'ALL'|'7D'|'30D'|'MONTH'|'CUSTOM'>('ALL');
+  const [range, setRange] = useState<'ALL'|'7D'|'30D'|'MONTH'|'CUSTOM'>('30D');
   const [search, setSearch] = useState('');
   const [searchOn, setSearchOn] = useState(false);
   const [totalMode, setTotalMode] = useState<'SPENT'|'NET'>('SPENT');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [currentMonth, setCurrentMonth] = useState<string>('');
-  const [monthPickerOpen, setMonthPickerOpen] = useState(false);
-  const listRef = useRef<FlatList<Section>>(null);
+  const [typeMenuVisible, setTypeMenuVisible] = useState(false);
+  const [typeAnchor, setTypeAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [rangeMenuVisible, setRangeMenuVisible] = useState(false);
+  const [rangeAnchor, setRangeAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const typeButtonRef = useRef<View>(null);
+  const rangeButtonRef = useRef<View>(null);
+  const normalizedSearch = search.trim().toLowerCase();
+
+  const openTypeMenu = useCallback(() => {
+    const ref: any = typeButtonRef.current;
+    if (ref && typeof ref.measureInWindow === 'function') {
+      ref.measureInWindow((x: number, y: number, w: number, h: number) => {
+        setTypeAnchor({ x, y, w, h });
+        setTypeMenuVisible(true);
+      });
+    } else if (typeAnchor) {
+      setTypeMenuVisible(true);
+    } else {
+      setTypeAnchor({ x: 200, y: 80, w: 1, h: 1 });
+      setTypeMenuVisible(true);
+    }
+  }, [typeAnchor]);
+
+  const openRangeMenu = useCallback(() => {
+    const ref: any = rangeButtonRef.current;
+    if (ref && typeof ref.measureInWindow === 'function') {
+      ref.measureInWindow((x: number, y: number, w: number, h: number) => {
+        setRangeAnchor({ x, y, w, h });
+        setRangeMenuVisible(true);
+      });
+    } else if (rangeAnchor) {
+      setRangeMenuVisible(true);
+    } else {
+      setRangeAnchor({ x: 220, y: 80, w: 1, h: 1 });
+      setRangeMenuVisible(true);
+    }
+  }, [rangeAnchor]);
 
   // Reset filters whenever this modal/screen gains focus
   useFocusEffect(useCallback(() => {
     setFilter('all');
-    setRange('ALL');
+    setRange('30D');
     setSearch('');
     setSearchOn(false);
+    setTypeMenuVisible(false);
+    setRangeMenuVisible(false);
+    setTypeAnchor(null);
+    setRangeAnchor(null);
     return undefined;
   }, []));
 
@@ -141,13 +224,12 @@ export const Transactions: React.FC = () => {
 
     if (fromTs) base = base.filter(t => new Date(t.date).getTime() >= fromTs);
 
-    const q = search.trim().toLowerCase();
-    if (q.length > 0) {
-      base = base.filter(t => (t.note || '').toLowerCase().includes(q) || (t.category || '').toLowerCase().includes(q));
+    if (normalizedSearch.length > 0) {
+      base = base.filter(t => (t.note || '').toLowerCase().includes(normalizedSearch) || (t.category || '').toLowerCase().includes(normalizedSearch));
     }
 
     return base;
-  }, [transactions, filter, range, search]);
+  }, [transactions, filter, range, normalizedSearch]);
 
   const sectionsRaw = useMemo(() => groupByDate(filtered), [filtered]);
 
@@ -156,211 +238,255 @@ export const Transactions: React.FC = () => {
   const expenseTotal = useMemo(() => filtered.filter(t => t.type !== 'income').reduce((a, t) => a + Number(t.amount || 0), 0), [filtered]);
   const netTotal = useMemo(() => incomeTotal - expenseTotal, [incomeTotal, expenseTotal]);
   const avgTxn = useMemo(() => filtered.length ? (filtered.reduce((a, t) => a + Math.abs(Number(t.amount || 0)), 0) / filtered.length) : 0, [filtered]);
-  const topCategory = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const t of filtered) counts[t.category || 'General'] = (counts[t.category || 'General'] || 0) + 1;
-    const entries = Object.entries(counts).sort((a,b)=> b[1]-a[1]);
-    return entries[0]?.[0] || '—';
-  }, [filtered]);
-
-  // 7-day sparkline / trend: build daily totals for last 7 days
-  const sparkData = useMemo(() => {
-    const now = new Date();
-    const days = Array.from({ length: 7 }).map((_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (6 - i));
-      const key = d.toISOString().slice(0,10);
-      return { key, date: d };
-    });
-    const map: Record<string, number> = {};
-    for (const t of filtered) {
-      const k = new Date(t.date).toISOString().slice(0,10);
-      if (k in map) map[k] += Math.abs(Number(t.amount || 0));
-      else map[k] = Math.abs(Number(t.amount || 0));
-    }
-    return days.map(d => map[d.key] || 0);
-  }, [filtered]);
-
-  // percent change vs previous 7-day window
   const percentChange = useMemo(() => {
-    const now = new Date();
-    const curr = sparkData.reduce((a,v)=>a+v,0);
-    // previous 7 days
-    const prevMap: Record<string, number> = {};
+    const nowDate = new Date();
+    const now = nowDate.getTime();
+    const dayMs = 24 * 60 * 60 * 1000;
+    let currentStart: number | null = null;
+    let previousStart: number | null = null;
+
+    if (range === '7D') {
+      const windowMs = 7 * dayMs;
+      currentStart = now - windowMs;
+      previousStart = currentStart - windowMs;
+    } else if (range === '30D') {
+      const windowMs = 30 * dayMs;
+      currentStart = now - windowMs;
+      previousStart = currentStart - windowMs;
+    } else if (range === 'MONTH') {
+      currentStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1).getTime();
+      previousStart = new Date(nowDate.getFullYear(), nowDate.getMonth() - 1, 1).getTime();
+    } else {
+      return null;
+    }
+
+    if (currentStart === null || previousStart === null) return null;
+    if (previousStart < 0) previousStart = 0;
+    if (previousStart >= currentStart) return null;
+    const matchesFilters = (t: Tx) => {
+      if (filter !== 'all' && t.type !== filter) return false;
+      if (normalizedSearch.length > 0) {
+        const note = (t.note || '').toLowerCase();
+        const category = (t.category || '').toLowerCase();
+        if (!note.includes(normalizedSearch) && !category.includes(normalizedSearch)) return false;
+      }
+      return true;
+    };
+    const contribution = (t: Tx) => {
+      const amount = Number(t.amount || 0);
+      if (!Number.isFinite(amount)) return 0;
+      return t.type === 'income' ? amount : -amount;
+    };
+
+    let currentNet = 0;
+    let previousNet = 0;
     for (const t of transactions) {
-      const dd = new Date(t.date);
-      const daysAgo = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - new Date(dd.getFullYear(), dd.getMonth(), dd.getDate()).getTime())/(24*60*60*1000));
-      if (daysAgo >= 7 && daysAgo < 14) {
-        const k = new Date(t.date).toISOString().slice(0,10);
-        prevMap[k] = (prevMap[k] || 0) + Math.abs(Number(t.amount || 0));
+      if (!matchesFilters(t)) continue;
+      const ts = new Date(t.date).getTime();
+      if (Number.isNaN(ts)) continue;
+      if (ts >= currentStart && ts <= now) {
+        currentNet += contribution(t);
+      } else if (ts >= previousStart && ts < currentStart) {
+        previousNet += contribution(t);
       }
     }
-    const prev = Object.values(prevMap).reduce((a,b)=>a+b,0);
-    if (prev === 0) return null;
-    return ((curr - prev) / prev) * 100;
-  }, [sparkData, transactions]);
+
+    if (Math.abs(previousNet) < 1e-6) return null;
+    return ((currentNet - previousNet) / Math.abs(previousNet)) * 100;
+  }, [transactions, filter, normalizedSearch, range]);
+  const onPrimary = get('text.onPrimary') as string;
+  const textPrimary = get('text.primary') as string;
+  const success = get('semantic.success') as string;
+  const danger = get('semantic.danger') as string;
+  const backgroundHex = ((get('background.default') as string) || '').toLowerCase();
+  const isLightTheme = backgroundHex.includes('#f7') || backgroundHex.includes('#f8') || backgroundHex.includes('fff');
+  const heroForeground = isLightTheme ? onPrimary : textPrimary;
+  const heroIconToken = isLightTheme ? 'text.onPrimary' : 'text.primary';
+  const gradientColors = isLightTheme
+    ? ['#1a1f33', '#262b46']
+    : ['rgba(13,16,30,0.94)', 'rgba(33,27,58,0.92)'];
+
+  const heroMuted = withOpacity(heroForeground, 0.78);
+  const heroDivider = withOpacity(heroForeground, 0.18);
+  const heroTileBg = withOpacity(heroForeground, 0.12);
+  const heroControlBg = withOpacity(heroForeground, 0.08);
+  const heroControlActive = withOpacity(heroForeground, 0.24);
+  const heroControlBorder = withOpacity(heroForeground, 0.22);
+  const heroTextFaint = withOpacity(heroForeground, 0.65);
+  const successSoft = withOpacity(success, 0.3);
+  const dangerSoft = withOpacity(danger, 0.3);
+  const searchContainerBg = withOpacity(heroForeground, 0.1);
+  const typeLabel = filter === 'all' ? 'All activity' : filter === 'income' ? 'Income only' : 'Spending only';
+  const rangeLabel = RANGE_LABELS[range];
+  const totalLabel = totalMode === 'SPENT' ? 'Spending' : 'Net movement';
+  const listPaddingBottom = Math.max(insets.bottom, spacing.s4);
 
   const onDelete = async (tx: Tx) => {
     try { await remove(tx.id); } catch {}
   };
 
   return (
-    <Screen>
+    <Screen inTab style={{ paddingBottom: 0 }}>
       {/* AppHeader removed; hero card now contains close + summary */}
 
       <View style={{ flex: 1 }}>
         <FlatList
-          ref={listRef as any}
           data={sectionsRaw}
           keyExtractor={(s) => s.key}
           bounces={false}
+          contentContainerStyle={{ paddingBottom: listPaddingBottom }}
           ListHeaderComponent={
-          <View style={{ paddingHorizontal: spacing.s16, paddingBottom: spacing.s8, paddingTop: spacing.s8 }}>
-            {/* Hero card */}
-            <View style={{ borderRadius: radius.lg, overflow: 'hidden', backgroundColor: get('surface.level1') as string, ...elevation.level1 as any }}>
-            <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, paddingBottom: spacing.s12, backgroundColor: get('surface.level1') as string }}>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.s12 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: get('text.primary') as string, fontWeight: '800', fontSize: 18 }}>Transactions</Text>
-                  <Text style={{ color: get('text.muted') as string, marginTop: 2 }}>All accounts • {filtered.length} items</Text>
+            <View style={styles.headerContainer}>
+              <LinearGradient
+                colors={gradientColors}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.heroCard}
+              >
+                <View style={styles.heroHeader}>
+                  <View style={styles.heroHeaderText}>
+                    <Text style={[styles.heroTitle, { color: heroForeground }]}>Transaction history</Text>
+                    <Text style={[styles.heroSubtitle, { color: heroMuted }]}>
+                      All accounts • {filtered.length} items
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => setSearchOn((s) => !s)}
+                    style={({ pressed }) => [
+                      styles.heroIconButton,
+                      {
+                        borderColor: heroControlBorder,
+                        backgroundColor: searchOn ? heroControlActive : heroControlBg,
+                        opacity: pressed ? 0.85 : 1,
+                      },
+                    ]}
+                  >
+                    <Icon name="filter" size={16} colorToken={heroIconToken} />
+                    <Text style={{ color: heroForeground, fontWeight: '600', fontSize: 12 }}>
+                      {searchOn ? 'Close search' : 'Search'}
+                    </Text>
+                  </Pressable>
                 </View>
 
-                <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-                  <Pressable onPress={() => { /* export placeholder */ }} style={({ pressed }) => ({ width: 40, height: 40, borderRadius: 10, backgroundColor: get('surface.level2') as string, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.85 : 1 })}>
-                    <Icon name="archive" size={16} colorToken="icon.muted" />
+                <View style={styles.heroControlsRow}>
+                  <Pressable
+                    onPress={() => setTotalMode((prev) => (prev === 'SPENT' ? 'NET' : 'SPENT'))}
+                    style={({ pressed }) => [
+                      styles.controlPill,
+                      {
+                        borderColor: heroControlBorder,
+                        backgroundColor: heroControlActive,
+                        opacity: pressed ? 0.85 : 1,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.controlPillLabel, { color: heroTextFaint }]}>Totals</Text>
+                    <View style={styles.controlPillValueRow}>
+                      <Icon name="trending-up" size={16} colorToken={heroIconToken} />
+                      <Text style={[styles.controlPillValue, { color: heroForeground }]}>{totalLabel}</Text>
+                    </View>
+                    <Text style={[styles.controlHint, { color: heroTextFaint }]}>Tap to switch view</Text>
                   </Pressable>
-                  <Pressable onPress={() => nav.navigate('Add')} style={({ pressed }) => ({ width: 40, height: 40, borderRadius: 10, backgroundColor: get('accent.primary') as string, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.9 : 1 })}>
-                    <Icon name="plus" size={16} colorToken="text.onPrimary" />
-                  </Pressable>
-                  <Pressable onPress={() => nav.goBack()} style={({ pressed }) => ({ width: 40, height: 40, borderRadius: 10, backgroundColor: get('surface.level2') as string, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.85 : 1 })}>
-                    <Icon name="chevron-left" size={18} colorToken="icon.muted" />
-                  </Pressable>
-                </View>
-              </View>
 
-              {/* Useful stats row */}
-              <View style={{ marginTop: spacing.s12, flexDirection: 'column', gap: spacing.s12 }}>
-                <View style={{ flexDirection: 'row', gap: spacing.s12, alignItems: 'center' }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: get('text.muted') as string, fontSize: 12 }}>Net</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Text style={{ color: netTotal >= 0 ? (get('semantic.success') as string) : (get('semantic.danger') as string), fontWeight: '800', fontSize: 16 }}>{`${netTotal >= 0 ? '+' : '-'}$${Math.abs(netTotal).toFixed(2)}`}</Text>
-                    {typeof percentChange === 'number' ? (
-                      <View style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, backgroundColor: percentChange >= 0 ? (get('semantic.success') as string) : (get('semantic.danger') as string) }}>
-                        <Text style={{ color: get('text.onPrimary') as string, fontWeight: '700', fontSize: 12 }}>{`${percentChange >= 0 ? '+' : ''}${percentChange.toFixed(0)}%`}</Text>
+                  <View ref={typeButtonRef} collapsable={false} style={{ flexGrow: 1, minWidth: 140 }}>
+                    <Pressable
+                      onPress={openTypeMenu}
+                      style={({ pressed }) => [
+                        styles.controlPill,
+                        {
+                          borderColor: heroControlBorder,
+                          backgroundColor: filter === 'all' ? heroControlBg : heroControlActive,
+                          opacity: pressed ? 0.85 : 1,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.controlPillLabel, { color: heroTextFaint }]}>Type</Text>
+                      <View style={styles.controlPillValueRow}>
+                        <Icon name="filter" size={16} colorToken={heroIconToken} />
+                        <Text style={[styles.controlPillValue, { color: heroForeground }]}>{typeLabel}</Text>
                       </View>
-                    ) : null}
+                    </Pressable>
+                  </View>
+
+                  <View ref={rangeButtonRef} collapsable={false} style={{ flexGrow: 1, minWidth: 140 }}>
+                    <Pressable
+                      onPress={openRangeMenu}
+                      style={({ pressed }) => [
+                        styles.controlPill,
+                        {
+                          borderColor: heroControlBorder,
+                          backgroundColor: range === 'ALL' ? heroControlBg : heroControlActive,
+                          opacity: pressed ? 0.85 : 1,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.controlPillLabel, { color: heroTextFaint }]}>Range</Text>
+                      <View style={styles.controlPillValueRow}>
+                        <Icon name="history" size={16} colorToken={heroIconToken} />
+                        <Text style={[styles.controlPillValue, { color: heroForeground }]}>{rangeLabel}</Text>
+                      </View>
+                    </Pressable>
                   </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: get('text.muted') as string, fontSize: 12 }}>Income</Text>
-                  <Text style={{ color: get('semantic.success') as string, fontWeight: '800' }}>{`$${incomeTotal.toFixed(2)}`}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: get('text.muted') as string, fontSize: 12 }}>Expense</Text>
-                  <Text style={{ color: get('semantic.danger') as string, fontWeight: '800' }}>{`$${expenseTotal.toFixed(2)}`}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: get('text.muted') as string, fontSize: 12 }}>Avg</Text>
-                  <Text style={{ color: get('text.primary') as string, fontWeight: '800' }}>{`$${avgTxn.toFixed(2)}`}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: get('text.muted') as string, fontSize: 12 }}>Top</Text>
-                  <Text style={{ color: get('text.primary') as string, fontWeight: '800' }}>{topCategory}</Text>
-                </View>
-                </View>
 
-                {/* Sparkline */}
-                <View style={{ paddingHorizontal: spacing.s4 }}>
-                  <Sparkline data={sparkData} color={get('accent.primary') as string} height={36} />
-                </View>
-              </View>
-              </View>
-            </View>
-
-            {/* Total mode toggle */}
-            <View style={{ flexDirection: 'row', gap: spacing.s8, marginBottom: spacing.s8 }}>
-              {(['SPENT','NET'] as const).map(m => (
-                <Pressable key={m} onPress={() => setTotalMode(m)}>
-                  <View style={{ paddingHorizontal: spacing.s12, paddingVertical: spacing.s6, borderRadius: radius.pill, backgroundColor: totalMode===m ? (get('accent.soft') as string) : (get('surface.level2') as string) }}>
-                    <Text style={{ color: totalMode===m ? (get('accent.primary') as string) : (get('text.muted') as string), fontWeight: totalMode===m ? '700' : '500' }}>{m === 'SPENT' ? 'Spent Only' : 'Net'}</Text>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Filter chips */}
-            <View style={{ flexDirection: 'row', gap: spacing.s8, flexWrap: 'wrap', marginBottom: spacing.s8 }}>
-              {(['All','Income','Expense'] as const).map(lbl => {
-                const active = (filter === 'all' && lbl==='All') || (filter==='income' && lbl==='Income') || (filter==='expense' && lbl==='Expense');
-                return (
-                  <Pressable key={lbl} onPress={() => setFilter(lbl.toLowerCase() as any)}>
-                    <View style={{ paddingHorizontal: spacing.s12, paddingVertical: spacing.s6, borderRadius: radius.pill, backgroundColor: active ? (get('accent.soft') as string) : (get('surface.level2') as string) }}>
-                      <Text style={{ color: active ? (get('accent.primary') as string) : (get('text.muted') as string), fontWeight: active ? '700' : '500' }}>{lbl}</Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {/* Top categories (compact) */}
-            <View style={{ marginBottom: spacing.s8 }}>
-              <Text style={{ color: get('text.muted') as string, fontSize: 12, marginBottom: spacing.s6 }}>Top categories</Text>
-              <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-                {(() => {
-                  const cats: [string, number][] = Object.entries(filtered.reduce((acc:any, t)=> { acc[t.category||'General'] = (acc[t.category||'General']||0) + Math.abs(Number(t.amount||0)); return acc; }, {})).sort((a:any,b:any)=> b[1]-a[1]).slice(0,3);
-                  const total = cats.reduce((a,c)=>a+c[1],0) || 1;
-                  return cats.map(([name, amt]) => (
-                    <View key={name} style={{ flex: 1 }}>
-                      <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>{name}</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <View style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: get('surface.level2') as string, overflow: 'hidden' }}>
-                          <View style={{ width: `${Math.round((amt/total)*100)}%`, height: 8, backgroundColor: get('accent.primary') as string }} />
-                        </View>
-                        <Text style={{ color: get('text.muted') as string, fontSize: 12 }}>{`$${amt.toFixed(0)}`}</Text>
-                      </View>
-                    </View>
-                  ));
-                })()}
-              </View>
-            </View>
-
-            {/* Range chips */}
-            <View style={{ flexDirection: 'row', gap: spacing.s8, flexWrap: 'wrap', marginBottom: spacing.s8 }}>
-              {(['ALL','7D','30D','MONTH','CUSTOM'] as const).map(lbl => {
-                const active = (range === lbl);
-                return (
-                  <Pressable key={lbl} onPress={() => setRange(lbl)}>
-                    <View style={{ paddingHorizontal: spacing.s12, paddingVertical: spacing.s6, borderRadius: radius.pill, backgroundColor: active ? (get('accent.soft') as string) : (get('surface.level2') as string) }}>
-                      <Text style={{ color: active ? (get('accent.primary') as string) : (get('text.muted') as string), fontWeight: active ? '700' : '500' }}>{lbl === 'MONTH' ? 'This Month' : lbl}</Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {/* Search toggle + field */}
-            <View style={{ flexDirection: 'row', gap: spacing.s8, alignItems: 'center' }}>
-              <Pressable onPress={() => setSearchOn(s => !s)}>
-                <Text style={{ color: get('accent.primary') as string, fontWeight: '600' }}>{searchOn ? 'Hide search' : 'Search'}</Text>
-              </Pressable>
                 {searchOn ? (
-                  <View style={{ flex: 1 }}>
-                    <Input value={search} onChangeText={setSearch} placeholder="Search notes or categories" />
+                  <View style={[styles.searchContainer, { backgroundColor: searchContainerBg, borderColor: heroControlBorder }]}>
+                    <Input value={search} onChangeText={setSearch} placeholder="Search notes or categories" style={{ margin: 0 }} />
                   </View>
                 ) : null}
-              </View>
+
+                <View style={styles.heroStatsRow}>
+                  <View style={[styles.heroStatCard, { backgroundColor: heroTileBg, borderColor: heroControlBorder }]}>
+                    <Text style={[styles.heroStatLabel, { color: heroMuted }]}>Net movement</Text>
+                    {typeof percentChange === 'number' ? (
+                      <View
+                        style={[
+                          styles.heroBadge,
+                          styles.heroBadgeInline,
+                          { backgroundColor: percentChange >= 0 ? successSoft : dangerSoft }
+                        ]}
+                      >
+                        <Text style={[styles.heroBadgeText, { color: heroForeground }]}>
+                          {`${percentChange >= 0 ? '▲' : '▼'} ${Math.abs(percentChange).toFixed(1)}%`}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <Text style={[styles.heroStatValue, { color: heroForeground }]}>
+                      {`${netTotal >= 0 ? '+' : '-'}$${Math.abs(netTotal).toFixed(2)}`}
+                    </Text>
+                    <View style={[styles.heroDivider, { backgroundColor: heroDivider }]} />
+                    <Text style={[styles.heroStatFootnote, { color: heroMuted }]}>
+                      Average ticket {avgTxn ? `$${avgTxn.toFixed(2)}` : '—'}
+                    </Text>
+                  </View>
+
+                  <View style={[styles.heroStatCard, { backgroundColor: heroTileBg, borderColor: heroControlBorder }]}>
+                    <View style={styles.heroStatTopRow}>
+                      <Text style={[styles.heroStatLabel, { color: heroMuted }]}>Income vs spend</Text>
+                    </View>
+                    <View style={styles.heroSplitStat}>
+                      <Text style={[styles.heroSplitLabel, { color: heroMuted }]}>Income</Text>
+                      <Text style={[styles.heroSplitValue, { color: heroForeground }]}>
+                        ${incomeTotal.toFixed(2)}
+                      </Text>
+                    </View>
+                    <View style={[styles.heroDivider, { backgroundColor: heroDivider }]} />
+                    <View style={styles.heroSplitStat}>
+                      <Text style={[styles.heroSplitLabel, { color: heroMuted }]}>Spending</Text>
+                      <Text style={[styles.heroSplitValue, { color: heroForeground }]}>
+                        ${expenseTotal.toFixed(2)}
+                      </Text>
+                    </View>
+                    <View style={[styles.heroDivider, { backgroundColor: heroDivider }]} />
+                    <Text style={[styles.heroStatFootnote, { color: heroMuted }]}>
+                      {filtered.length} transactions
+                    </Text>
+                  </View>
+                </View>
+
+              </LinearGradient>
             </View>
           }
-          onViewableItemsChanged={({ viewableItems }) => {
-            const first = viewableItems.find(v => (v as any).item && (v as any).index === 0);
-            const sec = (first?.item as any);
-            if (sec?.key) {
-              const d = new Date(sec.key);
-              const label = d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
-              setCurrentMonth(label);
-            }
-          }}
-          viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
           renderItem={({ item }) => {
             const isCollapsed = !!collapsed[item.key];
             const displayTotal = totalMode === 'SPENT' ? item.totalSpent : item.totalNet;
@@ -401,37 +527,176 @@ export const Transactions: React.FC = () => {
         />
       </View>
 
-      {/* Month jump pill */}
-      {currentMonth ? (
-        <View style={{ position: 'absolute', top: spacing.s8 + 44, right: spacing.s16 }}>
-          <Pressable onPress={() => setMonthPickerOpen(s => !s)}>
-            <View style={{ backgroundColor: get('surface.level2') as string, paddingHorizontal: spacing.s12, paddingVertical: spacing.s6, borderRadius: radius.pill }}>
-              <Text style={{ color: get('text.primary') as string, fontWeight: '600' }}>{currentMonth}</Text>
-            </View>
-          </Pressable>
-        </View>
-      ) : null}
+      <PopoverMenu
+        visible={typeMenuVisible}
+        onClose={() => {
+          setTypeMenuVisible(false);
+        }}
+        anchor={typeAnchor}
+        items={TYPE_OPTIONS.map((opt) => ({
+          key: opt.value,
+          label: opt.value === filter ? `${opt.label} ✓` : opt.label,
+          onPress: () => setFilter(opt.value),
+        }))}
+      />
 
-      {/* Month picker overlay */}
-      {monthPickerOpen ? (
-        <View style={{ position: 'absolute', top: 90, right: spacing.s16, backgroundColor: get('surface.level2') as string, borderRadius: radius.lg, padding: spacing.s8 }}>
-          {Array.from(new Set(sectionsRaw.map(s => new Date(s.key).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })))).map((m) => (
-            <Pressable key={m} onPress={() => {
-              setMonthPickerOpen(false);
-              const idx = sectionsRaw.findIndex(s => new Date(s.key).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) === m);
-              if (idx >= 0) {
-                listRef.current?.scrollToIndex({ index: idx, viewOffset: 0, animated: true });
-              }
-            }}>
-              <View style={{ paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.md }}>
-                <Text style={{ color: get('text.primary') as string }}>{m}</Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
+      <PopoverMenu
+        visible={rangeMenuVisible}
+        onClose={() => {
+          setRangeMenuVisible(false);
+        }}
+        anchor={rangeAnchor}
+        items={RANGE_OPTIONS.map((opt) => ({
+          key: opt.value,
+          label: opt.value === range ? `${opt.label} ✓` : opt.label,
+          onPress: () => setRange(opt.value),
+        }))}
+      />
     </Screen>
   );
 };
+
+const styles = StyleSheet.create({
+  headerContainer: {
+    paddingHorizontal: spacing.s16,
+    paddingTop: spacing.s12,
+    paddingBottom: spacing.s16,
+    gap: spacing.s16,
+  },
+  heroCard: {
+    borderRadius: radius.xl,
+    padding: spacing.s16,
+    gap: spacing.s16,
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  heroHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s12,
+  },
+  heroHeaderText: {
+    flex: 1,
+    gap: spacing.s4,
+  },
+  heroIconButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s6,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.s12,
+    paddingVertical: spacing.s8,
+  },
+  heroControlsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.s10,
+  },
+  controlPill: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    paddingHorizontal: spacing.s12,
+    paddingVertical: spacing.s10,
+    gap: spacing.s6,
+    flexGrow: 1,
+    minWidth: 140,
+  },
+  controlPillLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  controlPillValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s6,
+  },
+  controlPillValue: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  controlHint: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  searchContainer: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    padding: spacing.s8,
+  },
+  heroStatsRow: {
+    flexDirection: 'row',
+    gap: spacing.s12,
+    flexWrap: 'wrap',
+  },
+  heroStatCard: {
+    flex: 1,
+    borderRadius: radius.lg,
+    padding: spacing.s12,
+    gap: spacing.s8,
+    borderWidth: 1,
+    minWidth: 0,
+  },
+  heroStatLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  heroStatTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  heroStatValue: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  heroBadge: {
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.s8,
+    paddingVertical: spacing.s4,
+  },
+  heroBadgeInline: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.s4,
+  },
+  heroBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  heroDivider: {
+    height: StyleSheet.hairlineWidth,
+    alignSelf: 'stretch',
+  },
+  heroStatFootnote: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  heroSplitStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.s4,
+  },
+  heroSplitLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  heroSplitValue: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+});
 
 export default Transactions;
