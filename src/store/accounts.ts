@@ -7,6 +7,9 @@ export type BankAccount = {
   institution?: string;
   mask?: string; // last 4
   balance: number; // in user's currency for now
+  kind?: 'checking' | 'savings' | 'cash' | 'credit' | 'investment';
+  includeInNetWorth?: boolean;
+  note?: string;
 };
 
 type AccountsState = {

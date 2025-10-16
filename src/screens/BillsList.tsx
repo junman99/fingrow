@@ -80,7 +80,6 @@ export default function BillsList() {
   const warningColor = get('semantic.warning') as string;
   const successColor = get('semantic.success') as string;
   const surface1 = get('surface.level1') as string;
-  const surface2 = get('surface.level2') as string;
   const borderSubtle = get('border.subtle') as string;
 
   const now = new Date();

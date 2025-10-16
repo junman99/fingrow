@@ -37,7 +37,8 @@
     "react-native-svg": "15.12.1",
     "react-native-worklets": "0.5.1",
     "simple-swizzle": "^0.2.2",
-    "zustand": "^4.5.7"
+    "zustand": "^4.5.7",
+    "expo-blur": "~15.0.7"
   },
   "devDependencies": {
     "@types/react": "~19.1.10",

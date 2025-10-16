@@ -314,7 +314,9 @@ const Profile: React.FC = () => {
   const userCurrency = (profile?.currency || 'USD').toUpperCase();
 
   const totalCash = useMemo(() => {
-    return (accounts || []).reduce((sum, account) => sum + (account.balance || 0), 0);
+    return (accounts || [])
+      .filter(account => account.includeInNetWorth !== false)
+      .reduce((sum, account) => sum + (account.balance || 0), 0);
   }, [accounts]);
 
   const upcomingTotal = useMemo(() => sumUpcomingAmount(recurring, 30), [recurring]);

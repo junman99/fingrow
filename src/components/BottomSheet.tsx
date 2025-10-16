@@ -12,14 +12,16 @@ type Props = {
   children: React.ReactNode;
   height?: number; // desired content height (approx)
   dimmed?: boolean; // if true, sheet stays visible but backdrop is hidden and gestures disabled
+  fullHeight?: boolean;
 };
 
-export default function BottomSheet({ visible, onClose, children, height, dimmed }: Props) {
+export default function BottomSheet({ visible, onClose, children, height, dimmed, fullHeight }: Props) {
   const { get } = useThemeTokens();
   const insets = useSafeAreaInsets();
   const screenH = Dimensions.get('window').height;
   const maxH = Math.max(0, screenH - insets.top - 8);
-  const SHEET_H = Math.min(height || Math.round(screenH * 0.6), maxH);
+  const desired = fullHeight ? maxH : (height || Math.round(screenH * 0.6));
+  const SHEET_H = Math.min(desired, maxH);
   const CLOSED_Y = SHEET_H + 24; // offscreen
   const MID_Y = SHEET_H * 0.48;
   const OPEN_Y = 0;

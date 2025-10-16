@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, Pressable, Image, Animated, Easing, InteractionManager } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius, elevation } from '../theme/tokens';
 import { ScreenScroll } from '../components/ScreenScroll';
@@ -88,6 +89,11 @@ export const Home: React.FC = () => {
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { get } = useThemeTokens();
+  const tabBarHeight = useBottomTabBarHeight();
+  const fabBottomOffset = useMemo(
+    () => Math.max(tabBarHeight + spacing.s12, insets.bottom + spacing.s16),
+    [insets.bottom, tabBarHeight],
+  );
 
   // stores
   const { hydrate: hydrateTx } = useTxStore();
@@ -295,12 +301,12 @@ export const Home: React.FC = () => {
         </View>
       </ScreenScroll>
 
-      {/* Floating Add button at bottom-left when scrolled */}
+      {/* Floating Add button sits above bottom tab bar */}
       <View
         style={{
           position: 'absolute',
           right: spacing.s16,
-          bottom: Math.max(insets.bottom, spacing.s16)
+          bottom: fabBottomOffset,
         }}
       >
         <AddFabButton
