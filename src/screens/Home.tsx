@@ -90,10 +90,11 @@ export const Home: React.FC = () => {
   const insets = useSafeAreaInsets();
   const { get } = useThemeTokens();
   const tabBarHeight = useBottomTabBarHeight();
-  const fabBottomOffset = useMemo(
-    () => Math.max(tabBarHeight + spacing.s12, insets.bottom + spacing.s16),
-    [insets.bottom, tabBarHeight],
-  );
+  const fabBottomOffset = useMemo(() => {
+    const baseGap = spacing.s12;
+    if (tabBarHeight > 0) return baseGap;
+    return insets.bottom + baseGap;
+  }, [insets.bottom, tabBarHeight]);
 
   // stores
   const { hydrate: hydrateTx } = useTxStore();
