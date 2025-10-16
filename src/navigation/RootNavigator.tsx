@@ -3,7 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { enableScreens } from 'react-native-screens';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home } from '../screens/Home';
 import { Transactions } from '../screens/Transactions';
@@ -36,12 +36,12 @@ function BottomTabs() {
 
   const tabBarStyle = React.useMemo(
     () => ({
-      paddingTop: 10,
-      paddingBottom: Math.max(insets.bottom, 12),
+      paddingTop: 7,
+      paddingBottom: Math.max(insets.bottom, 8),
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: tabBarBorderColor,
       backgroundColor: tabBarBackground,
-      height: 64 + insets.bottom,
+      height: 45 + insets.bottom,
       elevation: 8,
       shadowColor: '#000000',
       shadowOpacity: isDark ? 0.18 : 0.08,
@@ -62,11 +62,13 @@ function BottomTabs() {
         tabBarLabelStyle: styles.tabBarLabel,
         tabBarHideOnKeyboard: true,
         tabBarIcon: ({ focused }) => (
-          <Icon
-            name={route.name === 'Home' ? 'receipt' : route.name === 'Money' ? 'wallet' : route.name === 'Invest' ? 'trending-up' : 'settings'}
-            size={22}
-            colorToken={focused ? 'accent.primary' : 'icon.default'}
-          />
+          <View style={{ marginBottom: -2 }}>
+            <Icon
+              name={route.name === 'Home' ? 'receipt' : route.name === 'Money' ? 'wallet' : route.name === 'Invest' ? 'trending-up' : 'settings'}
+              size={22}
+              colorToken={focused ? 'accent.primary' : 'icon.default'}
+            />
+          </View>
         ),
       })}
     >

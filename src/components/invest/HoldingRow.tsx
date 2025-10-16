@@ -28,12 +28,17 @@ export default function HoldingRow({ sym, onPress, portfolioId, variant = 'card'
   const changePct = isCash ? 0 : (q?.changePct ?? 0);
   const positive = changePct >= 0;
 
-  const bg = get('surface.level1') as string;
+  const bgBase = get('surface.level1') as string;
   const text = get('text.primary') as string;
   const muted = get('text.muted') as string;
   const border = get('border.subtle') as string;
   const good = get('semantic.success') as string;
   const bad = get('semantic.danger') as string;
+  const accent = get('accent.primary') as string;
+
+  const tone = isCash ? accent : (positive ? good : bad);
+  const cardBg = variant === 'card' ? withAlpha(tone, isCash ? 0.14 : 0.1) : variant === 'list' ? 'transparent' : bgBase;
+  const cardBorder = variant === 'card' ? withAlpha(tone, 0.28) : variant === 'list' ? 'transparent' : border;
   
 
   return (
@@ -42,10 +47,10 @@ export default function HoldingRow({ sym, onPress, portfolioId, variant = 'card'
       accessibilityRole="button"
       accessibilityLabel={`Open ${sym}`}
       style={{
-        backgroundColor: variant==='card' ? bg : 'transparent',
+        backgroundColor: variant==='card' ? cardBg : variant==='list' ? 'transparent' : bgBase,
         borderRadius: variant==='card' ? radius.lg : 0,
         borderWidth: variant==='card' ? 1 : 0,
-        borderColor: variant==='card' ? border : 'transparent',
+        borderColor: variant==='card' ? cardBorder : 'transparent',
         padding: variant==='card' ? spacing.s16 : spacing.s12,
         marginBottom: variant==='card' ? spacing.s8 : 0,
       }}
@@ -53,7 +58,7 @@ export default function HoldingRow({ sym, onPress, portfolioId, variant = 'card'
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         {/* Left: symbol/name */}
         <View style={{ flex: 1, gap: spacing.s2 }}>
-          <Text style={{ color: text, fontWeight: '700' }}>{isCash ? 'Cash' : sym}</Text>
+          <Text style={{ color: text, fontWeight: '800' }}>{isCash ? 'Cash' : sym}</Text>
           {isCash ? (
             <Text style={{ color: muted, fontSize: 12 }}>{cur}</Text>
           ) : (
@@ -63,7 +68,7 @@ export default function HoldingRow({ sym, onPress, portfolioId, variant = 'card'
 
         {/* Right: value & % with sparkline */}
         <View style={{ alignItems: 'flex-end', gap: spacing.s4 }}>
-          <Text style={{ color: text, fontWeight: '700' }}>{formatCurrency(val, cur, { compact: true })}</Text>
+          <Text style={{ color: text, fontWeight: '800' }}>{formatCurrency(val, cur, { compact: true })}</Text>
           {isCash ? (
             (() => {
               // weight = cash / (sum holdings + cash)
@@ -89,4 +94,23 @@ export default function HoldingRow({ sym, onPress, portfolioId, variant = 'card'
       </View>
     </Pressable>
   );
+}
+
+function withAlpha(color: string, alpha: number): string {
+  if (!color) return color;
+  if (color.startsWith('#')) {
+    const raw = color.replace('#', '');
+    const hex = raw.length === 3 ? raw.split('').map(ch => ch + ch).join('') : raw.padEnd(6, '0');
+    const num = parseInt(hex.slice(0, 6), 16);
+    const r = (num >> 16) & 255;
+    const g = (num >> 8) & 255;
+    const b = num & 255;
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+  const match = color.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([0-9.]+))?\)/i);
+  if (match) {
+    const [, r, g, b] = match;
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+  return color;
 }

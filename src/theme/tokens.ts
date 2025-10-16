@@ -10,44 +10,44 @@ export const elevation = {
 } as const;
 
 export const lightTokens = {
-  background: { default: '#f7f8fc' },
-  surface: { level1: '#ffffff', level2: '#fafafe' },
-  text: { primary: '#1d2433', muted: '#667085', onSurface: '#1d2433', onPrimary: '#ffffff' },
-  border: { subtle: '#e5e7ef', strong: '#1d2433' },
-  accent: { primary: '#7c5cff', secondary: '#ff6dc0' },
-  semantic: { danger: palette.red500, success: palette.green500, warning: palette.yellow500 },
-  icon: { default: palette.gray700, onPrimary: palette.white, onSurface: palette.gray900, muted: palette.gray500 },
+  background: { default: '#FAF7F0' },
+  surface: { level1: '#FFFBF5', level2: '#F5F1E8' },
+  text: { primary: '#2D2424', muted: '#7A6F6F', onSurface: '#2D2424', onPrimary: '#FAF7F0' },
+  border: { subtle: '#E8DFD4', strong: '#2D2424' },
+  accent: { primary: '#5B9A8B', secondary: '#D4735E' },
+  semantic: { danger: '#C85C3D', success: '#88AB8E', warning: '#E8B86D' },
+  icon: { default: '#7A6F6F', onPrimary: '#FAF7F0', onSurface: '#2D2424', muted: '#A39B95' },
   component: {
     button: {
-      primary:   { bg: '#7c5cff', text: '#ffffff' },
-      secondary: { bg: '#ffffff', text: '#7c5cff', border: '#e5e7ef' },
-      ghost:     {                      text: palette.blue600 }
+      primary:   { bg: '#5B9A8B', text: '#FAF7F0' },
+      secondary: { bg: '#F5F1E8', text: '#2D2424', border: '#E8DFD4' },
+      ghost:     {                      text: '#5B9A8B' }
     },
-    card: { bg: '#ffffff', border: '#e5e7ef' },
-    sheet: { bg: '#ffffff' },
-    popover: { bg: 'rgba(255,255,255,0.94)' },
-    modal: { bg: 'rgba(255,255,255,0.96)' }
+    card: { bg: '#FFFBF5', border: '#E8DFD4' },
+    sheet: { bg: '#FFFBF5' },
+    popover: { bg: 'rgba(255,251,245,0.96)' },
+    modal: { bg: 'rgba(255,251,245,0.98)' }
   }
 } as const;
 
 export const darkTokens = {
-  background: { default: '#0a0b12' },
-  surface: { level1: 'rgba(255,255,255,0.06)', level2: 'rgba(255,255,255,0.10)' },
-  text: { primary: '#eef3ff', muted: '#a7b0c6', onSurface: '#eef3ff', onPrimary: '#0b0b0f' },
-  border: { subtle: 'rgba(255,255,255,0.14)', strong: '#0a0b12' },
-  accent: { primary: '#45e6d2', secondary: '#9c7bff' },
-  semantic: { danger: palette.red500, success: palette.green500, warning: palette.yellow500 },
-  icon: { default: palette.gray300, onPrimary: palette.white, onSurface: palette.gray50, muted: palette.gray500 },
+  background: { default: '#1A1614' },
+  surface: { level1: '#2A2624', level2: '#36312E' },
+  text: { primary: '#F5EFE7', muted: '#B8AFA7', onSurface: '#F5EFE7', onPrimary: '#1A1614' },
+  border: { subtle: '#3E3734', strong: '#F5EFE7' },
+  accent: { primary: '#7FE7CC', secondary: '#FF9B71' },
+  semantic: { danger: '#FF9B71', success: '#A4BE7B', warning: '#E8B86D' },
+  icon: { default: '#B8AFA7', onPrimary: '#1A1614', onSurface: '#F5EFE7', muted: '#8A7F77' },
   component: {
     button: {
-      primary:   { bg: '#45e6d2', text: '#0b0b0f' },
-      secondary: { bg: 'rgba(255,255,255,0.06)', text: '#eef3ff', border: 'rgba(255,255,255,0.14)' },
-      ghost:     {                      text: palette.blue500 }
+      primary:   { bg: '#7FE7CC', text: '#1A1614' },
+      secondary: { bg: '#2A2624', text: '#F5EFE7', border: '#3E3734' },
+      ghost:     {                      text: '#7FE7CC' }
     },
-    card: { bg: 'rgba(255,255,255,0.06)', border: 'rgba(255,255,255,0.14)' },
-    sheet: { bg: '#11131a' },
-    popover: { bg: 'rgba(9,11,16,0.90)' },
-    modal: { bg: 'rgba(9,11,16,0.92)' }
+    card: { bg: '#2A2624', border: '#3E3734' },
+    sheet: { bg: '#2A2624' },
+    popover: { bg: 'rgba(42,38,36,0.96)' },
+    modal: { bg: 'rgba(42,38,36,0.98)' }
   }
 } as const;
 

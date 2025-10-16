@@ -22,22 +22,22 @@ export default function WatchRow({ sym, onPress }: { sym: string; onPress?: () =
   const changePct = q?.changePct ?? 0;
   const positive = changePct >= 0;
 
-  const bg = get('surface.level1') as string;
   const text = get('text.primary') as string;
   const muted = get('text.muted') as string;
   const border = get('border.subtle') as string;
   const good = get('semantic.success') as string;
   const bad = get('semantic.danger') as string;
   const cur = (useInvestStore.getState().activePortfolio()?.baseCurrency || 'USD').toUpperCase();
+  const accent = positive ? good : bad;
 
   return (
     <Pressable accessibilityRole="button"
-      onPress={onPress}
+      onPress={handlePress}
       style={{
-        backgroundColor: bg,
+        backgroundColor: withAlpha(accent, 0.08),
         borderRadius: radius.lg,
         borderWidth: 1,
-        borderColor: border,
+        borderColor: withAlpha(accent, 0.3),
         padding: spacing.s16,
         marginBottom: spacing.s8,
       }}
@@ -45,7 +45,7 @@ export default function WatchRow({ sym, onPress }: { sym: string; onPress?: () =
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         {/* Left: symbol/name */}
         <View style={{ flex: 1, gap: spacing.s2 }}>
-          <Text style={{ color: text, fontWeight: '700' }}>{sym}</Text>
+          <Text style={{ color: text, fontWeight: '800' }}>{sym}</Text>
           <Text style={{ color: muted, fontSize: 12 }}>{formatCurrency(last, cur, { compact: false })}</Text>
         </View>
 
@@ -58,4 +58,23 @@ export default function WatchRow({ sym, onPress }: { sym: string; onPress?: () =
       </View>
     </Pressable>
   );
+}
+
+function withAlpha(color: string, alpha: number): string {
+  if (!color) return color;
+  if (color.startsWith('#')) {
+    const raw = color.replace('#', '');
+    const hex = raw.length === 3 ? raw.split('').map(ch => ch + ch).join('') : raw.padEnd(6, '0');
+    const num = parseInt(hex.slice(0, 6), 16);
+    const r = (num >> 16) & 255;
+    const g = (num >> 8) & 255;
+    const b = num & 255;
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+  const match = color.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([0-9.]+))?\)/i);
+  if (match) {
+    const [, r, g, b] = match;
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+  return color;
 }

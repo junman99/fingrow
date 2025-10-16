@@ -49,7 +49,8 @@ export type IconName =
   | 'more-horizontal'
   | 'trash'
   | 'archive'
-  | 'edit';
+  | 'edit'
+  | 'close';
 
 type Props = {
   name: IconName;
@@ -78,6 +79,7 @@ const featherMap: Record<Exclude<IconName, 'arrow-bold-left' | 'arrow-bold-right
   'trash': 'trash-2',
   'archive': 'archive',
   'edit': 'edit-3',
+  'close': 'x',
 };
 
 const Icon: React.FC<Props> = ({ name, size = 24, colorToken = 'icon.default' }) => {

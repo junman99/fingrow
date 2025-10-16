@@ -17,3 +17,23 @@ export function convertUSD(rates: FxRates | undefined, to: string, amountUSD: nu
   if (!rate) return amountUSD;
   return amountUSD * rate;
 }
+
+export function convertCurrency(rates: FxRates | undefined, amount: number, from: string, to: string): number {
+  if (!Number.isFinite(amount)) return 0;
+  const src = (from || 'USD').toUpperCase();
+  const dest = (to || 'USD').toUpperCase();
+  if (!rates || !rates.rates || src === dest) return amount;
+
+  let amountUSD = amount;
+  if (src !== 'USD') {
+    const rateFrom = rates.rates[src];
+    if (rateFrom && rateFrom !== 0) {
+      amountUSD = amount / rateFrom;
+    }
+  }
+
+  if (dest === 'USD') return amountUSD;
+  const rateTo = rates.rates[dest];
+  if (!rateTo || rateTo === 0) return amountUSD;
+  return amountUSD * rateTo;
+}
