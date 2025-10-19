@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { View, Text, TextInput, Pressable, Keyboard, ScrollView, Platform, Animated } from 'react-native';
+import { View, Text, TextInput, Pressable, Keyboard, ScrollView, Platform } from 'react-native';
 import BottomSheet from '../BottomSheet';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
@@ -25,22 +25,6 @@ export default function TransactionEditorSheet({ visible, onClose, symbol, portf
   const { profile } = useProfileStore();
   const insets = useSafeAreaInsets();
 
-  // Smooth keyboard-driven footer animation
-  const kb = React.useRef(new Animated.Value(0)).current;
-  React.useEffect(() => {
-    const onShow = (e: any) => {
-      const h = e?.endCoordinates?.height || 0;
-      const dur = e?.duration ?? 250;
-      Animated.timing(kb, { toValue: h, duration: dur, useNativeDriver: false }).start();
-    };
-    const onHide = (e: any) => {
-      const dur = e?.duration ?? 200;
-      Animated.timing(kb, { toValue: 0, duration: dur, useNativeDriver: false }).start();
-    };
-    const s1 = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', onShow);
-    const s2 = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', onHide);
-    return () => { s1.remove(); s2.remove(); };
-  }, [kb]);
 
   const [side, setSide] = React.useState<'buy'|'sell'>(initial?.side || 'buy');
   const [qtyInput, setQtyInput] = React.useState(initial?.qty != null ? String(initial.qty) : '');
@@ -93,96 +77,186 @@ export default function TransactionEditorSheet({ visible, onClose, symbol, portf
   };
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} height={420}>
+    <BottomSheet visible={visible} onClose={onClose} height={500}>
       <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ paddingBottom: spacing.s24 }}>
-        <View style={{ gap: spacing.s12 }}>
-          <Text style={{ color: text, fontWeight: '800', fontSize: 18, marginBottom: spacing.s4 }}>New transaction</Text>
+        <View style={{ gap: spacing.s16 }}>
+          {/* Header */}
+          <View>
+            <Text style={{ color: text, fontWeight: '800', fontSize: 24, letterSpacing: -0.5 }}>
+              {mode === 'edit' ? 'Edit' : 'New'} Transaction
+            </Text>
+            <Text style={{ color: muted, fontSize: 14, marginTop: spacing.s4 }}>{symbol}</Text>
+          </View>
 
+          {/* Buy/Sell Toggle */}
           <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-            <Pressable accessibilityRole="button" onPress={() => setSide('buy')} style={({ pressed }) => ({
-              paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill, borderWidth: 1,
-              backgroundColor: side === 'buy' ? (get('accent.primary') as string) : (pressed ? (get('surface.level2') as string) : (get('surface.level1') as string)),
-              borderColor: get('component.button.secondary.border') as string
-            })}>
-              <Text style={{ color: side === 'buy' ? onPrimary : text, fontWeight: '700' }}>Buy</Text>
+            <Pressable
+              onPress={() => setSide('buy')}
+              style={({ pressed }) => ({
+                flex: 1,
+                paddingVertical: spacing.s12,
+                borderRadius: radius.md,
+                alignItems: 'center',
+                backgroundColor: side === 'buy' ? (get('accent.primary') as string) : (get('surface.level1') as string),
+                opacity: pressed ? 0.8 : 1
+              })}
+            >
+              <Text style={{ color: side === 'buy' ? onPrimary : text, fontWeight: '700', fontSize: 15 }}>Buy</Text>
             </Pressable>
-            <Pressable onPress={() => setSide('sell')} style={({ pressed }) => ({
-              paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill, borderWidth: 1,
-              backgroundColor: side === 'sell' ? (get('semantic.danger') as string) : (pressed ? (get('surface.level2') as string) : (get('surface.level1') as string)),
-              borderColor: get('component.button.secondary.border') as string
-            })}>
-              <Text style={{ color: side === 'sell' ? onPrimary : text, fontWeight: '700' }}>Sell</Text>
+            <Pressable
+              onPress={() => setSide('sell')}
+              style={({ pressed }) => ({
+                flex: 1,
+                paddingVertical: spacing.s12,
+                borderRadius: radius.md,
+                alignItems: 'center',
+                backgroundColor: side === 'sell' ? (get('semantic.danger') as string) : (get('surface.level1') as string),
+                opacity: pressed ? 0.8 : 1
+              })}
+            >
+              <Text style={{ color: side === 'sell' ? onPrimary : text, fontWeight: '700', fontSize: 15 }}>Sell</Text>
             </Pressable>
           </View>
 
-          <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: muted, marginBottom: spacing.s4 }}>Units</Text>
-              <TextInput
-                keyboardType="decimal-pad"
-                placeholder="0"
-                placeholderTextColor={muted}
-                value={qtyInput}
-                onChangeText={setQtyInput}
-                style={{ color: text, backgroundColor: get('surface.level2') as string, borderColor: border, borderWidth: 1, borderRadius: radius.lg, paddingHorizontal: spacing.s12, height: 44 }}
-              />
+          {/* Inputs */}
+          <View style={{ gap: spacing.s12 }}>
+            <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: muted, marginBottom: spacing.s6, fontSize: 13, fontWeight: '600' }}>Shares</Text>
+                <TextInput
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  placeholderTextColor={muted}
+                  value={qtyInput}
+                  onChangeText={setQtyInput}
+                  style={{
+                    color: text,
+                    backgroundColor: get('surface.level1') as string,
+                    borderRadius: radius.md,
+                    paddingHorizontal: spacing.s12,
+                    height: 48,
+                    fontSize: 16,
+                    fontWeight: '600'
+                  }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: muted, marginBottom: spacing.s6, fontSize: 13, fontWeight: '600' }}>Price</Text>
+                <TextInput
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  placeholderTextColor={muted}
+                  value={priceInput}
+                  onChangeText={setPriceInput}
+                  style={{
+                    color: text,
+                    backgroundColor: get('surface.level1') as string,
+                    borderRadius: radius.md,
+                    paddingHorizontal: spacing.s12,
+                    height: 48,
+                    fontSize: 16,
+                    fontWeight: '600'
+                  }}
+                />
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: muted, marginBottom: spacing.s4 }}>Price</Text>
-              <TextInput
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={muted}
-                value={priceInput}
-                onChangeText={setPriceInput}
-                style={{ color: text, backgroundColor: get('surface.level2') as string, borderColor: border, borderWidth: 1, borderRadius: radius.lg, paddingHorizontal: spacing.s12, height: 44 }}
-              />
+
+            <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: muted, marginBottom: spacing.s6, fontSize: 13, fontWeight: '600' }}>Date</Text>
+                <Pressable
+                  onPress={() => setOpenDate(true)}
+                  style={{
+                    backgroundColor: get('surface.level1') as string,
+                    borderRadius: radius.md,
+                    paddingHorizontal: spacing.s12,
+                    height: 48,
+                    justifyContent: 'center'
+                  }}
+                >
+                  <Text style={{ color: text, fontWeight: '600' }}>{date.toLocaleDateString()}</Text>
+                </Pressable>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: muted, marginBottom: spacing.s6, fontSize: 13, fontWeight: '600' }}>Fees</Text>
+                <TextInput
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  placeholderTextColor={muted}
+                  value={feesInput}
+                  onChangeText={setFeesInput}
+                  style={{
+                    color: text,
+                    backgroundColor: get('surface.level1') as string,
+                    borderRadius: radius.md,
+                    paddingHorizontal: spacing.s12,
+                    height: 48,
+                    fontSize: 16,
+                    fontWeight: '600'
+                  }}
+                />
+              </View>
             </View>
           </View>
 
-          <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
+          {/* Affect Cash Toggle */}
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: get('surface.level1') as string,
+            padding: spacing.s16,
+            borderRadius: radius.md
+          }}>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: muted, marginBottom: spacing.s4 }}>Date</Text>
-              <Pressable onPress={() => setOpenDate(true)} style={{ borderColor: border, borderWidth: 1, borderRadius: radius.lg, paddingHorizontal: spacing.s12, height: 44, justifyContent: 'center', backgroundColor: get('surface.level2') as string }}>
-                <Text style={{ color: text }}>{date.toDateString()}</Text>
-              </Pressable>
+              <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>Adjust cash balance</Text>
+              <Text style={{ color: muted, fontSize: 12, marginTop: spacing.s2 }}>Update portfolio cash</Text>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: muted, marginBottom: spacing.s4 }}>Fees (optional)</Text>
-              <TextInput
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={muted}
-                value={feesInput}
-                onChangeText={setFeesInput}
-                style={{ color: text, backgroundColor: get('surface.level2') as string, borderColor: border, borderWidth: 1, borderRadius: radius.lg, paddingHorizontal: spacing.s12, height: 44 }}
-              />
-            </View>
-          </View>
-
-          <View style={{ height: spacing.s12 }} />
-          {/* Affect Cash toggle */}
-          <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between' }}>
-            <Text style={{ color: text, fontWeight:'700' }}>Affect cash</Text>
-            <Pressable accessibilityRole="switch" accessibilityState={{ checked: affectCash }} onPress={()=> setAffectCash(v => !v)}
-              style={({ pressed }) => ({ width: 56, height: 32, borderRadius: 999, backgroundColor: affectCash ? (get('accent.primary') as string) : (get('surface.level2') as string), alignItems: affectCash ? 'flex-end' : 'flex-start', justifyContent:'center', paddingHorizontal: 4, opacity: pressed ? 0.9 : 1, borderWidth: 1, borderColor: get('component.button.secondary.border') as string })}>
-              <View style={{ width: 24, height: 24, borderRadius: 999, backgroundColor: get('surface.level1') as string }} />
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityState={{ checked: affectCash }}
+              onPress={() => setAffectCash(v => !v)}
+              style={({ pressed }) => ({
+                width: 51,
+                height: 31,
+                borderRadius: 999,
+                backgroundColor: affectCash ? (get('accent.primary') as string) : (get('surface.level2') as string),
+                alignItems: affectCash ? 'flex-end' : 'flex-start',
+                justifyContent: 'center',
+                paddingHorizontal: 2,
+                opacity: pressed ? 0.9 : 1
+              })}
+            >
+              <View style={{ width: 27, height: 27, borderRadius: 999, backgroundColor: onPrimary }} />
             </Pressable>
           </View>
         </View>
       </ScrollView>
 
-      <Animated.View style={{
+      <View style={{
         paddingHorizontal: spacing.s16,
-        paddingTop: spacing.s8,
+        paddingTop: spacing.s12,
         paddingBottom: Math.max(insets.bottom, 16),
-        transform: [{ translateY: Animated.multiply(kb, -1) }],
-        backgroundColor: get('surface.level1') as string
+        backgroundColor: get('component.sheet.bg') as string,
+        borderTopWidth: 1,
+        borderTopColor: get('border.subtle') as string
       }}>
-        <Pressable onPress={onSave} style={{ backgroundColor: get('component.button.primary.bg') as string || (get('accent.primary') as string), height: 48, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ color: onPrimary, fontWeight: '700' }}>Save</Text>
+        <Pressable
+          onPress={onSave}
+          style={({ pressed }) => ({
+            backgroundColor: get('component.button.primary.bg') as string || (get('accent.primary') as string),
+            height: 50,
+            borderRadius: radius.md,
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: pressed ? 0.9 : 1
+          })}
+        >
+          <Text style={{ color: onPrimary, fontWeight: '700', fontSize: 16 }}>
+            {mode === 'edit' ? 'Update' : 'Save'} Transaction
+          </Text>
         </Pressable>
-      </Animated.View>
+      </View>
 
       <DateTimeSheet visible={openDate} date={date} onCancel={() => setOpenDate(false)} onConfirm={(d) => { setDate(d); setOpenDate(false); }} />
     </BottomSheet>

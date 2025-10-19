@@ -39,6 +39,7 @@ export type IconName =
   | 'home'
   | 'settings'
   | 'trending-up'
+  | 'trending-down'
   | 'menu'
   | 'check'
   | 'filter'
@@ -50,12 +51,45 @@ export type IconName =
   | 'trash'
   | 'archive'
   | 'edit'
-  | 'close';
+  | 'close'
+  | 'x'
+  | 'zap'
+  | 'trophy'
+  | 'crown'
+  | 'star'
+  | 'award'
+  | 'check-circle'
+  | 'tag'
+  | 'dollar-sign'
+  | 'shield'
+  | 'flag'
+  | 'briefcase'
+  | 'book'
+  | 'calendar'
+  | 'lock'
+  | 'gift'
+  | 'rocket'
+  | 'hexagon'
+  | 'sun'
+  | 'activity'
+  | 'bar-chart-2'
+  | 'heart'
+  | 'coffee'
+  | 'compass'
+  | 'layers'
+  | 'eye'
+  | 'eye-off'
+  | 'piggy-bank'
+  | 'shield-check'
+  | 'sparkles'
+  | 'gem'
+  | 'sunrise';
 
 type Props = {
   name: IconName;
   size?: number;
   colorToken?: string;
+  color?: string;
 };
 
 const featherMap: Record<Exclude<IconName, 'arrow-bold-left' | 'arrow-bold-right' | 'plus-rounded'>, FeatherIconName> = {
@@ -68,6 +102,7 @@ const featherMap: Record<Exclude<IconName, 'arrow-bold-left' | 'arrow-bold-right
   'home': 'home',
   'settings': 'settings',
   'trending-up': 'trending-up',
+  'trending-down': 'trending-down',
   'menu': 'menu',
   'check': 'check',
   'filter': 'filter',
@@ -80,11 +115,43 @@ const featherMap: Record<Exclude<IconName, 'arrow-bold-left' | 'arrow-bold-right
   'archive': 'archive',
   'edit': 'edit-3',
   'close': 'x',
+  'x': 'x',
+  'zap': 'zap',
+  'trophy': 'award',
+  'crown': 'award',
+  'star': 'star',
+  'award': 'award',
+  'check-circle': 'check-circle',
+  'tag': 'tag',
+  'dollar-sign': 'dollar-sign',
+  'shield': 'shield',
+  'flag': 'flag',
+  'briefcase': 'briefcase',
+  'book': 'book',
+  'calendar': 'calendar',
+  'lock': 'lock',
+  'gift': 'gift',
+  'rocket': 'send',
+  'hexagon': 'hexagon',
+  'sun': 'sun',
+  'activity': 'activity',
+  'bar-chart-2': 'bar-chart-2',
+  'heart': 'heart',
+  'coffee': 'coffee',
+  'compass': 'compass',
+  'layers': 'layers',
+  'eye': 'eye',
+  'eye-off': 'eye-off',
+  'piggy-bank': 'save',
+  'shield-check': 'shield',
+  'sparkles': 'star',
+  'gem': 'hexagon',
+  'sunrise': 'sunrise',
 };
 
-const Icon: React.FC<Props> = ({ name, size = 24, colorToken = 'icon.default' }) => {
+const Icon: React.FC<Props> = ({ name, size = 24, colorToken = 'icon.default', color: colorProp }) => {
   const { get } = useThemeTokens();
-  const color = get(colorToken) as string;
+  const color = colorProp || (get(colorToken) as string);
 
   if (name === 'arrow-bold-left') {
     return <ArrowBoldLeft size={size} color={color} />;

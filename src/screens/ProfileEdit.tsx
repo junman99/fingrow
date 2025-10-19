@@ -1,20 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, Alert, Switch } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Pressable, Alert, Switch, Image } from 'react-native';
 import { ScreenScroll } from '../components/ScreenScroll';
 import Input from '../components/Input';
 import Button from '../components/Button';
-import { Card } from '../components/Card';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens, useTheme } from '../theme/ThemeProvider';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { useProfileStore, type ThemeMode } from '../store/profile';
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Feather } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { useNavigation } from '@react-navigation/native';
-
-type FeatherName = React.ComponentProps<typeof Feather>['name'];
 
 const ProfileEdit: React.FC = () => {
   const { get } = useThemeTokens();
@@ -97,207 +92,191 @@ const ProfileEdit: React.FC = () => {
     Alert.alert('Changes reset', 'We restored your last saved profile details.');
   };
 
-  const heroAccentPrimary = get('accent.primary') as string;
-  const heroAccentSecondary = get('accent.secondary') as string;
-  const heroText = get('text.onPrimary') as string;
+  const accentPrimary = get('accent.primary') as string;
+  const surface1 = get('surface.level1') as string;
+  const surface2 = get('surface.level2') as string;
+  const textOnPrimary = get('text.onPrimary') as string;
+  const textPrimary = get('text.primary') as string;
+  const textMuted = get('text.muted') as string;
+  const borderSubtle = get('border.subtle') as string;
 
-  const createdLabel = useMemo(() => {
-    try {
-      return new Date(profile.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
-    } catch {
-      return '—';
-    }
-  }, [profile.createdAt]);
+  const avatarInitials = (() => {
+    const n = name?.trim() || profile?.name?.trim();
+    if (!n) return '?';
+    const parts = n.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? '?';
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  })();
 
-  const monthlyBudgetNumber = monthlyBudget ? Number(monthlyBudget) : undefined;
-  const monthlySavingsNumber = monthlySavingsGoal ? Number(monthlySavingsGoal) : undefined;
-
-  const heroChips = useMemo(() => ([
-    { label: 'Member since', value: createdLabel },
-    { label: 'Currency', value: currency || 'Add currency' },
-    { label: 'Monthly budget', value: monthlyBudgetNumber ? `${currency || ''} ${monthlyBudgetNumber.toLocaleString()}`.trim() : 'Add budget target' },
-  ]), [createdLabel, currency, monthlyBudgetNumber]);
-
-  const themeOptions: { mode: ThemeMode; label: string; description: string; icon: FeatherName }[] = [
-    { mode: 'system', label: 'System', description: 'Keep in sync with your device', icon: 'smartphone' },
-    { mode: 'light', label: 'Light', description: 'Bright and focused for daytime', icon: 'sun' },
-    { mode: 'dark', label: 'Dark', description: 'Comfortable for low-light moments', icon: 'moon' },
+  const themeOptions: { mode: ThemeMode; label: string; icon: 'smartphone' | 'sun' | 'moon' }[] = [
+    { mode: 'system', label: 'System', icon: 'smartphone' },
+    { mode: 'light', label: 'Light', icon: 'sun' },
+    { mode: 'dark', label: 'Dark', icon: 'moon' },
   ];
 
   return (
-    <ScreenScroll contentStyle={{ paddingHorizontal: spacing.s16, paddingBottom: spacing.s24 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingTop: spacing.s12 }}>
-        <View style={{ flex: 1, paddingRight: spacing.s12 }}>
-          <Text style={{ fontSize: 28, fontWeight: '800', color: get('text.primary') as string }}>Edit profile</Text>
-          <Text style={{ color: get('text.muted') as string, marginTop: spacing.s4 }}>Refresh your details to keep insights tailored.</Text>
-        </View>
+    <ScreenScroll contentStyle={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s32 }}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s24 }}>
+        <Text style={{ fontSize: 32, fontWeight: '800', color: textPrimary, letterSpacing: -0.5 }}>
+          Edit Profile
+        </Text>
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close editor"
           onPress={() => navigation.goBack()}
           hitSlop={12}
-          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, padding: spacing.s6 })}
+          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
         >
-          <Feather name="x" size={22} color={get('text.muted') as string} />
+          <Icon name="x" size={24} color={textMuted} />
         </Pressable>
       </View>
 
-      <LinearGradient
-        colors={[heroAccentPrimary, heroAccentSecondary]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{ borderRadius: radius.xl, padding: spacing.s16, marginTop: spacing.s16 }}
+      {/* Avatar Section */}
+      <View
+        style={{
+          backgroundColor: surface1,
+          borderRadius: radius.xl,
+          padding: spacing.s20,
+          marginBottom: spacing.s16,
+          alignItems: 'center',
+        }}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s16 }}>
-          <Pressable accessibilityRole="button" onPress={askPick}>
-            <View style={{ width: 108, height: 108, borderRadius: 54, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center' }}>
-              {profile.avatarUri
-                ? <Image source={{ uri: profile.avatarUri }} style={{ width: 108, height: 108 }} contentFit="cover" cachePolicy="memory-disk" />
-                : <Text style={{ color: heroText, fontWeight: '700' }}>Add photo</Text>}
-              <View style={{ position: 'absolute', bottom: 0, width: '100%', backgroundColor: 'rgba(0,0,0,0.35)', paddingVertical: 6, alignItems: 'center' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
-                  <Feather name="camera" size={16} color={heroText} />
-                  <Text style={{ color: heroText, fontSize: 12, fontWeight: '600' }}>Update</Text>
-                </View>
-              </View>
+        <Pressable onPress={askPick}>
+          <View
+            style={{
+              width: 96,
+              height: 96,
+              borderRadius: 48,
+              overflow: 'hidden',
+              backgroundColor: accentPrimary,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: spacing.s12,
+            }}
+          >
+            {profile?.avatarUri ? (
+              <Image source={{ uri: profile.avatarUri }} style={{ width: 96, height: 96 }} />
+            ) : (
+              <Text style={{ color: textOnPrimary, fontWeight: '800', fontSize: 38 }}>
+                {avatarInitials}
+              </Text>
+            )}
+            <View
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                right: 0,
+                width: 32,
+                height: 32,
+                borderRadius: 16,
+                backgroundColor: accentPrimary,
+                borderWidth: 3,
+                borderColor: surface1,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Icon name="camera" size={16} color={textOnPrimary} />
             </View>
-          </Pressable>
-          <View style={{ flex: 1, gap: spacing.s6 }}>
-            <Text style={{ color: heroText, fontSize: 22, fontWeight: '800' }}>{name || 'Add your name'}</Text>
-            {handle ? <Text style={{ color: heroText, opacity: 0.85 }}>{handle.startsWith('@') ? handle : `@${handle}`}</Text> : null}
-            <Text style={{ color: heroText, opacity: 0.85 }}>{email || 'Add your email'}</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s6, marginTop: spacing.s6 }}>
-              {heroChips.map((chip) => (
-                <View key={chip.label} style={{ backgroundColor: 'rgba(255,255,255,0.18)', paddingVertical: spacing.s4, paddingHorizontal: spacing.s8, borderRadius: radius.pill }}>
-                  <Text style={{ color: heroText, fontSize: 12, fontWeight: '600' }}>{chip.label}: {chip.value}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        </View>
-        <Pressable onPress={askPick} style={{ marginTop: spacing.s12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
-            <Feather name="upload-cloud" size={18} color={heroText} />
-            <Text style={{ color: heroText, fontWeight: '700' }}>Upload new photo</Text>
           </View>
         </Pressable>
-        {profile.avatarUri ? (
-          <Pressable onPress={onRemoveAvatar} style={{ marginTop: spacing.s8 }}>
-            <Text style={{ color: heroText, opacity: 0.8, textDecorationLine: 'underline' }}>Remove current photo</Text>
+        <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 14, marginBottom: spacing.s8 }}>
+          Tap to change photo
+        </Text>
+        {profile.avatarUri && (
+          <Pressable onPress={onRemoveAvatar}>
+            <Text style={{ color: textMuted, fontSize: 13, textDecorationLine: 'underline' }}>
+              Remove photo
+            </Text>
           </Pressable>
-        ) : null}
-      </LinearGradient>
+        )}
+      </View>
 
-      <Card style={{ marginTop: spacing.s16 }}>
-        <View style={{ gap: spacing.s12 }}>
-          <View style={{ gap: spacing.s4 }}>
-            <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 18 }}>Profile essentials</Text>
-            <Text style={{ color: get('text.muted') as string }}>This is how FinGrow will greet collaborators and tailor tips for you.</Text>
-          </View>
+      {/* Basic Info */}
+      <View style={{ marginBottom: spacing.s16 }}>
+        <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 18, marginBottom: spacing.s12 }}>
+          Basic Info
+        </Text>
+        <View style={{ backgroundColor: surface1, borderRadius: radius.lg, padding: spacing.s16, gap: spacing.s12 }}>
           <Input label="Full name" value={name} onChangeText={setName} placeholder="Your name" />
-          <Input label="Handle (optional)" value={handle} onChangeText={setHandle} placeholder="@you" />
           <Input label="Email" value={email} onChangeText={setEmail} placeholder="you@example.com" keyboardType="email-address" />
         </View>
-      </Card>
+      </View>
 
-      <Card style={{ marginTop: spacing.s16 }}>
-        <View style={{ gap: spacing.s12 }}>
-          <View style={{ gap: spacing.s4 }}>
-            <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 18 }}>Money rhythm</Text>
-            <Text style={{ color: get('text.muted') as string }}>Help us pace your budgets and savings nudges around the moments that matter.</Text>
-          </View>
+      {/* Financial Settings */}
+      <View style={{ marginBottom: spacing.s16 }}>
+        <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 18, marginBottom: spacing.s12 }}>
+          Financial Settings
+        </Text>
+        <View style={{ backgroundColor: surface1, borderRadius: radius.lg, padding: spacing.s16, gap: spacing.s12 }}>
           <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
-            <Input label="Currency" value={currency} onChangeText={setCurrency} placeholder="SGD" style={{ flex: 1 }} />
-            <Input label="Budget cycle day" value={budgetCycleDay} onChangeText={setBudgetCycleDay} keyboardType="number-pad" placeholder="1-31" style={{ flex: 1 }} />
+            <Input label="Currency" value={currency} onChangeText={setCurrency} placeholder="USD" style={{ flex: 1 }} />
+            <Input label="Budget day" value={budgetCycleDay} onChangeText={setBudgetCycleDay} keyboardType="number-pad" placeholder="1" style={{ flex: 1 }} />
           </View>
-          <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
-            <Input label="Monthly budget" value={monthlyBudget} onChangeText={setMonthlyBudget} keyboardType="decimal-pad" placeholder="e.g. 2000" style={{ flex: 1 }} />
-            <Input label="Monthly savings goal" value={monthlySavingsGoal} onChangeText={setMonthlySavingsGoal} keyboardType="decimal-pad" placeholder="e.g. 500" style={{ flex: 1 }} />
-          </View>
-          {monthlySavingsNumber && monthlyBudgetNumber ? (
-            <View style={{ backgroundColor: get('surface.level2') as string, borderRadius: radius.md, padding: spacing.s12 }}>
-              <Text style={{ color: get('text.primary') as string, fontWeight: '600' }}>You&apos;re aiming to save {(monthlySavingsNumber / monthlyBudgetNumber * 100).toFixed(0)}% of your spending plan.</Text>
-            </View>
-          ) : null}
+          <Input label="Monthly budget" value={monthlyBudget} onChangeText={setMonthlyBudget} keyboardType="decimal-pad" placeholder="2000" />
+          <Input label="Savings goal" value={monthlySavingsGoal} onChangeText={setMonthlySavingsGoal} keyboardType="decimal-pad" placeholder="500" />
         </View>
-      </Card>
+      </View>
 
-      <Card style={{ marginTop: spacing.s16 }}>
-        <View style={{ gap: spacing.s12 }}>
-          <View style={{ gap: spacing.s4 }}>
-            <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 18 }}>App experience</Text>
-            <Text style={{ color: get('text.muted') as string }}>Tune the theme, language and privacy so FinGrow feels like home.</Text>
+      {/* Theme */}
+      <View style={{ marginBottom: spacing.s16 }}>
+        <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 18, marginBottom: spacing.s12 }}>
+          Appearance
+        </Text>
+        <View style={{ backgroundColor: surface1, borderRadius: radius.lg, padding: spacing.s16 }}>
+          <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
+            {themeOptions.map((option) => {
+              const active = option.mode === themeMode;
+              return (
+                <Pressable
+                  key={option.mode}
+                  onPress={() => setThemeMode(option.mode)}
+                  style={({ pressed }) => ({
+                    flex: 1,
+                    alignItems: 'center',
+                    paddingVertical: spacing.s12,
+                    paddingHorizontal: spacing.s8,
+                    borderRadius: radius.md,
+                    backgroundColor: active ? surface2 : 'transparent',
+                    opacity: pressed ? 0.7 : 1,
+                  })}
+                >
+                  <Icon name={option.icon} size={22} color={active ? accentPrimary : textMuted} />
+                  <Text style={{ color: active ? accentPrimary : textMuted, fontWeight: active ? '700' : '600', fontSize: 12, marginTop: spacing.s4 }}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
-          <View style={{ gap: spacing.s8 }}>
-            <Text style={{ color: get('text.primary') as string, fontWeight: '600' }}>Theme</Text>
-            <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-              {themeOptions.map((option) => {
-                const active = option.mode === themeMode;
-                return (
-                  <Pressable
-                    key={option.mode}
-                    onPress={() => setThemeMode(option.mode)}
-                    style={({ pressed }) => [
-                      {
-                        flex: 1,
-                        borderRadius: radius.lg,
-                        paddingVertical: spacing.s12,
-                        paddingHorizontal: spacing.s12,
-                        borderWidth: 1,
-                        borderColor: active ? get('accent.primary') as string : get('border.subtle') as string,
-                        backgroundColor: active ? (get('surface.level2') as string) : get('surface.level1') as string,
-                        opacity: pressed ? 0.9 : 1,
-                      }
-                    ]}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
-                      <Feather name={option.icon} size={18} color={active ? (get('accent.primary') as string) : (get('text.muted') as string)} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ color: active ? get('accent.primary') as string : get('text.primary') as string, fontWeight: '700' }}>{option.label}</Text>
-                        <Text style={{ color: get('text.muted') as string, fontSize: 12 }}>{option.description}</Text>
-                      </View>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
+        </View>
+      </View>
+
+      {/* Advanced */}
+      <View style={{ marginBottom: spacing.s24 }}>
+        <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 18, marginBottom: spacing.s12 }}>
+          Advanced
+        </Text>
+        <View style={{ backgroundColor: surface1, borderRadius: radius.lg, padding: spacing.s16, gap: spacing.s16 }}>
           <Input label="Language" value={language} onChangeText={setLanguage} placeholder="en" />
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.s8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ flex: 1, paddingRight: spacing.s12 }}>
-              <Text style={{ color: get('text.primary') as string, fontWeight: '600' }}>Analytics & insights</Text>
-              <Text style={{ color: get('text.muted') as string, fontSize: 12 }}>Share anonymous usage data to improve predictions and budgeting nudges.</Text>
+              <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 14 }}>Analytics</Text>
+              <Text style={{ color: textMuted, fontSize: 12, marginTop: spacing.s2 }}>Help improve the app</Text>
             </View>
             <Switch
               value={analytics}
               onValueChange={setAnalytics}
-              trackColor={{ false: get('surface.level2') as string, true: get('accent.primary') as string }}
-              thumbColor={analytics ? get('text.onPrimary') as string : (get('surface.level1') as string)}
+              trackColor={{ false: surface2, true: accentPrimary }}
+              thumbColor={textOnPrimary}
             />
           </View>
         </View>
-      </Card>
+      </View>
 
-      <Card style={{ marginTop: spacing.s16 }}>
-        <View style={{ gap: spacing.s12 }}>
-          <View style={{ gap: spacing.s4 }}>
-            <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 18 }}>Quick actions</Text>
-            <Text style={{ color: get('text.muted') as string }}>Hop to your profile or clear out any edits if you change your mind.</Text>
-          </View>
-          <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
-            <Button variant="secondary" size="sm" onPress={() => navigation.navigate('ProfileModal')} style={{ flex: 1 }}>
-              View profile
-            </Button>
-            <Button variant="ghost" size="sm" onPress={onReset} style={{ flex: 1 }}>
-              Reset changes
-            </Button>
-          </View>
-        </View>
-      </Card>
-
-      <View style={{ marginTop: spacing.s24, gap: spacing.s12 }}>
+      {/* Action Buttons */}
+      <View style={{ gap: spacing.s12 }}>
         <Button onPress={onSave}>
-          Save changes
+          Save Changes
         </Button>
         <Button variant="ghost" onPress={() => navigation.goBack()}>
           Cancel

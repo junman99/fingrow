@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, View, Text, Pressable } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import Button from '../../components/Button';
@@ -22,24 +21,15 @@ export default function GroupsRoot() {
   const meName = (useProfileStore.getState().profile.name || '').trim().toLowerCase();
 
   const accentPrimary = get('accent.primary') as string;
+  const accentSecondary = get('accent.secondary') as string;
   const textOnPrimary = get('text.onPrimary') as string;
   const textPrimary = get('text.primary') as string;
   const textMuted = get('text.muted') as string;
+  const textOnSurface = get('text.onSurface') as string;
   const surface1 = get('surface.level1') as string;
   const surface2 = get('surface.level2') as string;
   const borderSubtle = get('border.subtle') as string;
-  const heroGradient = isDark
-    ? (['#0d101e', '#19152c'] as const)
-    : (['#5c55ff', '#8a6bff'] as const);
-  const heroMetricBg = isDark ? withAlpha('#12162a', 0.88) : withAlpha('#ffffff', 0.14);
-  const heroMetricIconBg = isDark ? withAlpha('#1f1a36', 0.85) : withAlpha('#ffffff', 0.22);
-  const heroButtonBg = isDark ? withAlpha('#ffffff', 0.08) : withAlpha('#ffffff', 0.16);
-  const heroButtonBorder = isDark ? withAlpha('#ffffff', 0.12) : withAlpha('#ffffff', 0.24);
-  const heroChipBg = isDark ? withAlpha('#ffffff', 0.08) : withAlpha(heroGradient[0], 0.18);
-  const heroText = isDark ? '#eef3ff' : textOnPrimary;
-  const heroTextSoft = withAlpha(heroText, 0.82);
-  const heroTextMuted = withAlpha(heroText, 0.7);
-  const heroIconColorToken = isDark ? 'text.primary' : 'text.onPrimary';
+  const backgroundDefault = get('background.default') as string;
 
   const data = useMemo(() => {
     const arr = [...groups].map(g => {
@@ -90,28 +80,32 @@ export default function GroupsRoot() {
         minWidth: 150,
         padding: spacing.s12,
         borderRadius: radius.lg,
-        backgroundColor: heroMetricBg
+        backgroundColor: surface2,
+        borderWidth: 1,
+        borderColor: borderSubtle
       }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.s6 }}>
         <View style={{
           width: 32, height: 32, borderRadius: 16,
-          backgroundColor: heroMetricIconBg,
+          backgroundColor: withAlpha(accentPrimary, isDark ? 0.20 : 0.12),
           alignItems: 'center', justifyContent: 'center', marginRight: spacing.s8
         }}>
-          <Icon name={icon} size={18} colorToken={heroIconColorToken} />
+          <Icon name={icon} size={18} colorToken="accent.primary" />
         </View>
-        <Text style={{ color: heroTextSoft, fontWeight: '600' }}>{label}</Text>
+        <Text style={{ color: textMuted, fontWeight: '600' }}>{label}</Text>
       </View>
-      <Text style={{ color: heroText, fontSize: 20, fontWeight: '800' }}>{value}</Text>
-      {caption ? <Text style={{ color: heroTextMuted, marginTop: 4, fontSize: 12 }}>{caption}</Text> : null}
+      <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800' }}>{value}</Text>
+      {caption ? <Text style={{ color: textMuted, marginTop: 4, fontSize: 12 }}>{caption}</Text> : null}
     </View>
   );
 
   const renderAvatarStack = (names: string[]) => {
-    const cols = isDark
-      ? [withAlpha('#171c2f', 0.92), withAlpha('#221b3a', 0.88), withAlpha('#2f244d', 0.78)]
-      : [withAlpha(heroGradient[0], 0.24), withAlpha(heroGradient[1], 0.2), withAlpha('#ffffff', 0.32)];
+    const cols = [
+      withAlpha(accentPrimary, isDark ? 0.30 : 0.20),
+      withAlpha(accentSecondary, isDark ? 0.30 : 0.20),
+      withAlpha(accentPrimary, isDark ? 0.20 : 0.15)
+    ];
     return (
       <View style={{ width: 60, height: 48, alignItems: 'center', justifyContent: 'center' }}>
         {names.slice(0, 3).map((n, i) => {
@@ -123,7 +117,7 @@ export default function GroupsRoot() {
               width: 32, height: 32, borderRadius: 16,
               backgroundColor: cols[i],
               alignItems: 'center', justifyContent: 'center',
-              borderWidth: 1, borderColor: isDark ? withAlpha('#ffffff', 0.16) : withAlpha('#ffffff', 0.6),
+              borderWidth: 1.5, borderColor: borderSubtle,
             }}>
               <Text style={{ color: textPrimary, fontSize: 12, fontWeight: '700' }}>{initials}</Text>
             </View>
@@ -154,9 +148,9 @@ export default function GroupsRoot() {
         : textMuted;
     const lastActive = item.last ? timeAgo(item.last) : 'Just created';
     const billCount = item.bills?.length ?? 0;
-    const chipBg = settled ? surface2 : heroChipBg;
-    const chipColor = settled ? textMuted : (isDark ? heroText : accentPrimary);
-    const borderColor = settled ? borderSubtle : withAlpha(heroGradient[0], 0.35);
+    const chipBg = settled ? surface2 : withAlpha(accentSecondary, isDark ? 0.20 : 0.12);
+    const chipColor = settled ? textMuted : accentSecondary;
+    const borderColor = settled ? borderSubtle : withAlpha(accentSecondary, 0.35);
 
     return (
       <Pressable
@@ -186,7 +180,7 @@ export default function GroupsRoot() {
             left: 0,
             bottom: 0,
             width: 6,
-            backgroundColor: heroGradient[1]
+            backgroundColor: accentSecondary
           }} />
         )}
         {renderAvatarStack(activeMembers.map((m: any) => m.name))}
@@ -212,7 +206,7 @@ export default function GroupsRoot() {
             marginTop: spacing.s12,
             padding: spacing.s12,
             borderRadius: radius.lg,
-            backgroundColor: settled ? surface2 : heroChipBg
+            backgroundColor: settled ? surface2 : withAlpha(accentSecondary, isDark ? 0.15 : 0.10)
           }}>
             <Text style={{ color: myShareColor, fontWeight: '600' }}>{myShareLabel}</Text>
           </View>
@@ -270,36 +264,23 @@ export default function GroupsRoot() {
         ListHeaderComponentStyle={{ marginBottom: spacing.s16 }}
         ListHeaderComponent={(
           <View>
-            <LinearGradient
-              colors={heroGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{
-                borderRadius: radius.xl,
-                padding: spacing.s16,
-                marginTop: spacing.s8
-              }}
-            >
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <View style={{ marginTop: spacing.s8 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.s16 }}>
                 <View style={{ flex: 1, paddingRight: spacing.s8 }}>
-                  <Text style={{ color: heroText, fontSize: 24, fontWeight: '800' }}>Shared bills</Text>
-                  <Text style={{ color: heroTextSoft, marginTop: spacing.s4 }}>
+                  <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.5 }}>Shared bills</Text>
+                  <Text style={{ color: textMuted, marginTop: spacing.s4, fontSize: 14 }}>
                     Keep tabs on every group balance and settle up with confidence.
                   </Text>
                 </View>
                 <Button
                   title="+ New group"
                   size="sm"
-                  variant="secondary"
+                  variant="primary"
                   onPress={() => nav.navigate('CreateGroup')}
-                  style={{
-                    backgroundColor: heroButtonBg,
-                    borderColor: heroButtonBorder
-                  }}
                 />
               </View>
 
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s12, marginTop: spacing.s16 }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s12, marginBottom: spacing.s8 }}>
                 <MetricCard
                   icon="users-2"
                   label="Groups"
@@ -325,7 +306,7 @@ export default function GroupsRoot() {
                   caption={totals.theyOwe > 0.009 ? 'Give your pals a nudge' : 'Nothing outstanding'}
                 />
               </View>
-            </LinearGradient>
+            </View>
 
             <View style={{
               marginTop: spacing.s16,

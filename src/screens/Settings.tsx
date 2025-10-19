@@ -27,6 +27,7 @@ import { seedFiveMonths, clearAllData } from '../lib/demo';
 import { seedInvestSixMonths, clearInvestDemo } from '../lib/demo_invest';
 import { exportPortfolioCsv } from '../lib/export';
 import { useAuthStore } from '../store/auth';
+import { useAchievementsStore, getAllAchievementsWithStatus, ACHIEVEMENTS } from '../store/achievements';
 
 type ThemeOption = { label: string; value: ThemeMode; icon: string; description: string };
 
@@ -169,11 +170,8 @@ export const Settings: React.FC = () => {
   const { setMode } = useTheme();
   const { profile, update, clearAllLocalData } = useProfileStore();
   const { signOut } = useAuthStore();
-  const { refreshFx, setQuoteProvider } = useInvestStore();
+  const { refreshFx } = useInvestStore();
   const activePortfolioId = useInvestStore(state => state.activePortfolioId);
-  const quoteProvider = useInvestStore(
-    s => (s.profile?.quoteProvider ?? 'auto'),
-  ) as 'auto' | 'yahoo' | 'stooq';
 
   const [currencySheet, setCurrencySheet] = useState(false);
   const [currencyQuery, setCurrencyQuery] = useState('');
@@ -443,6 +441,152 @@ export const Settings: React.FC = () => {
           </View>
         </View>
 
+        {/* Achievements Section */}
+        <View style={{ gap: spacing.s12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+              <Icon name="trophy" size={20} color={get('accent.primary') as string} />
+              <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 16, letterSpacing: -0.3 }}>
+                Achievements
+              </Text>
+            </View>
+            <View
+              style={{
+                paddingHorizontal: spacing.s10,
+                paddingVertical: spacing.s4,
+                borderRadius: radius.pill,
+                backgroundColor: withAlpha(get('accent.primary') as string, 0.12),
+              }}
+            >
+              <Text style={{ color: get('accent.primary') as string, fontWeight: '700', fontSize: 12 }}>
+                {getAllAchievementsWithStatus().filter(a => a.unlocked).length}/{ACHIEVEMENTS.length}
+              </Text>
+            </View>
+          </View>
+
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
+            {getAllAchievementsWithStatus().slice(0, 6).map(achievement => {
+              const unlocked = achievement.unlocked;
+              const progressPercent = achievement.target && achievement.progress
+                ? Math.min(100, (achievement.progress / achievement.target) * 100)
+                : unlocked ? 100 : 0;
+
+              return (
+                <View
+                  key={achievement.id}
+                  style={{
+                    width: '48%',
+                    padding: spacing.s12,
+                    borderRadius: radius.lg,
+                    backgroundColor: unlocked
+                      ? withAlpha(get('accent.primary') as string, 0.12)
+                      : get('surface.level1') as string,
+                    borderWidth: 1,
+                    borderColor: unlocked
+                      ? get('accent.primary') as string
+                      : get('border.subtle') as string,
+                    gap: spacing.s8,
+                    opacity: unlocked ? 1 : 0.6,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: radius.md,
+                      backgroundColor: unlocked
+                        ? get('accent.primary') as string
+                        : get('surface.level2') as string,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Icon
+                      name={achievement.icon as any}
+                      size={20}
+                      color={unlocked ? get('text.onPrimary') as string : get('text.muted') as string}
+                    />
+                  </View>
+                  <View>
+                    <Text
+                      style={{
+                        color: get('text.primary') as string,
+                        fontWeight: '700',
+                        fontSize: 13,
+                      }}
+                    >
+                      {achievement.title}
+                    </Text>
+                    <Text
+                      style={{
+                        color: get('text.muted') as string,
+                        fontSize: 11,
+                        marginTop: spacing.s2,
+                      }}
+                    >
+                      {achievement.description}
+                    </Text>
+                  </View>
+
+                  {/* Progress bar if applicable */}
+                  {achievement.target && !unlocked && achievement.progress !== undefined && (
+                    <View>
+                      <View
+                        style={{
+                          height: 4,
+                          borderRadius: radius.pill,
+                          backgroundColor: get('surface.level2') as string,
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <View
+                          style={{
+                            height: '100%',
+                            width: `${progressPercent}%`,
+                            backgroundColor: get('accent.primary') as string,
+                          }}
+                        />
+                      </View>
+                      <Text
+                        style={{
+                          color: get('text.muted') as string,
+                          fontSize: 10,
+                          marginTop: spacing.s2,
+                        }}
+                      >
+                        {achievement.progress}/{achievement.target}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+
+          <AnimatedPressable
+            onPress={() => {
+              // TODO: Navigate to full achievements screen
+              Alert.alert('Achievements', 'Full achievements screen coming soon!');
+            }}
+          >
+            <View
+              style={{
+                paddingVertical: spacing.s10,
+                paddingHorizontal: spacing.s16,
+                borderRadius: radius.lg,
+                backgroundColor: get('surface.level1') as string,
+                borderWidth: 1,
+                borderColor: get('border.subtle') as string,
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ color: get('text.primary') as string, fontWeight: '600', fontSize: 14 }}>
+                View all achievements
+              </Text>
+            </View>
+          </AnimatedPressable>
+        </View>
+
         {/* Theme Selection */}
         <SettingsSection title="Appearance" description="Choose your visual vibe" icon="palette">
           <View style={{ gap: spacing.s8 }}>
@@ -693,51 +837,147 @@ export const Settings: React.FC = () => {
         {/* Investments */}
         <SettingsSection title="Investments" description="Market data and portfolio tools" icon="trending-up">
           <View style={{ gap: spacing.s8 }}>
-            <Text style={{ color: get('text.muted') as string, fontSize: 13, fontWeight: '600' }}>
-              Market data provider
-            </Text>
-            <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-              {(['auto', 'yahoo', 'stooq'] as const).map(key => {
-                const active = quoteProvider === key;
-                return (
+          {/* Data Source Selection */}
+          <View
+            style={{
+              backgroundColor: get('surface.level1') as string,
+              borderRadius: radius.lg,
+              borderWidth: 1,
+              borderColor: get('border.subtle') as string,
+              overflow: 'hidden',
+            }}
+          >
+            {[
+              { key: 'yahoo' as const, title: 'Yahoo Finance', subtitle: 'Free, no API key needed', icon: 'globe' },
+              { key: 'fmp' as const, title: 'FinancialModelingPrep', subtitle: '150 calls/day free tier', icon: 'database' },
+            ].map((item, idx, arr) => {
+              const selected = (profile.dataSource || 'yahoo') === item.key;
+              return (
+                <View key={item.key}>
                   <AnimatedPressable
-                    key={key}
                     onPress={async () => {
+                      update({ dataSource: item.key });
                       try {
-                        await setQuoteProvider(key);
                         await Haptics.selectionAsync();
                       } catch {}
                     }}
                   >
                     <View
                       style={{
-                        paddingVertical: spacing.s10,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingVertical: spacing.s12,
                         paddingHorizontal: spacing.s16,
-                        borderRadius: radius.pill,
-                        backgroundColor: active
-                          ? (get('accent.primary') as string)
-                          : (get('surface.level1') as string),
-                        borderWidth: 1,
-                        borderColor: active
-                          ? (get('accent.primary') as string)
-                          : (get('border.subtle') as string),
+                        gap: spacing.s12,
+                        backgroundColor: selected ? withAlpha(get('accent.primary') as string, 0.08) : 'transparent',
                       }}
                     >
-                      <Text
+                      <View
                         style={{
-                          color: active ? (get('text.onPrimary') as string) : (get('text.primary') as string),
-                          fontWeight: '700',
-                          fontSize: 14,
+                          width: 36,
+                          height: 36,
+                          borderRadius: radius.md,
+                          backgroundColor: selected ? get('accent.primary') as string : get('surface.level2') as string,
+                          alignItems: 'center',
+                          justifyContent: 'center',
                         }}
                       >
-                        {key.toUpperCase()}
-                      </Text>
+                        <Icon name={item.icon as any} size={18} color={selected ? get('text.onPrimary') as string : get('text.primary') as string} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: get('text.primary') as string, fontWeight: '600', fontSize: 15 }}>
+                          {item.title}
+                        </Text>
+                        <Text style={{ color: get('text.muted') as string, fontSize: 13, marginTop: spacing.s2 }}>
+                          {item.subtitle}
+                        </Text>
+                      </View>
+                      {selected && (
+                        <View
+                          style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: radius.pill,
+                            backgroundColor: get('accent.primary') as string,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Icon name="check" size={14} color={get('text.onPrimary') as string} />
+                        </View>
+                      )}
                     </View>
                   </AnimatedPressable>
-                );
-              })}
-            </View>
+                  {idx < arr.length - 1 && (
+                    <View
+                      style={{
+                        height: 1,
+                        backgroundColor: get('border.subtle') as string,
+                        marginLeft: 64,
+                      }}
+                    />
+                  )}
+                </View>
+              );
+            })}
           </View>
+
+          {/* FMP API Key Input - only show when FMP is selected */}
+          {(profile.dataSource || 'yahoo') === 'fmp' && (
+            <View
+              style={{
+                paddingVertical: spacing.s12,
+                paddingHorizontal: spacing.s16,
+                backgroundColor: get('surface.level1') as string,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: get('border.subtle') as string,
+                gap: spacing.s8,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: radius.md,
+                    backgroundColor: get('surface.level2') as string,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Icon name="key" size={18} color={get('text.primary') as string} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: get('text.primary') as string, fontWeight: '600', fontSize: 15 }}>
+                    API Key
+                  </Text>
+                  <Text style={{ color: get('text.muted') as string, fontSize: 13, marginTop: spacing.s2 }}>
+                    Get yours at financialmodelingprep.com
+                  </Text>
+                </View>
+              </View>
+              <TextInput
+                value={profile.fmpApiKey || ''}
+                onChangeText={(text) => update({ fmpApiKey: text })}
+                placeholder="Enter your FMP API key..."
+                placeholderTextColor={get('text.muted') as string}
+                style={{
+                  height: 44,
+                  borderRadius: radius.md,
+                  borderWidth: 1,
+                  borderColor: get('border.subtle') as string,
+                  backgroundColor: get('surface.level2') as string,
+                  paddingHorizontal: spacing.s12,
+                  color: get('text.primary') as string,
+                  fontSize: 14,
+                  fontFamily: 'monospace',
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+          )}
 
           <SettingRow
             title="Export portfolio"
@@ -756,6 +996,7 @@ export const Settings: React.FC = () => {
             }}
             icon="download"
           />
+          </View>
         </SettingsSection>
 
         {/* Privacy */}

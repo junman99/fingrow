@@ -4,7 +4,6 @@ import { View, Text, TextInput, FlatList, Pressable } from 'react-native';
 import CenterModal from '../CenterModal';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
-import { toStooqSymbol } from '../../lib/stooq';
 import { baseCryptoSymbol } from '../../lib/coingecko';
 import { useNavigation } from '@react-navigation/native';
 
@@ -28,11 +27,15 @@ export default function AddHoldingModal({ visible, onClose, portfolioId }: Props
   const items = React.useMemo(() => {
     const sym = (q || '').trim().toUpperCase();
     if (!sym) return [] as Item[];
-    const st = toStooqSymbol(sym);
     const out: Item[] = [];
-    if (st) out.push({ symbol: sym, provider: st.toUpperCase() });
+    // Check if it's a crypto symbol
     const base = baseCryptoSymbol(sym);
-    if (base) out.push({ symbol: sym, provider: 'COINGECKO' });
+    if (base) {
+      out.push({ symbol: sym, provider: 'COINGECKO' });
+    } else {
+      // Default to Yahoo Finance for stocks/ETFs
+      out.push({ symbol: sym, provider: 'YAHOO' });
+    }
     return out;
   }, [q]);
 

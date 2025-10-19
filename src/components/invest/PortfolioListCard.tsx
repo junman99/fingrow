@@ -179,7 +179,7 @@ function AllocationChips({ top, show, tint }: { top: Array<{ sym: string; w: num
   );
 }
 
-export default function PortfolioListCard({ selectionMode, selectedIds, onToggleSelect, onDeleteSelected, onOpenPortfolio, onCreate, onStartDeleteMode, onOpenManager }: Props) {
+const PortfolioListCard = React.memo(({ selectionMode, selectedIds, onToggleSelect, onDeleteSelected, onOpenPortfolio, onCreate, onStartDeleteMode, onOpenManager }: Props) => {
   const { get, isDark } = useThemeTokens();
   const portfolios = useInvestStore(s => s.portfolios);
   const order = useInvestStore(s => s.portfolioOrder);
@@ -413,79 +413,63 @@ export default function PortfolioListCard({ selectionMode, selectedIds, onToggle
               onPress={handlePress}
               accessibilityRole="button"
               accessibilityLabel={`${selectionMode ? 'Select' : 'Open'} ${p.name} portfolio`}
-              style={{ borderRadius: radius.xl }}
             >
               {({ pressed }) => (
                 <View
                   style={{
-                    borderRadius: radius.xl,
-                    borderWidth: pressed && !isSelected ? 1 : cardBorderWidth,
-                    borderColor: pressed && !isSelected
-                      ? withAlpha(accent.stroke, isDark ? 0.58 : 0.32)
-                      : cardBorderColor,
-                    backgroundColor: tileBg,
-                    shadowColor: accent.shadow,
-                    shadowOpacity: pressed ? 0.24 : (isSelected ? 0.2 : 0.12),
-                    shadowRadius: pressed ? 12 : 16,
-                    shadowOffset: { width: 0, height: pressed ? 6 : 12 },
-                    transform: [{ translateY: pressed ? 1 : 0 }],
-                    elevation: pressed ? 3 : (isSelected ? 7 : 5),
-                    padding: spacing.s12,
-                    gap: spacing.s10,
+                    borderRadius: radius.lg,
+                    backgroundColor: get('surface.level1') as string,
+                    padding: spacing.s16,
+                    gap: spacing.s12,
+                    opacity: pressed ? 0.8 : 1,
                   }}
                 >
+                  {/* Header Row */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s10, flex: 1, paddingRight: spacing.s8 }}>
-                      <PortfolioAvatar portfolio={p as any} quotes={quotes} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 16 }} numberOfLines={1}>{p.name}</Text>
-                        <Text style={{ color: textMuted, fontSize: 12 }} numberOfLines={1}>{metaLine}</Text>
-                      </View>
+                    <View style={{ flex: 1, gap: spacing.s2 }}>
+                      <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }} numberOfLines={1}>{p.name}</Text>
+                      <Text style={{ color: textMuted, fontSize: 12 }} numberOfLines={1}>{positionsLabel} • {cur}</Text>
                     </View>
                     {annotation}
                   </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.s10 }}>
-                    <View style={{ flex: 1, gap: spacing.s4 }}>
-                      <Text style={{ color: textMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.4 }}>PORTFOLIO VALUE</Text>
-                      <Text style={{ color: textPrimary, fontSize: 24, fontWeight: '800' }} numberOfLines={1}>
-                        {formatCurrency(value, cur)}
-                      </Text>
-                    </View>
-                    <DeltaBadge amount={deltaToday} currency={cur} label="Today" gradient={[accent.chip, withAlpha(accent.chip, 0.6)]} />
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text style={{ color: gainColor, fontWeight: '700', fontSize: 12 }}>
-                      All-time {totalGainValue}
+
+                  {/* Value & Today's Change */}
+                  <View>
+                    <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800' }}>
+                      {formatCurrency(value, cur)}
                     </Text>
-                    <View
-                      style={{
-                        paddingHorizontal: spacing.s10,
-                        paddingVertical: spacing.s4,
-                        borderRadius: radius.pill,
-                        backgroundColor: withAlpha(accent.chip, isDark ? 0.46 : 0.2),
-                        borderWidth: 1,
-                        borderColor: withAlpha(accent.chip, isDark ? 0.52 : 0.26),
-                      }}
-                    >
-                      <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 12 }}>{positionsLabel}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, marginTop: spacing.s4 }}>
+                      <Text style={{ color: deltaToday >= 0 ? successColor : dangerColor, fontWeight: '600', fontSize: 13 }}>
+                        Today: {deltaToday >= 0 ? '+' : ''}{formatCurrency(deltaToday, cur)}
+                      </Text>
+                      <Text style={{ color: textMuted, fontSize: 13 }}>•</Text>
+                      <Text style={{ color: gainColor, fontWeight: '600', fontSize: 13 }}>
+                        All-time {totalGainValue}
+                      </Text>
                     </View>
                   </View>
-                  {hasHoldings ? (
-                    <AllocationChips top={top} show={hasHoldings} tint={accent.chip} />
-                  ) : (
-                    <View
-                      style={{
-                        paddingHorizontal: spacing.s10,
-                        paddingVertical: spacing.s8,
-                        borderRadius: radius.lg,
-                        borderWidth: 1,
-                        borderColor: withAlpha(accent.chip, isDark ? 0.44 : 0.2),
-                        backgroundColor: withAlpha(accent.chip, isDark ? 0.28 : 0.08),
-                      }}
-                    >
-                      <Text style={{ color: textMuted }}>
-                        No holdings yet. Tap to add your first position and unlock insights.
-                      </Text>
+
+                  {/* Top Holdings - Compact */}
+                  {hasHoldings && top.length > 0 && (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s6 }}>
+                      {top.slice(0, 3).map((s, i) => {
+                        const pct = Math.round(s.w * 100);
+                        return (
+                          <View
+                            key={`${s.sym}-${i}`}
+                            style={{
+                              paddingHorizontal: spacing.s10,
+                              paddingVertical: spacing.s4,
+                              borderRadius: radius.pill,
+                              backgroundColor: get('surface.level2') as string,
+                            }}
+                          >
+                            <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 12 }}>
+                              {s.sym} {pct}%
+                            </Text>
+                          </View>
+                        );
+                      })}
                     </View>
                   )}
                 </View>
@@ -529,4 +513,8 @@ export default function PortfolioListCard({ selectionMode, selectedIds, onToggle
       />
     </View>
   );
-}
+});
+
+PortfolioListCard.displayName = 'PortfolioListCard';
+
+export default PortfolioListCard;

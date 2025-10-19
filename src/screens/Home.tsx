@@ -12,6 +12,7 @@ import Icon from '../components/Icon';
 import { useTxStore } from '../store/transactions';
 import { useProfileStore } from '../store/profile';
 import { useGroupsStore } from '../store/groups';
+import { useStreaksStore, getStreakMessage, getNextMilestone } from '../store/streaks';
 
 const AnimatedText = Animated.createAnimatedComponent(Text);
 
@@ -23,19 +24,19 @@ type AddFabProps = {
 };
 
 const AddFabButton: React.FC<AddFabProps> = ({ anim, accent, textColor, onPress }) => {
-  const collapsedWidth = 52;
-  const expandedWidth = 188;
+  const collapsedWidth = 56;
+  const expandedWidth = 196;
   const width = anim.interpolate({ inputRange: [0, 1], outputRange: [collapsedWidth, expandedWidth] });
   const textOpacity = anim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 0.35, 1] });
   const textTranslate = anim.interpolate({ inputRange: [0, 1], outputRange: [8, 2] });
-  const iconSize = 22;
+  const iconSize = 24;
   const iconBaseOffset = (collapsedWidth - iconSize) / 2;
   const iconTargetOffset = spacing.s16 + spacing.s4;
   const iconTranslate = anim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, iconTargetOffset - iconBaseOffset]
   });
-  const height = 48;
+  const height = 56;
 
   return (
     <Animated.View style={{
@@ -52,9 +53,9 @@ const AddFabButton: React.FC<AddFabProps> = ({ anim, accent, textColor, onPress 
         style={({ pressed }) => ({
           alignItems: 'center',
           justifyContent: 'center',
-          paddingVertical: spacing.s8,
+          paddingVertical: spacing.s12,
           paddingLeft: spacing.s16,
-          paddingRight: spacing.s12,
+          paddingRight: spacing.s16,
           opacity: pressed ? 0.9 : 1
         })}
       >
@@ -66,13 +67,14 @@ const AddFabButton: React.FC<AddFabProps> = ({ anim, accent, textColor, onPress 
             transform: [{ translateX: iconTranslate }]
           }}
         >
-          <Icon name="plus-rounded" size={22} colorToken="text.onPrimary" />
+          <Icon name="plus-rounded" size={24} colorToken="text.onPrimary" />
         </Animated.View>
         <AnimatedText
           numberOfLines={1}
           style={{
             color: textColor,
             fontWeight: '700',
+            fontSize: 15,
             textAlign: 'center',
             opacity: textOpacity,
             transform: [{ translateX: textTranslate }]
@@ -85,13 +87,48 @@ const AddFabButton: React.FC<AddFabProps> = ({ anim, accent, textColor, onPress 
   );
 };
 
+// Animated pressable for cards
+const AnimatedPressable: React.FC<{
+  onPress: () => void;
+  children: React.ReactNode;
+  style?: any;
+}> = ({ onPress, children, style }) => {
+  const scaleAnim = React.useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.96,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  return (
+    <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+      <Animated.View style={[style, { transform: [{ scale: scaleAnim }] }]}>
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
+};
+
 export const Home: React.FC = () => {
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { get } = useThemeTokens();
   const tabBarHeight = useBottomTabBarHeight();
   const fabBottomOffset = useMemo(() => {
-    const baseGap = spacing.s12;
+    const baseGap = spacing.s16;
     if (tabBarHeight > 0) return baseGap;
     return insets.bottom + baseGap;
   }, [insets.bottom, tabBarHeight]);
@@ -100,8 +137,15 @@ export const Home: React.FC = () => {
   const { hydrate: hydrateTx } = useTxStore();
   const { profile, hydrate: hydrateProfile } = useProfileStore();
   const { hydrate: hydrateGroups } = useGroupsStore();
+  const { currentStreak, longestStreak, recordVisit, hydrate: hydrateStreaks } = useStreaksStore();
 
-  useEffect(() => { hydrateProfile(); hydrateTx(); hydrateGroups(); }, []);
+  useEffect(() => {
+    hydrateProfile();
+    hydrateTx();
+    hydrateGroups();
+    hydrateStreaks();
+    recordVisit(); // Track this visit
+  }, []);
 
   const accentPrimary = get('accent.primary') as string;
   const accentSecondary = get('accent.secondary') as string;
@@ -187,6 +231,7 @@ export const Home: React.FC = () => {
 
   const warningAccent = get('semantic.warning') as string;
   const successAccent = get('semantic.success') as string;
+
   const quickActions = useMemo(() => ([
     {
       key: 'groups',
@@ -198,7 +243,7 @@ export const Home: React.FC = () => {
     {
       key: 'goal',
       icon: 'target' as const,
-      label: 'Savings goals',
+      label: 'Goals',
       onPress: () => navigateWhenIdle(() => nav.navigate('Goals', { screen: 'GoalsRoot' })),
       accent: accentPrimary
     },
@@ -220,10 +265,10 @@ export const Home: React.FC = () => {
 
   const avatarInitials = (() => {
     const n = profile?.name?.trim();
-    if (!n) return '👤';
+    if (!n) return '?';
     const parts = n.split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return '👤';
-    if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? '👤';
+    if (parts.length === 0) return '?';
+    if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? '?';
     return (parts[0][0] + parts[1][0]).toUpperCase();
   })();
 
@@ -235,74 +280,174 @@ export const Home: React.FC = () => {
         scrollEventThrottle={16}
         contentStyle={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, paddingBottom: spacing.s32 }}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
-          <Text style={{ fontSize: 28, fontWeight: '800', color: textPrimary }}>Spending</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open profile"
+        {/* Header with profile */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s16 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 32, fontWeight: '800', color: textPrimary, letterSpacing: -0.5 }}>
+              Spending
+            </Text>
+            <Text style={{ color: muted, fontSize: 14, marginTop: spacing.s2 }}>
+              Track your daily flow
+            </Text>
+          </View>
+          <AnimatedPressable
             onPress={() => nav.navigate('ProfileModal')}
-            style={({ pressed }) => ({
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              overflow: 'hidden',
-              backgroundColor: surface2,
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: pressed ? 0.8 : 1
-            })}
           >
-            {profile?.avatarUri ? (
-              <Image source={{ uri: profile.avatarUri }} style={{ width: 44, height: 44 }} />
-            ) : (
-              <Text style={{ color: textPrimary, fontWeight: '700' }}>{avatarInitials}</Text>
-            )}
-          </Pressable>
+            <View
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: radius.xl,
+                overflow: 'hidden',
+                backgroundColor: accentPrimary,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 2,
+                borderColor: borderSubtle,
+              }}
+            >
+              {profile?.avatarUri ? (
+                <Image source={{ uri: profile.avatarUri }} style={{ width: 48, height: 48 }} />
+              ) : (
+                <Text style={{ color: textOnPrimary, fontWeight: '800', fontSize: 18 }}>
+                  {avatarInitials}
+                </Text>
+              )}
+            </View>
+          </AnimatedPressable>
         </View>
 
-        <View style={{ marginTop: spacing.s8 }}>
+        {/* Month Compare Chart - No Card */}
+        <View style={{ marginBottom: spacing.s16 }}>
           <MonthCompareChart />
         </View>
 
-        <View style={{ marginTop: spacing.s16 }}>
-          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16, marginBottom: spacing.s8 }}>Shortcuts</Text>
-          <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
-            {quickActions.map(action => (
-              <Pressable
-                key={action.key}
-                accessibilityRole="button"
-                onPress={action.onPress}
-                style={({ pressed }) => ({
-                  flex: 1,
+        {/* Streak Counter */}
+        {currentStreak > 0 && (
+          <AnimatedPressable
+            onPress={() => navigateWhenIdle(() => nav.navigate('AchievementsModal'))}
+            style={{ marginBottom: spacing.s16 }}
+          >
+            <View
+              style={{
+                backgroundColor: surface1,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: borderSubtle,
+                padding: spacing.s16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.s12,
+              }}
+            >
+              <View
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: radius.md,
+                  backgroundColor: successAccent,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  opacity: pressed ? 0.82 : 1
-                })}
+                }}
               >
-                <View style={{
-                  width: '100%',
-                  paddingVertical: spacing.s10,
-                  borderRadius: radius.lg,
-                  backgroundColor: action.accent,
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <Icon name={action.icon} size={26} colorToken="text.onPrimary" />
-                  <Text style={{ color: get('text.onPrimary') as string, fontWeight: '700', marginTop: spacing.s4, fontSize: 12 }}>
-                    {action.label}
+                <Icon name="zap" size={28} colorToken="text.onPrimary" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s4 }}>
+                  <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
+                    {currentStreak}
+                  </Text>
+                  <Text style={{ color: muted, fontSize: 14, fontWeight: '600' }}>
+                    day streak
                   </Text>
                 </View>
-              </Pressable>
+                <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s2 }}>
+                  {getStreakMessage(currentStreak)}
+                </Text>
+                {getNextMilestone(currentStreak) && (
+                  <View
+                    style={{
+                      marginTop: spacing.s8,
+                      paddingHorizontal: spacing.s10,
+                      paddingVertical: spacing.s4,
+                      borderRadius: radius.pill,
+                      backgroundColor: surface2,
+                      alignSelf: 'flex-start',
+                    }}
+                  >
+                    <Text style={{ color: muted, fontSize: 11, fontWeight: '600' }}>
+                      {getNextMilestone(currentStreak)!.days - currentStreak} days to {getNextMilestone(currentStreak)!.label}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Icon name="chevron-right" size={20} color={muted} />
+            </View>
+          </AnimatedPressable>
+        )}
+
+        {/* Quick Actions */}
+        <View style={{ marginBottom: spacing.s16 }}>
+          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16, marginBottom: spacing.s12, letterSpacing: -0.3 }}>
+            Quick actions
+          </Text>
+          <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
+            {quickActions.map(action => (
+              <View
+                key={action.key}
+                style={{ flex: 1 }}
+              >
+                <AnimatedPressable
+                  onPress={action.onPress}
+                  style={{ width: '100%' }}
+                >
+                  <View
+                    style={{
+                      padding: spacing.s12,
+                      borderRadius: radius.lg,
+                      backgroundColor: surface1,
+                      alignItems: 'center',
+                      gap: spacing.s8,
+                      minHeight: 90,
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: radius.md,
+                        backgroundColor: action.accent,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Icon name={action.icon} size={20} colorToken="text.onPrimary" />
+                    </View>
+                    <Text
+                      style={{
+                        color: textPrimary,
+                        fontWeight: '600',
+                        fontSize: 12,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {action.label}
+                    </Text>
+                  </View>
+                </AnimatedPressable>
+              </View>
             ))}
           </View>
         </View>
 
-        <View style={{ marginTop: spacing.s16 }}>
+        {/* Recent Transactions */}
+        <View>
           <RecentTransactionsCard />
         </View>
       </ScreenScroll>
 
-      {/* Floating Add button sits above bottom tab bar */}
+      {/* Floating Add button */}
       <View
         style={{
           position: 'absolute',
@@ -312,7 +457,7 @@ export const Home: React.FC = () => {
       >
         <AddFabButton
           anim={collapseAnim}
-          accent={accentSecondary}
+          accent={accentPrimary}
           textColor={textOnPrimary}
           onPress={handleAddPress}
         />

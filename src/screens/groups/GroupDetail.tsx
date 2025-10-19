@@ -6,7 +6,6 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import { ScreenScroll } from '../../components/ScreenScroll';
 import Button from '../../components/Button';
 import Icon from '../../components/Icon';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
 import { useGroupsStore } from '../../store/groups';
@@ -122,13 +121,11 @@ export default function GroupDetail() {
   const textPrimary = get('text.primary') as string;
   const textMuted = get('text.muted') as string;
   const textOnPrimary = get('text.onPrimary') as string;
+  const textOnSurface = get('text.onSurface') as string;
   const surface1 = get('surface.level1') as string;
   const surface2 = get('surface.level2') as string;
   const borderSubtle = get('border.subtle') as string;
-  const heroGradient: [string, string] = isDark ? ['#0d101e', '#19152c'] : [accentPrimary, accentSecondary];
-  const heroText = isDark ? '#eef3ff' : textOnPrimary;
-  const heroTextMuted = withAlpha(heroText, 0.7);
-  const heroCardTint = isDark ? withAlpha('#ffffff', 0.08) : withAlpha('#ffffff', 0.16);
+  const backgroundDefault = get('background.default') as string;
 
   const metrics = [
     {
@@ -170,9 +167,9 @@ export default function GroupDetail() {
           borderRadius: 28,
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: withAlpha(accentPrimary, isDark ? 0.18 : 0.24),
-          borderWidth: 1,
-          borderColor: withAlpha('#ffffff', isDark ? 0.16 : 0.6)
+          backgroundColor: withAlpha(accentPrimary, isDark ? 0.20 : 0.12),
+          borderWidth: 1.5,
+          borderColor: borderSubtle
         }}>
           <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 18 }}>{initials}</Text>
         </View>
@@ -285,33 +282,25 @@ export default function GroupDetail() {
   return (
     <ScreenScroll contentStyle={{ paddingBottom: spacing.s32 }}>
       <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s16 }}>
-        <LinearGradient
-          colors={heroGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
-            borderRadius: radius.xl,
-            padding: spacing.s16,
-            gap: spacing.s16,
-            overflow: 'hidden'
-          }}
-        >
+        <View style={{ gap: spacing.s12 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: spacing.s12 }}>
             <View style={{ flex: 1, gap: spacing.s4 }}>
-              <Text style={{ color: heroTextMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' }}>Shared group</Text>
-              <Text style={{ color: heroText, fontSize: 28, fontWeight: '800', lineHeight: 32 }}>{group.name}</Text>
-              {updatedLabel ? <Text style={{ color: heroTextMuted, fontSize: 13 }}>{updatedLabel}</Text> : null}
+              <Text style={{ color: textMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' }}>Shared group</Text>
+              <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', lineHeight: 36, letterSpacing: -0.5 }}>{group.name}</Text>
+              {updatedLabel ? <Text style={{ color: textMuted, fontSize: 13 }}>{updatedLabel}</Text> : null}
             </View>
             <View style={{
-              backgroundColor: heroCardTint,
+              backgroundColor: withAlpha(accentPrimary, isDark ? 0.20 : 0.12),
               borderRadius: radius.lg,
               paddingHorizontal: spacing.s12,
               paddingVertical: spacing.s8,
               alignItems: 'flex-end',
-              gap: spacing.s4
+              gap: spacing.s4,
+              borderWidth: 1,
+              borderColor: borderSubtle
             }}>
-              <Text style={{ color: heroTextMuted, fontSize: 12 }}>Members</Text>
-              <Text style={{ color: heroText, fontWeight: '800', fontSize: 20 }}>{membersActive.length}</Text>
+              <Text style={{ color: textMuted, fontSize: 12 }}>Members</Text>
+              <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 20 }}>{membersActive.length}</Text>
             </View>
           </View>
 
@@ -320,14 +309,16 @@ export default function GroupDetail() {
               <View key={metric.label} style={{
                 flex: 1,
                 minWidth: 140,
-                backgroundColor: heroCardTint,
+                backgroundColor: surface2,
                 borderRadius: radius.lg,
                 padding: spacing.s12,
-                gap: spacing.s4
+                gap: spacing.s4,
+                borderWidth: 1,
+                borderColor: borderSubtle
               }}>
-                <Text style={{ color: heroTextMuted, fontSize: 12, fontWeight: '600' }}>{metric.label}</Text>
-                <Text style={{ color: heroText, fontSize: 20, fontWeight: '800' }}>{metric.value}</Text>
-                <Text style={{ color: heroTextMuted, fontSize: 12 }}>{metric.caption}</Text>
+                <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600' }}>{metric.label}</Text>
+                <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800' }}>{metric.value}</Text>
+                <Text style={{ color: textMuted, fontSize: 12 }}>{metric.caption}</Text>
               </View>
             ))}
           </View>
@@ -346,10 +337,10 @@ export default function GroupDetail() {
               variant="secondary"
               title="Add bill"
               onPress={() => nav.navigate('AddBill', { groupId: group.id })}
-              style={{ flexGrow: 1, minWidth: 140, backgroundColor: heroCardTint, borderColor: withAlpha(heroText, 0.2) }}
+              style={{ flexGrow: 1, minWidth: 140 }}
             />
           </View>
-        </LinearGradient>
+        </View>
 
         {group.note ? (
           <View style={cardStyle}>

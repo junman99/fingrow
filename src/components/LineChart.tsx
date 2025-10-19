@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, LayoutChangeEvent, Animated, Easing } from 'react-native';
 import Svg, { Path, Line, G, Defs, LinearGradient, Stop, Circle, Text as SvgText, Rect } from 'react-native-svg';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { ScrollContext } from './ScrollContext';
 
@@ -112,6 +113,14 @@ export default function LineChart({
   // You can set left/right to 0 — yAxisWidth keeps a bit of space for labels
   const pad = { left: 6, right: 10, bottom: 26, top: 10, ...(padding || {}) };
 
+  // Pinch-to-zoom state
+  const [scale, setScale] = React.useState(1);
+  const [panOffset, setPanOffset] = React.useState(0);
+  const scaleRef = React.useRef(1);
+  const panOffsetRef = React.useRef(0);
+  const savedScaleRef = React.useRef(1);
+  const savedPanRef = React.useRef(0);
+
   const [layoutW, setLayoutW] = React.useState<number>(340);
   const onLayout = (e: LayoutChangeEvent) => {
     const lw = e.nativeEvent.layout.width || 340;
@@ -120,8 +129,26 @@ export default function LineChart({
   const w = layoutW;
   const h = height;
 
-  const values = data.map(d => d.v);
-  const suppressXAxisLabels = !data.length || values.every(v => v === 0);
+  // Calculate visible data window based on zoom and pan
+  const visibleData = React.useMemo(() => {
+    if (!data.length) return data;
+
+    const totalRange = data[data.length - 1].t - data[0].t;
+    const visibleRange = totalRange / scale;
+
+    // Calculate center point with pan offset
+    const centerRatio = 0.5 + panOffset;
+    const clampedCenter = Math.max(visibleRange / (2 * totalRange), Math.min(1 - visibleRange / (2 * totalRange), centerRatio));
+
+    const centerTime = data[0].t + totalRange * clampedCenter;
+    const startTime = centerTime - visibleRange / 2;
+    const endTime = centerTime + visibleRange / 2;
+
+    return data.filter(d => d.t >= startTime && d.t <= endTime);
+  }, [data, scale, panOffset]);
+
+  const values = visibleData.map(d => d.v);
+  const suppressXAxisLabels = !visibleData.length || values.every(v => v === 0);
   const minRaw = values.length ? Math.min(...values) : 0;
   const maxRaw = values.length ? Math.max(...values) : 1;
   // Guard when min == max to avoid div-by-zero
@@ -130,7 +157,7 @@ export default function LineChart({
   const max = maxRaw + padRange;
   const range = Math.max(1e-6, max - min);
 
-  const times = data.map(d => d.t);
+  const times = visibleData.map(d => d.t);
   const tmin = times[0] ?? 0;
   const tmax = times[times.length-1] ?? 1;
   const trange = Math.max(1, tmax - tmin);
@@ -155,21 +182,22 @@ export default function LineChart({
 
   // Rounded y-axis ticks
   const yTicks = niceTicks(min, max, 4);
-  // x-axis ticks
+  // x-axis ticks - dynamically adjust based on zoom level
   const dayTicks: Array<{ t: number; label: string }> = [];
-  if (xTickStrategy?.mode === 'day' && data.length) {
-    const every = Math.max(1, Math.round(xTickStrategy.every || 1));
-    for (let i = 0; i < data.length; i += every) {
-      const d = new Date(data[i].t);
+  const autoEvery = Math.max(1, Math.round(visibleData.length / 6));
+  if ((xTickStrategy?.mode === 'day' || scale > 3) && visibleData.length) {
+    const every = xTickStrategy?.mode === 'day' ? Math.max(1, Math.round(xTickStrategy.every || 1)) : autoEvery;
+    for (let i = 0; i < visibleData.length; i += every) {
+      const d = new Date(visibleData[i].t);
       const label = d.toLocaleString(undefined, { day: '2-digit', month: 'short' }); // e.g., "12 Sep"
-      dayTicks.push({ t: data[i].t, label });
+      dayTicks.push({ t: visibleData[i].t, label });
     }
   }
 
 
   // x-axis month ticks (cap to ~6 labels)
   const monthTicks: Array<{ t: number; label: string }> = [];
-  if (data.length > 1) {
+  if (visibleData.length > 1 && scale <= 3) {
     const start = new Date(tmin);
     const m0 = new Date(start.getFullYear(), start.getMonth(), 1).getTime();
     let cur = m0 < tmin ? new Date(start.getFullYear(), start.getMonth() + 1, 1).getTime() : m0;
@@ -188,31 +216,32 @@ export default function LineChart({
   }
 
   const pathD = React.useMemo(() => {
-    if (!data.length) return '';
-    let d = `M ${xFor(data[0].t)} ${yFor(data[0].v)}`;
-    for (let i = 1; i < data.length; i++) d += ` L ${xFor(data[i].t)} ${yFor(data[i].v)}`;
+    if (!visibleData.length) return '';
+    let d = `M ${xFor(visibleData[0].t)} ${yFor(visibleData[0].v)}`;
+    for (let i = 1; i < visibleData.length; i++) d += ` L ${xFor(visibleData[i].t)} ${yFor(visibleData[i].v)}`;
     return d;
-  }, [tmin, tmax, min, max, data, plotLeft, plotWidth, plotBottom, plotHeight]);
+  }, [tmin, tmax, min, max, visibleData, plotLeft, plotWidth, plotBottom, plotHeight]);
 
   const areaD = React.useMemo(() => {
-    if (!data.length) return '';
-    let d = `M ${xFor(data[0].t)} ${plotBottom}`;
-    d += ` L ${xFor(data[0].t)} ${yFor(data[0].v)}`;
-    for (let i = 1; i < data.length; i++) d += ` L ${xFor(data[i].t)} ${yFor(data[i].v)}`;
-    d += ` L ${xFor(data[data.length-1].t)} ${plotBottom} Z`;
+    if (!visibleData.length) return '';
+    let d = `M ${xFor(visibleData[0].t)} ${plotBottom}`;
+    d += ` L ${xFor(visibleData[0].t)} ${yFor(visibleData[0].v)}`;
+    for (let i = 1; i < visibleData.length; i++) d += ` L ${xFor(visibleData[i].t)} ${yFor(visibleData[i].v)}`;
+    d += ` L ${xFor(visibleData[visibleData.length-1].t)} ${plotBottom} Z`;
     return d;
-  }, [tmin, tmax, min, max, data, plotLeft, plotWidth, plotBottom, plotHeight]);
+  }, [tmin, tmax, min, max, visibleData, plotLeft, plotWidth, plotBottom, plotHeight]);
 
-  const lastX = data.length ? xFor(data[data.length-1].t) : plotLeft;
-  const lastY = data.length ? yFor(data[data.length-1].v) : plotBottom;
+  const lastX = visibleData.length ? xFor(visibleData[visibleData.length-1].t) : plotLeft;
+  const lastY = visibleData.length ? yFor(visibleData[visibleData.length-1].v) : plotBottom;
   const baselineY = baselineValue !== undefined ? yFor(baselineValue) : undefined;
 
   // Tooltip / crosshair interaction (tooltip pinned to top)
   const [hoverIdx, setHoverIdx] = React.useState<number | null>(null);
-  const hasHover = enableTooltip && hoverIdx !== null && data[hoverIdx];
+  const hasHover = enableTooltip && hoverIdx !== null && visibleData[hoverIdx];
+  const touchXRef = React.useRef(0);
 
-  const handleTouch = (xPix: number) => {
-    if (!enableTooltip || !data.length) return;
+  const handleTouch = React.useCallback((xPix: number) => {
+    if (!enableTooltip || !visibleData.length) return;
     const svgX = (xPix / Math.max(1, w)) * w;
     const chartX = Math.max(plotLeft, Math.min(svgX, plotRight));
     const t = tmin + ((chartX - plotLeft) / Math.max(1e-6, plotWidth)) * trange;
@@ -224,16 +253,12 @@ export default function LineChart({
     let idx = lo;
     if (idx > 0 && (idx >= times.length || Math.abs(times[idx-1] - t) < Math.abs(times[idx] - t))) idx = idx - 1;
     setHoverIdx(idx);
-  };
+  }, [enableTooltip, visibleData, w, plotLeft, plotRight, tmin, plotWidth, trange, times]);
 
-  const onStart = (e: any) => handleTouch(e.nativeEvent.locationX);
-  const onMove = (e: any) => handleTouch(e.nativeEvent.locationX);
-  const onEnd = () => setHoverIdx(null);
-
-  const hoverX = hasHover ? xFor(data[hoverIdx!].t) : 0;
-  const hoverY = hasHover ? yFor(data[hoverIdx!].v) : 0;
-  const tipDate = hasHover ? new Date(data[hoverIdx!].t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-  const tipValue = hasHover ? formatExact(data[hoverIdx!].v, currency) : '';
+  const hoverX = hasHover ? xFor(visibleData[hoverIdx!].t) : 0;
+  const hoverY = hasHover ? yFor(visibleData[hoverIdx!].v) : 0;
+  const tipDate = hasHover ? new Date(visibleData[hoverIdx!].t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  const tipValue = hasHover ? formatExact(visibleData[hoverIdx!].v, currency) : '';
 
   // Tooltip box pinned to top
   const boxW = 140, boxH = 40, padBox = 8;
@@ -257,7 +282,7 @@ export default function LineChart({
   const pulseOpacity = pulse.interpolate({ inputRange: [0,1], outputRange: [0.25, 0] });
 
   // Current value tag near latest point (always visible)
-  const curValue = data.length ? formatExact(data[data.length-1].v, currency) : '';
+  const curValue = visibleData.length ? formatExact(visibleData[visibleData.length-1].v, currency) : '';
   const curBoxW = Math.min(180, Math.max(60, curValue.length * 7 + 14));
   let curX = lastX + 8;
   let curY = lastY - 16 - 8;
@@ -265,18 +290,97 @@ export default function LineChart({
   if (curX < plotLeft) curX = plotLeft;
   if (curY < plotTop) curY = lastY + 8;
 
+  // Pinch gesture for zoom - with safeguards for Expo Go
+  const pinchGesture = React.useMemo(() =>
+    Gesture.Pinch()
+      .runOnJS(true)
+      .onBegin(() => {
+        savedScaleRef.current = scaleRef.current;
+        savedPanRef.current = panOffsetRef.current;
+      })
+      .onStart(() => {
+        if (disableParent) disableParent();
+      })
+      .onUpdate((event) => {
+        // Only update if scale is changing significantly (avoid Expo Go dev menu conflicts)
+        if (Math.abs(event.scale - 1) < 0.1) return;
+
+        try {
+          const newScale = Math.max(1, Math.min(20, savedScaleRef.current * event.scale));
+          scaleRef.current = newScale;
+          setScale(newScale);
+
+          // Simple zoom - keep center stable
+          if (newScale > 1 && newScale !== savedScaleRef.current) {
+            const maxPan = 0.5 - (0.5 / newScale);
+            const adjustedPan = savedPanRef.current * (savedScaleRef.current / newScale);
+            const clampedPan = Math.max(-maxPan, Math.min(maxPan, adjustedPan));
+            panOffsetRef.current = clampedPan;
+            setPanOffset(clampedPan);
+          } else if (newScale === 1) {
+            // Reset pan when fully zoomed out
+            panOffsetRef.current = 0;
+            setPanOffset(0);
+          }
+        } catch (err) {
+          console.error('Pinch error:', err);
+        }
+      })
+      .onEnd(() => {
+        if (enableParent) enableParent();
+      })
+      .onFinalize(() => {
+        if (enableParent) enableParent();
+      }),
+    [data, disableParent, enableParent]
+  );
+
+  // Single-finger touch gesture for tooltip - works for both hold and drag
+  const tooltipGesture = React.useMemo(() =>
+    Gesture.Pan()
+      .enabled(enableTooltip)
+      .maxPointers(1)
+      .minDistance(0)
+      .runOnJS(true)
+      .onTouchesDown((event) => {
+        // Immediate response on touch down
+        if (event.numberOfTouches === 1) {
+          if (disableParent) disableParent();
+          handleTouch(event.allTouches[0].absoluteX);
+        }
+      })
+      .onTouchesMove((event) => {
+        // Update while dragging
+        if (event.numberOfTouches === 1) {
+          handleTouch(event.allTouches[0].absoluteX);
+        }
+      })
+      .onStart((event) => {
+        handleTouch(event.absoluteX);
+      })
+      .onUpdate((event) => {
+        handleTouch(event.absoluteX);
+      })
+      .onEnd(() => {
+        setHoverIdx(null);
+        if (enableParent) enableParent();
+      })
+      .onTouchesUp(() => {
+        setHoverIdx(null);
+        if (enableParent) enableParent();
+      })
+      .onFinalize(() => {
+        setHoverIdx(null);
+      }),
+    [enableTooltip, handleTouch, disableParent, enableParent]
+  );
+
+  // Combine gestures - pinch takes priority over tooltip
+  const composedGesture = Gesture.Exclusive(pinchGesture, tooltipGesture);
+
   return (
-    <View
-      onLayout={onLayout}
-      onStartShouldSetResponderCapture={() => enableTooltip}
-      onStartShouldSetResponder={() => enableTooltip}
-      onMoveShouldSetResponderCapture={() => enableTooltip}
-      onMoveShouldSetResponder={() => enableTooltip}
-      onResponderGrant={(e) => { disableParent && disableParent(); onStart(e); }}
-      onResponderMove={(e) => onMove(e)}
-      onResponderRelease={() => { onEnd(); enableParent && enableParent(); }}
-      onResponderTerminate={() => { onEnd(); enableParent && enableParent(); }}
-    >
+    <GestureDetector gesture={composedGesture}>
+    <View onLayout={onLayout}>
       <Svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`}>
         <Defs>
           <LinearGradient id="lcGrad" x1="0" y1="0" x2="0" y2="1">
@@ -308,7 +412,7 @@ export default function LineChart({
           {pathD ? <Path d={pathD} stroke={accent} strokeWidth={2} fill="none" /> : null}
 
           {/* current marker with breathing */}
-          {showMarker && data.length ? (
+          {showMarker && visibleData.length ? (
             <G>
               <AnimatedCircle cx={lastX as any} cy={lastY as any} r={pulseR as any} fill={accent as any} opacity={pulseOpacity as any} />
               <Circle cx={lastX} cy={lastY} r={3.5} fill={accent} />
@@ -342,7 +446,7 @@ export default function LineChart({
           ) : null}
 
           {/* current value tag (always on) */}
-          {showCurrentLabel && data.length ? (
+          {showCurrentLabel && visibleData.length ? (
             <G>
               <Rect x={curX} y={curY} width={curBoxW} height={22} rx={8} fill={tipBg} />
               <SvgText x={curX + 8} y={curY + 15} fill={tipText} fontSize="11">{curValue}</SvgText>
@@ -351,5 +455,6 @@ export default function LineChart({
         </G>
       </Svg>
     </View>
+    </GestureDetector>
   );
 }

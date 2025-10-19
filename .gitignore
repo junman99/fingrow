@@ -27,6 +27,7 @@ Thumbs.db
 # Env & secrets
 .env
 .env.*
+src/config/secrets.ts
 
 # Others
 **/__MACOSX/

@@ -8,7 +8,6 @@ import { spacing, radius } from '../theme/tokens';
 import { useTxStore } from '../store/transactions';
 import { useBudgetsStore } from '../store/budgets';
 import { useNavigation } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import Icon from './Icon';
 
 // ---- helpers for axis ----
@@ -120,7 +119,7 @@ export const MonthCompareChart: React.FC = () => {
   const rawMax = Math.max(1, ...dailyThis.slice(0, daysPlotThis), ...dailyPrev.slice(0, daysPlotPrev));
   const maxVal = niceCeilTight(rawMax);
   const left = Math.max(32, Math.min(42, labelW + 4));
-  const right = 36;
+  const right = 16;
 
   const innerW = Math.max(1, w - left - right);
   const innerH = Math.max(1, h - top - bottom);
@@ -238,19 +237,27 @@ export const MonthCompareChart: React.FC = () => {
     requestOffsetChange(newOffset - offset);
   };
 
-  const backgroundHex = (get('background.default') as string || '').toLowerCase();
-  const isLightTheme = backgroundHex.includes('#f7') || backgroundHex.includes('#f8') || backgroundHex.includes('fff');
-  const gradientColors = isLightTheme
-    ? ['#1a1f33', '#262b46']
-    : ['rgba(13,16,30,0.92)', 'rgba(33,27,58,0.9)'];
-  const cardBg = isLightTheme ? 'rgba(247,248,252,0.94)' : 'rgba(14,16,24,0.94)';
-  const heroText = '#f5f8ff';
-  const softOnPrimary = 'rgba(245,248,255,0.78)';
-  const gridColor = 'rgba(255,255,255,0.16)';
-  const prevBar = 'rgba(255,255,255,0.26)';
-  const currBar = 'rgba(255,255,255,0.9)';
-  const legendBg = 'rgba(255,255,255,0.18)';
-  const paceColor = pace > 0 ? (get('semantic.danger') as string) : (pace < 0 ? (get('semantic.success') as string) : softOnPrimary);
+  const accentPrimary = get('accent.primary') as string;
+  const surface1 = get('surface.level1') as string;
+  const surface2 = get('surface.level2') as string;
+  const borderSubtle = get('border.subtle') as string;
+  const textPrimary = get('text.primary') as string;
+  const textMuted = get('text.muted') as string;
+  const cardBg = surface1;
+
+  const paceColor = pace > 0 ? (get('semantic.danger') as string) : (pace < 0 ? (get('semantic.success') as string) : textMuted);
+
+  function withAlpha(hex: string, alpha: number) {
+    if (!hex) return hex;
+    if (hex.startsWith('rgba')) return hex;
+    const raw = hex.replace('#', '');
+    const expanded = raw.length === 3 ? raw.split('').map(x => x + x).join('') : raw;
+    const bigint = parseInt(expanded, 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
   const slideRange = Math.max(chartW || 0, 240);
   const translateX = slide.interpolate({
     inputRange: [-1, 0, 1],
@@ -263,93 +270,74 @@ export const MonthCompareChart: React.FC = () => {
   const rightDisabled = animating || chartW === 0 || offset >= 0;
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={() => { if (hoverActive) setHoverActive(false); }}
-      style={({ pressed }) => {
-        const base: any = {
-          borderRadius: radius.xl,
-          overflow: 'hidden',
-          opacity: pressed ? 0.97 : 1,
-        };
-        if (pressed) base.transform = [{ translateY: 1 }];
-        return base;
-      }}
-    >
-      <LinearGradient
-        colors={gradientColors}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s10, paddingBottom: spacing.s8 }}
-        onLayout={e => setChartW(e.nativeEvent.layout.width)}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s10 }}>
-          <View style={{ flex: 1, paddingRight: spacing.s10 }}>
-            <Text style={{ color: softOnPrimary, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8 }}>Month pace</Text>
-            <Text style={{ color: heroText, fontSize: 26, fontWeight: '800', marginTop: spacing.s2 }}>${sumThis.toFixed(0)}</Text>
-            <View style={{ flexDirection: 'row', gap: spacing.s6, marginTop: spacing.s6 }}>
-              <View style={{ backgroundColor: legendBg, borderRadius: radius.pill, paddingHorizontal: spacing.s10, paddingVertical: spacing.s6 }}>
-                <Text style={{ color: softOnPrimary, fontSize: 12 }}>{`Avg ${avgPerDay ? `$${avgPerDay.toFixed(0)}/day` : '$0/day'}`}</Text>
-              </View>
-              <View style={{ backgroundColor: legendBg, borderRadius: radius.pill, paddingHorizontal: spacing.s10, paddingVertical: spacing.s6 }}>
-                <Text style={{ color: softOnPrimary, fontSize: 12 }}>{`Prev ${sumPrev ? `$${sumPrev.toFixed(0)}` : '$0'}`}</Text>
-              </View>
+    <View onLayout={e => setChartW(e.nativeEvent.layout.width)}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s10 }}>
+        <View style={{ flex: 1, paddingRight: spacing.s10 }}>
+          <Text style={{ color: textMuted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: '600' }}>Month pace</Text>
+          <Text style={{ color: textPrimary, fontSize: 26, fontWeight: '800', marginTop: spacing.s2 }}>${sumThis.toFixed(0)}</Text>
+          <View style={{ flexDirection: 'row', gap: spacing.s6, marginTop: spacing.s6 }}>
+            <View style={{ backgroundColor: surface2, borderRadius: radius.pill, paddingHorizontal: spacing.s10, paddingVertical: spacing.s6 }}>
+              <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600' }}>{`Avg ${avgPerDay ? `$${avgPerDay.toFixed(0)}/day` : '$0/day'}`}</Text>
             </View>
-          </View>
-          <View style={{ alignItems: 'flex-end', gap: spacing.s4 }}>
-            <Pressable
-              onPress={openMonthPicker}
-              hitSlop={10}
-              style={({ pressed }) => ({
-                borderRadius: radius.pill,
-                paddingHorizontal: spacing.s10,
-                paddingVertical: spacing.s6,
-                backgroundColor: legendBg,
-                opacity: pressed ? 0.85 : 1
-              })}
-            >
-              <Text style={{ color: heroText, fontWeight: '700' }}>
-                {new Date(Y, M, 1).toLocaleString(undefined, { month: 'short', year: 'numeric' })}
-              </Text>
-            </Pressable>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={{ color: softOnPrimary, fontSize: 12 }}>vs last month</Text>
-              <Text style={{ color: paceColor, fontWeight: '700' }}>
-                {pace === 0 ? 'Even' : `${pace > 0 ? '+' : '-'}$${Math.abs(pace).toFixed(0)}`}
-              </Text>
+            <View style={{ backgroundColor: surface2, borderRadius: radius.pill, paddingHorizontal: spacing.s10, paddingVertical: spacing.s6 }}>
+              <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600' }}>{`Prev ${sumPrev ? `$${sumPrev.toFixed(0)}` : '$0'}`}</Text>
             </View>
           </View>
         </View>
-
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, marginBottom: spacing.s4 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
-            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: currBar }} />
-            <Text style={{ color: softOnPrimary, fontSize: 11 }}>This month</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
-            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: prevBar }} />
-            <Text style={{ color: softOnPrimary, fontSize: 11 }}>Last month</Text>
+        <View style={{ alignItems: 'flex-end', gap: spacing.s4 }}>
+          <Pressable
+            onPress={openMonthPicker}
+            hitSlop={10}
+            style={({ pressed }) => ({
+              borderRadius: radius.pill,
+              paddingHorizontal: spacing.s10,
+              paddingVertical: spacing.s6,
+              backgroundColor: surface2,
+              opacity: pressed ? 0.85 : 1
+            })}
+          >
+            <Text style={{ color: textPrimary, fontWeight: '700' }}>
+              {new Date(Y, M, 1).toLocaleString(undefined, { month: 'short', year: 'numeric' })}
+            </Text>
+          </Pressable>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600' }}>vs last month</Text>
+            <Text style={{ color: paceColor, fontWeight: '700' }}>
+              {pace === 0 ? 'Even' : `${pace > 0 ? '+' : '-'}$${Math.abs(pace).toFixed(0)}`}
+            </Text>
           </View>
         </View>
+      </View>
 
-        <Animated.View style={chartTransform ? { transform: chartTransform } : undefined}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, marginBottom: spacing.s4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
+          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: accentPrimary }} />
+          <Text style={{ color: textMuted, fontSize: 11, fontWeight: '600' }}>This month</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
+          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: withAlpha(textMuted, 0.5) }} />
+          <Text style={{ color: textMuted, fontSize: 11, fontWeight: '600' }}>Last month</Text>
+        </View>
+      </View>
+
+      <Animated.View style={chartTransform ? { transform: chartTransform } : undefined}>
         <View style={{ position: 'relative' }}>
           <Svg width={w} height={h}>
             <G>
-              <Line x1={left} y1={top} x2={left} y2={top + innerH} stroke={gridColor} strokeWidth={1} />
-              <Line x1={left} y1={top + innerH} x2={left + innerW} y2={top + innerH} stroke={gridColor} strokeWidth={1} />
+              <Line x1={left} y1={top} x2={left} y2={top + innerH} stroke={borderSubtle} strokeWidth={1} />
+              <Line x1={left} y1={top + innerH} x2={left + innerW} y2={top + innerH} stroke={borderSubtle} strokeWidth={1} />
 
               {[0, 0.25, 0.5, 0.75, 1].map((t, idx) => {
                 const y = top + innerH * (1 - t);
                 const val = Math.round(maxVal * t);
                 return (
                   <G key={`gl-${idx}`}>
-                    <Line x1={left} y1={y} x2={left + innerW} y2={y} stroke={gridColor} strokeDasharray="3 3" strokeWidth={1} />
+                    <Line x1={left} y1={y} x2={left + innerW} y2={y} stroke={borderSubtle} strokeDasharray="3 3" strokeWidth={1} />
                     <SvgText
                       x={left - 4}
                       y={y + 4 + (idx === 0 ? 4 : 0)}
                       fontSize="10"
-                      fill={softOnPrimary}
+                      fill={textMuted}
                       textAnchor="end"
                     >
                       {fmtMoneyShort(val)}
@@ -372,7 +360,7 @@ export const MonthCompareChart: React.FC = () => {
                     height={barH}
                     rx={Math.min(6, radius.sm / 2)}
                     ry={Math.min(6, radius.sm / 2)}
-                    fill={prevBar}
+                    fill={withAlpha(textMuted, 0.5)}
                     opacity={0.72}
                   />
                 );
@@ -393,9 +381,9 @@ export const MonthCompareChart: React.FC = () => {
                     height={barH}
                     rx={Math.min(6, radius.sm / 2)}
                     ry={Math.min(6, radius.sm / 2)}
-                    fill={currBar}
+                    fill={accentPrimary}
                     opacity={isActive ? 1 : 0.92}
-                    stroke={isActive ? heroText : 'none'}
+                    stroke={isActive ? accentPrimary : 'none'}
                     strokeWidth={isActive ? 1.5 : 0}
                   />
                 );
@@ -407,7 +395,7 @@ export const MonthCompareChart: React.FC = () => {
                   y1={top}
                   x2={centerX(hoverI)}
                   y2={top + innerH}
-                  stroke={heroText}
+                  stroke={accentPrimary}
                   strokeWidth={1}
                   strokeDasharray="4 4"
                   opacity={0.6}
@@ -418,7 +406,7 @@ export const MonthCompareChart: React.FC = () => {
                 const i = clamp(d - 1, 0, daysPlotThis - 1);
                 const xCenter = xForIndex(i) + seg / 2;
                 return (
-                  <SvgText key={`x-${d}`} x={xCenter} y={top + innerH + 14} fontSize="10" fill={softOnPrimary} textAnchor="middle">
+                  <SvgText key={`x-${d}`} x={xCenter} y={top + innerH + 14} fontSize="10" fill={textMuted} textAnchor="middle">
                     {d}
                   </SvgText>
                 );
@@ -448,63 +436,33 @@ export const MonthCompareChart: React.FC = () => {
                 borderRadius: radius.md,
                 paddingVertical: 8,
                 paddingHorizontal: spacing.s10,
-                backgroundColor: 'rgba(0,0,0,0.35)',
+                backgroundColor: surface2,
                 borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.35)'
+                borderColor: borderSubtle
               }}
             >
-              <Text style={{ color: softOnPrimary, fontSize: 11 }}>{dateLabel}</Text>
-              <Text style={{ color: heroText, fontWeight: '700' }}>{`$${daySpend.toFixed(0)} spent`}</Text>
-              <Text style={{ color: softOnPrimary, fontSize: 11 }}>{`MTD $${mtdAtDay.toFixed(0)}`}</Text>
+              <Text style={{ color: textMuted, fontSize: 11 }}>{dateLabel}</Text>
+              <Text style={{ color: textPrimary, fontWeight: '700' }}>{`$${daySpend.toFixed(0)} spent`}</Text>
+              <Text style={{ color: textMuted, fontSize: 11 }}>{`MTD $${mtdAtDay.toFixed(0)}`}</Text>
             </View>
           )}
         </View>
-        </Animated.View>
+      </Animated.View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.s2 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
-            <Pressable
-              accessibilityRole="button"
-              disabled={leftDisabled}
-              onPress={() => requestOffsetChange(-1)}
-              hitSlop={10}
-              style={({ pressed }) => ({
-                width: 40,
-                height: 40,
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: leftDisabled ? 0.35 : pressed ? 0.7 : 1
-              })}
-            >
-              <Icon name="arrow-bold-left" size={24} colorToken="icon.onPrimary" />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              disabled={rightDisabled}
-              onPress={() => requestOffsetChange(1)}
-              hitSlop={10}
-              style={({ pressed }) => ({
-                width: 40,
-                height: 40,
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: rightDisabled ? 0.35 : pressed ? 0.7 : 1
-              })}
-            >
-              <Icon name="arrow-bold-right" size={24} colorToken="icon.onPrimary" />
-            </Pressable>
-          </View>
-          <Pressable onPress={() => nav.navigate('InsightsModal')} hitSlop={12} style={({ pressed }) => ({
-            paddingVertical: spacing.s6,
-            paddingHorizontal: spacing.s10,
-            borderRadius: radius.pill,
-            backgroundColor: 'rgba(0,0,0,0.25)',
-            opacity: pressed ? 0.85 : 1
-          })}>
-            <Text style={{ color: heroText, fontWeight: '700' }}>See insights</Text>
-          </Pressable>
-        </View>
-      </LinearGradient>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.s2 }}>
+        <Text style={{ color: textMuted, fontSize: 11, fontWeight: '500', fontStyle: 'italic' }}>
+          Swipe to explore previous months
+        </Text>
+        <Pressable onPress={() => nav.navigate('InsightsModal')} hitSlop={12} style={({ pressed }) => ({
+          paddingVertical: spacing.s6,
+          paddingHorizontal: spacing.s10,
+          borderRadius: radius.pill,
+          backgroundColor: surface2,
+          opacity: pressed ? 0.85 : 1
+        })}>
+          <Text style={{ color: accentPrimary, fontWeight: '700' }}>See insights</Text>
+        </Pressable>
+      </View>
 
       <Modal visible={mpOpen} transparent animationType="fade" onRequestClose={() => setMpOpen(false)}>
         <TouchableWithoutFeedback onPress={() => setMpOpen(false)}>
@@ -512,9 +470,9 @@ export const MonthCompareChart: React.FC = () => {
             <TouchableWithoutFeedback>
               <View style={{ width: '100%', maxWidth: 360, backgroundColor: cardBg, borderRadius: radius.xl, padding: spacing.s16, ...{ shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 10 } }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
-                  <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 16 }}>Select month</Text>
+                  <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Select month</Text>
                   <Pressable onPress={() => setMpOpen(false)} hitSlop={8}>
-                    <Text style={{ color: get('text.muted') as string, fontSize: 16 }}>Close</Text>
+                    <Text style={{ color: textMuted, fontSize: 16 }}>Close</Text>
                   </Pressable>
                 </View>
 
@@ -525,16 +483,16 @@ export const MonthCompareChart: React.FC = () => {
                     style={{ padding: spacing.s8, opacity: mpYear <= minYear ? 0.3 : 1 }}
                     disabled={mpYear <= minYear}
                   >
-                    <Text style={{ color: get('text.primary') as string, fontSize: 20 }}>‹</Text>
+                    <Text style={{ color: textPrimary, fontSize: 20 }}>‹</Text>
                   </Pressable>
-                  <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 18 }}>{mpYear}</Text>
+                  <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 18 }}>{mpYear}</Text>
                   <Pressable
                     onPress={() => setMpYear(prev => (prev >= nowYear ? prev : prev + 1))}
                     hitSlop={8}
                     style={{ padding: spacing.s8, opacity: mpYear >= nowYear ? 0.4 : 1 }}
                     disabled={mpYear >= nowYear}
                   >
-                    <Text style={{ color: get('text.primary') as string, fontSize: 20 }}>›</Text>
+                    <Text style={{ color: textPrimary, fontSize: 20 }}>›</Text>
                   </Pressable>
                 </View>
 
@@ -554,13 +512,13 @@ export const MonthCompareChart: React.FC = () => {
                           paddingVertical: spacing.s10,
                           borderRadius: radius.lg,
                           alignItems: 'center',
-                          backgroundColor: isSelected ? get('surface.level2') : get('surface.level1'),
+                          backgroundColor: isSelected ? surface2 : surface1,
                           borderWidth: isSelected ? 2 : 1,
-                          borderColor: isSelected ? get('accent.primary') : get('border.subtle'),
+                          borderColor: isSelected ? accentPrimary : borderSubtle,
                           opacity: disabled ? 0.35 : 1
                         }}
                       >
-                        <Text style={{ color: get('text.primary') as string, fontWeight: isSelected ? '700' : '500' }}>{lbl}</Text>
+                        <Text style={{ color: textPrimary, fontWeight: isSelected ? '700' : '500' }}>{lbl}</Text>
                       </Pressable>
                     );
                   })}
@@ -570,7 +528,7 @@ export const MonthCompareChart: React.FC = () => {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-    </Pressable>
+    </View>
   );
 };
 
@@ -665,7 +623,7 @@ export const MonthCompareChartClassic: React.FC = () => {
   const rawMax = Math.max(1, ...dailyThis.slice(0, daysPlotThis), ...dailyPrev.slice(0, daysPlotPrev));
   const maxVal = niceCeilTight(rawMax);
   const left = Math.max(28, Math.min(38, labelW + 0));
-  const right = 35; // mirror left
+  const right = 16; // mirror left
 
   const innerW = Math.max(1, w - left - right);
   const innerH = Math.max(1, h - top - bottom);
@@ -739,7 +697,7 @@ export const MonthCompareChartClassic: React.FC = () => {
   return (
     <Pressable accessibilityRole="button"
       onPress={() => { if (hoverActive) setHoverActive(false); }}
-      style={{ backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s12 }}
+      style={{}}
       onLayout={e => setChartW(e.nativeEvent.layout.width)}
     >
       {/* hidden text to measure Y label width */}
@@ -902,7 +860,7 @@ export const MonthCompareChartClassic: React.FC = () => {
       {/* Bottom controls row (single pill with chevrons) */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.s4 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: get('surface.level2') as string, borderRadius: 999 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'transparent', borderRadius: 999 }}>
             <Pressable
               onPress={() => changeOffsetClassic(-1)}
               disabled={leftDisabledClassic}

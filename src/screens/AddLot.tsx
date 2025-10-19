@@ -13,19 +13,23 @@ import TransactionEditorSheet from '../components/invest/TransactionEditorSheet'
 import TransactionRow from '../components/invest/TransactionRow';
 import { formatCurrency, formatPercent } from '../lib/format';
 import { computePnL } from '../lib/positions';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export function AddLot() {
+export const AddLot = React.memo(() => {
   const [showTxSheet, setShowTxSheet] = React.useState(false);
   const [editLotState, setEditLotState] = React.useState<{id:string, lot:any} | null>(null);
   const { get } = useThemeTokens();
   const route = useRoute<any>();
   const nav = useNavigation<any>();
+  const insets = useSafeAreaInsets();
 
   const symbol = route.params?.symbol as string;
   const portfolioId = route.params?.portfolioId as (string | undefined);
 
   const store = useInvestStore();
-  const { quotes = {}, portfolios = {}, holdings = {} } = store as any;
+  const quotes = useInvestStore(s => s.quotes);
+  const portfolios = useInvestStore(s => s.portfolios);
+  const holdings = useInvestStore(s => s.holdings);
 
   const q: any = quotes[symbol] || {};
   const p = portfolioId ? portfolios[portfolioId] : null;
@@ -105,13 +109,13 @@ export function AddLot() {
 
   // Position summary
   const lots = (holding?.lots ?? []) as any[];
-  const onEditLot = (lot: any) => {
+  const onEditLot = React.useCallback((lot: any) => {
     setEditLotState({ id: lot.id, lot });
     setShowTxSheet(true);
-  };
-  const onDeleteLot = async (lot: any) => {
+  }, []);
+  const onDeleteLot = React.useCallback(async (lot: any) => {
     try { await (store as any).removeLot(symbol, lot.id, { portfolioId }); } catch {}
-  };
+  }, [store, symbol, portfolioId]);
 
   const pnl = computePnL(lots, Number(last) || 0);
   const qty = pnl.qty || 0;
@@ -137,7 +141,10 @@ export function AddLot() {
   const onPrimary = get('text.onPrimary') as string;
   const primary = get('component.button.primary.bg') as string;
 
-  const onSave = async () => {
+  // Get fundamentals data
+  const fundamentals = q?.fundamentals;
+
+  const onSave = React.useCallback(async () => {
     const qn = Number(qtyInput);
     const pr = Number(priceInput);
     if (!symbol || !qn || !pr) return;
@@ -157,54 +164,61 @@ export function AddLot() {
       } catch {}
       try { await store.refreshQuotes(); } catch {}
       try { setShowTxSheet(false); } catch {}
-      nav.goBack();
+      // Use requestAnimationFrame to defer navigation
+      requestAnimationFrame(() => {
+        nav.goBack();
+      });
     } catch (e) {
       console.error(e);
     }
-  };
+  }, [qtyInput, priceInput, symbol, holding, q, cur, store, side, date, portfolioId, nav]);
 
   return (
-    <Screen>
+    <Screen inTab style={{ paddingBottom: 0 }}>
       <ScrollView
         alwaysBounceVertical={Platform.OS === 'ios'}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        contentContainerStyle={{ padding: spacing.s16, gap: spacing.s16 }}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + spacing.s24 }}
       >
 
-        {/* Chart */}
-        <Card style={{ padding: spacing.s16 }}>
-
-          {/* Header price + change */}
-          <View style={{ gap: spacing.s4 }}>
-            <Text style={{ color: text, fontWeight:'800', fontSize: 16 }}>{symbol}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s8 }}>
-              <Text style={{ color: text, fontSize: 28, fontWeight: '800' }}>{formatCurrency(Number(last || 0), cur, { compact: false })}</Text>
-              <Text style={{ color: (Number(changePct) >= 0 ? good : bad), fontSize: 14, fontWeight: '700' }}>
-                {formatCurrency(Number(change || 0), cur, { compact: false })} ({formatPercent(Number(changePct || 0))})
+        {/* Chart Section - No Card */}
+        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s12 }}>
+          {/* Header */}
+          <View>
+            <Text style={{ color: text, fontWeight:'800', fontSize: 32, letterSpacing: -0.8 }}>{symbol}</Text>
+            {fundamentals?.companyName && fundamentals.companyName !== symbol && (
+              <Text style={{ color: muted, fontSize: 15, marginTop: spacing.s2 }}>{fundamentals.companyName}</Text>
+            )}
+            <Text style={{ color: text, fontSize: 40, fontWeight: '800', marginTop: spacing.s8, letterSpacing: -1 }}>
+              {formatCurrency(Number(last || 0), cur, { compact: false })}
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6, marginTop: spacing.s4 }}>
+              <Text style={{ color: (Number(changePct) >= 0 ? good : bad), fontSize: 16, fontWeight: '700' }}>
+                {formatCurrency(Number(change || 0), cur, { compact: false })}
+              </Text>
+              <Text style={{ color: (Number(changePct) >= 0 ? good : bad), fontSize: 16, fontWeight: '700' }}>
+                ({formatPercent(Number(changePct || 0))})
               </Text>
             </View>
           </View>
-    
-          <View style={{ marginTop: spacing.s12, marginHorizontal: -spacing.s8 }}>
-            <LineChart
+
+          {/* Chart */}
+          <LineChart
             data={chartToShow}
             height={200}
-            yAxisWidth={28}
-            padding={{ left: 10, bottom: 17, top: 8 }}
-            
+            yAxisWidth={0}
+            padding={{ left: 12, right: 12, bottom: 20, top: 10 }}
             showArea
             currency={cur}
             xTickStrategy={xTickStrategy}
           />
-        </View>
-          {/* Timeframes (single row under chart) */}
+
+          {/* Timeframes */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: spacing.s8, paddingVertical: spacing.s8 }}
-            bounces
-            overScrollMode="always"
+            contentContainerStyle={{ gap: spacing.s6 }}
           >
             {(['1D','5D','1M','6M','YTD','1Y','ALL'] as const).map(k => {
               const on = tf===k;
@@ -212,102 +226,491 @@ export function AddLot() {
                 <Pressable
                   key={k}
                   onPress={() => setTf(k)}
-                  hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Set interval ${k}`}
-                  style={{ justifyContent: 'center', paddingHorizontal: spacing.s12, paddingVertical: spacing.s8, borderRadius: radius.pill, backgroundColor: on ? (get('accent.primary') as string) : (get('surface.level2') as string) }}
+                  style={{
+                    paddingHorizontal: spacing.s14,
+                    paddingVertical: spacing.s8,
+                    borderRadius: radius.pill,
+                    backgroundColor: on ? (get('accent.primary') as string) : bg,
+                    borderWidth: on ? 0 : 1,
+                    borderColor: border
+                  }}
                 >
-                  <Text style={{ color: on ? (get('text.onPrimary') as string) : (get('text.primary') as string), fontWeight: '700', fontSize: 14 }}>{k}</Text>
+                  <Text style={{ color: on ? onPrimary : text, fontWeight: '700', fontSize: 13 }}>
+                    {k}
+                  </Text>
                 </Pressable>
               );
             })}
           </ScrollView>
-    
-          
+        </View>
 
-        </Card>
+        {/* Company Info - No Card, Clean Design */}
+        {fundamentals && (fundamentals.sector || fundamentals.industry || fundamentals.description) && (
+          <View style={{ paddingHorizontal: spacing.s16, marginTop: spacing.s24 }}>
+            <Text style={{ color: text, fontWeight: '800', fontSize: 20, marginBottom: spacing.s12 }}>About</Text>
+
+            {(fundamentals.sector || fundamentals.industry) && (
+              <View style={{ flexDirection: 'row', gap: spacing.s8, marginBottom: spacing.s12 }}>
+                {fundamentals.sector && (
+                  <View
+                    style={{
+                      paddingHorizontal: spacing.s12,
+                      paddingVertical: spacing.s6,
+                      borderRadius: radius.pill,
+                      backgroundColor: bg,
+                      borderWidth: 1,
+                      borderColor: border,
+                    }}
+                  >
+                    <Text style={{ color: text, fontSize: 13, fontWeight: '600' }}>{fundamentals.sector}</Text>
+                  </View>
+                )}
+                {fundamentals.industry && (
+                  <View
+                    style={{
+                      paddingHorizontal: spacing.s12,
+                      paddingVertical: spacing.s6,
+                      borderRadius: radius.pill,
+                      backgroundColor: bg,
+                      borderWidth: 1,
+                      borderColor: border,
+                    }}
+                  >
+                    <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>{fundamentals.industry}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {fundamentals.description && (
+              <Text style={{ color: text, fontSize: 14, lineHeight: 20, opacity: 0.8 }} numberOfLines={3}>
+                {fundamentals.description}
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* Key Metrics - Grid Layout */}
+        {fundamentals && (
+          <View style={{ paddingHorizontal: spacing.s16, marginTop: spacing.s24 }}>
+            <Text style={{ color: text, fontWeight: '800', fontSize: 20, marginBottom: spacing.s12 }}>Key Metrics</Text>
+
+            <Card>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s12 }}>
+                {/* Market Cap */}
+                <View style={{ width: '47%' }}>
+                  <Text style={{ color: muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: spacing.s4 }}>
+                    MARKET CAP
+                  </Text>
+                  <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>
+                    {fundamentals.marketCap !== undefined ? formatCurrency(fundamentals.marketCap, cur, { compact: true }) : '-'}
+                  </Text>
+                </View>
+
+                {/* P/E Ratio */}
+                <View style={{ width: '47%' }}>
+                  <Text style={{ color: muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: spacing.s4 }}>
+                    P/E RATIO
+                  </Text>
+                  <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>
+                    {fundamentals.peRatio !== undefined ? fundamentals.peRatio.toFixed(2) : '-'}
+                  </Text>
+                </View>
+
+                {/* Forward P/E */}
+                <View style={{ width: '47%' }}>
+                  <Text style={{ color: muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: spacing.s4 }}>
+                    FORWARD P/E
+                  </Text>
+                  <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>
+                    {fundamentals.forwardPE !== undefined ? fundamentals.forwardPE.toFixed(2) : '-'}
+                  </Text>
+                </View>
+
+                {/* EPS */}
+                <View style={{ width: '47%' }}>
+                  <Text style={{ color: muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: spacing.s4 }}>
+                    EPS (TTM)
+                  </Text>
+                  <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>
+                    {fundamentals.eps !== undefined ? formatCurrency(fundamentals.eps, cur) : '-'}
+                  </Text>
+                </View>
+
+                {/* Dividend Yield */}
+                <View style={{ width: '47%' }}>
+                  <Text style={{ color: muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: spacing.s4 }}>
+                    DIVIDEND YIELD
+                  </Text>
+                  <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>
+                    {fundamentals.dividendYield !== undefined && fundamentals.dividendYield > 0 ? `${(fundamentals.dividendYield * 100).toFixed(2)}%` : '-'}
+                  </Text>
+                </View>
+
+                {/* Beta */}
+                <View style={{ width: '47%' }}>
+                  <Text style={{ color: muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: spacing.s4 }}>
+                    BETA
+                  </Text>
+                  <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>
+                    {fundamentals.beta !== undefined ? fundamentals.beta.toFixed(2) : '-'}
+                  </Text>
+                </View>
+
+                {/* Avg Volume */}
+                <View style={{ width: '47%' }}>
+                  <Text style={{ color: muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: spacing.s4 }}>
+                    AVG VOLUME
+                  </Text>
+                  <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>
+                    {fundamentals.avgVolume !== undefined ? `${(fundamentals.avgVolume / 1000000).toFixed(2)}M` : '-'}
+                  </Text>
+                </View>
+
+                {/* 52W High */}
+                <View style={{ width: '47%' }}>
+                  <Text style={{ color: muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: spacing.s4 }}>
+                    52W HIGH
+                  </Text>
+                  <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>
+                    {fundamentals.week52High !== undefined ? formatCurrency(fundamentals.week52High, cur) : '-'}
+                  </Text>
+                </View>
+
+                {/* 52W Low */}
+                <View style={{ width: '47%' }}>
+                  <Text style={{ color: muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: spacing.s4 }}>
+                    52W LOW
+                  </Text>
+                  <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>
+                    {fundamentals.week52Low !== undefined ? formatCurrency(fundamentals.week52Low, cur) : '-'}
+                  </Text>
+                </View>
+              </View>
+            </Card>
+          </View>
+        )}
+
+        {/* Earnings Performance Charts */}
+        {fundamentals?.earningsHistory && fundamentals.earningsHistory.length > 0 && (
+          <View style={{ paddingHorizontal: spacing.s16, marginTop: spacing.s24 }}>
+            <Text style={{ color: text, fontWeight: '800', fontSize: 20, marginBottom: spacing.s12 }}>Earnings Performance</Text>
+
+            <Card>
+              {/* EPS Chart: Estimate vs Actual */}
+              <View style={{ gap: spacing.s12 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>EPS: Estimate vs Actual</Text>
+                  <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
+                      <View style={{ width: 12, height: 3, backgroundColor: get('accent.primary') as string, borderRadius: 2 }} />
+                      <Text style={{ color: muted, fontSize: 11 }}>Actual</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
+                      <View style={{ width: 12, height: 3, backgroundColor: muted, borderRadius: 2, opacity: 0.4 }} />
+                      <Text style={{ color: muted, fontSize: 11 }}>Estimate</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Custom EPS Chart - Yahoo Finance Style */}
+                <View style={{ height: 200, marginTop: spacing.s8 }}>
+                  {(() => {
+                    const sortedEarnings = [...fundamentals.earningsHistory].sort((a, b) => a.date - b.date).slice(-4);
+                    const allValues = sortedEarnings.flatMap(e => [e.actual, e.estimate ?? 0]).filter(v => v !== undefined) as number[];
+                    const maxVal = Math.max(...allValues);
+                    const minVal = Math.min(...allValues);
+
+                    // Add 15% padding to top and bottom for better visual spacing
+                    const rawRange = maxVal - minVal || 1;
+                    const paddingPercent = 0.15;
+                    const paddedMax = maxVal + (rawRange * paddingPercent);
+                    const paddedMin = Math.max(0, minVal - (rawRange * paddingPercent)); // Don't go below 0
+                    const range = paddedMax - paddedMin;
+
+                    const chartHeight = 120;
+                    const padding = 20;
+                    const topPadding = 10;
+
+                    const getY = (value: number) => {
+                      return topPadding + ((paddedMax - value) / range) * chartHeight;
+                    };
+
+                    return (
+                      <View style={{ position: 'relative', height: '100%', paddingHorizontal: padding }}>
+                        {/* Grid lines */}
+                        {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => (
+                          <View
+                            key={i}
+                            style={{
+                              position: 'absolute',
+                              left: padding,
+                              right: padding,
+                              top: topPadding + chartHeight * ratio,
+                              height: 1,
+                              backgroundColor: border,
+                              opacity: ratio === 0.5 ? 0.3 : 0.15,
+                            }}
+                          />
+                        ))}
+
+                        {/* Chart area */}
+                        <View style={{ height: chartHeight + topPadding * 2, flexDirection: 'row', justifyContent: 'space-between' }}>
+                          {sortedEarnings.map((earning, idx) => {
+                            const actual = earning.actual;
+                            const estimate = earning.estimate ?? 0;
+                            const hasActual = actual !== undefined;
+                            const beat = hasActual && actual >= estimate;
+                            const actualY = hasActual ? getY(actual) : 0;
+                            const estimateY = getY(estimate);
+
+                            return (
+                              <View key={idx} style={{ flex: 1, alignItems: 'center', position: 'relative', height: '100%' }}>
+                                {/* Connecting line for estimate */}
+                                {idx < sortedEarnings.length - 1 && (
+                                  <View
+                                    style={{
+                                      position: 'absolute',
+                                      top: estimateY,
+                                      left: '50%',
+                                      width: 100 / sortedEarnings.length + '%',
+                                      height: 1,
+                                      backgroundColor: muted,
+                                      opacity: 0.3,
+                                    }}
+                                  />
+                                )}
+
+                                {/* Estimate dot (outlined) */}
+                                <View
+                                  style={{
+                                    position: 'absolute',
+                                    top: estimateY - 6,
+                                    width: 12,
+                                    height: 12,
+                                    borderRadius: 6,
+                                    borderWidth: 2,
+                                    borderColor: muted,
+                                    borderStyle: 'dashed',
+                                    backgroundColor: get('surface.level1') as string,
+                                  }}
+                                />
+
+                                {/* Actual dot (filled) - only show if actual exists */}
+                                {hasActual && (
+                                  <View
+                                    style={{
+                                      position: 'absolute',
+                                      top: actualY - 7,
+                                      width: 14,
+                                      height: 14,
+                                      borderRadius: 7,
+                                      backgroundColor: beat ? good : bad,
+                                    }}
+                                  />
+                                )}
+                              </View>
+                            );
+                          })}
+                        </View>
+
+                        {/* X-axis labels */}
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.s8 }}>
+                          {sortedEarnings.map((earning, idx) => {
+                            const actual = earning.actual;
+                            const estimate = earning.estimate ?? 0;
+                            const hasActual = actual !== undefined;
+                            const beat = hasActual && actual >= estimate;
+
+                            return (
+                              <View key={idx} style={{ flex: 1, alignItems: 'center', gap: spacing.s2 }}>
+                                <Text style={{ color: text, fontSize: 11, fontWeight: '700' }}>
+                                  {earning.quarter}
+                                </Text>
+                                <Text style={{ color: hasActual ? (beat ? good : bad) : muted, fontSize: 12, fontWeight: '700' }}>
+                                  ${hasActual ? actual.toFixed(2) : estimate.toFixed(2)}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    );
+                  })()}
+                </View>
+              </View>
+
+              {/* Earnings Detail Table */}
+              <View style={{ gap: spacing.s10, marginTop: spacing.s16, paddingTop: spacing.s16, borderTopWidth: 1, borderColor: border }}>
+                <Text style={{ color: text, fontWeight: '700', fontSize: 15, marginBottom: spacing.s4 }}>Recent Earnings</Text>
+                {[...fundamentals.earningsHistory].sort((a, b) => b.date - a.date).slice(0, 4).map((earning, idx, arr) => {
+                  const actual = earning.actual;
+                  const estimate = earning.estimate ?? 0;
+                  const hasActual = actual !== undefined;
+                  const beat = hasActual && actual > estimate;
+                  const diff = hasActual ? actual - estimate : 0;
+                  const diffPct = hasActual && estimate !== 0 ? (diff / Math.abs(estimate)) * 100 : 0;
+
+                  return (
+                    <View key={idx}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.s6 }}>
+                        <Text style={{ color: text, fontWeight: '700', fontSize: 14 }}>{earning.quarter}</Text>
+                        {hasActual && diff !== 0 && (
+                          <View
+                            style={{
+                              paddingHorizontal: spacing.s8,
+                              paddingVertical: spacing.s4,
+                              borderRadius: radius.pill,
+                              backgroundColor: beat ? good : bad,
+                              opacity: 0.15,
+                            }}
+                          >
+                            <Text style={{ color: beat ? good : bad, fontWeight: '700', fontSize: 11 }}>
+                              {beat ? '▲' : '▼'} {Math.abs(diffPct).toFixed(1)}%
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: muted, fontSize: 11, marginBottom: spacing.s2 }}>Estimate</Text>
+                          <Text style={{ color: text, fontSize: 13 }}>{formatCurrency(estimate, cur)}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: muted, fontSize: 11, marginBottom: spacing.s2 }}>Actual</Text>
+                          <Text style={{ color: hasActual ? (beat ? good : bad) : muted, fontWeight: hasActual ? '700' : '600', fontSize: 13 }}>
+                            {hasActual ? formatCurrency(actual, cur) : '-'}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: muted, fontSize: 11, marginBottom: spacing.s2 }}>Difference</Text>
+                          <Text style={{ color: hasActual ? (beat ? good : bad) : muted, fontWeight: '600', fontSize: 13 }}>
+                            {hasActual ? (diff >= 0 ? '+' : '') + formatCurrency(diff, cur) : '-'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {idx < arr.length - 1 && (
+                        <View style={{ height: 1, backgroundColor: border, marginTop: spacing.s10 }} />
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </Card>
+          </View>
+        )}
 
         {/* Position summary */}
+        <View style={{ paddingHorizontal: spacing.s16, marginTop: spacing.s24 }}>
+        <Text style={{ color: text, fontWeight: '800', fontSize: 20, marginBottom: spacing.s12 }}>Your Position</Text>
         <Card>
-          <View style={{ gap: spacing.s8 }}>
-            <Text style={{ color: text, fontWeight: '800' }}>Position</Text>
-            <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
-              <Text style={{ color: muted }}>Day's gain</Text>
-              <Text style={{ color: dayGain >= 0 ? good : bad, fontWeight:'700' }}>{formatCurrency(dayGain, cur)}</Text>
+          <View style={{ gap: spacing.s12 }}>
+            {/* Gains Row */}
+            <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: muted, fontSize: 12, marginBottom: spacing.s4 }}>Day's gain</Text>
+                <Text style={{ color: dayGain >= 0 ? good : bad, fontWeight:'700', fontSize: 16 }}>
+                  {formatCurrency(dayGain, cur)}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: muted, fontSize: 12, marginBottom: spacing.s4 }}>Total gain</Text>
+                <Text style={{ color: totalGain >= 0 ? good : bad, fontWeight:'700', fontSize: 16 }}>
+                  {formatCurrency(totalGain, cur)}
+                </Text>
+              </View>
             </View>
-            <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
-              <Text style={{ color: muted }}>Total gain</Text>
-              <Text style={{ color: totalGain >= 0 ? good : bad, fontWeight:'700' }}>{formatCurrency(totalGain, cur)}</Text>
-            </View>
-            <View style={{ height: 1, backgroundColor: border, marginVertical: spacing.s8 }} />
-            <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
-              <Text style={{ color: muted }}>Total cost</Text>
-              <Text style={{ color: text }}>{formatCurrency(totalCost, cur)}</Text>
-            </View>
-            <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
-              <Text style={{ color: muted }}>Shares</Text>
-              <Text style={{ color: text }}>{qty}</Text>
-            </View>
-            <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
-              <Text style={{ color: muted }}>Average cost</Text>
-              <Text style={{ color: text }}>{formatCurrency(avgCost, cur)}</Text>
-            </View>
-            <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
-              <Text style={{ color: muted }}>Market value</Text>
-              <Text style={{ color: text }}>{formatCurrency(mktValue, cur)}</Text>
+
+            {/* Details */}
+            <View style={{ gap: spacing.s8, paddingTop: spacing.s8, borderTopWidth: 1, borderColor: border }}>
+              <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
+                <Text style={{ color: muted, fontSize: 13 }}>Market value</Text>
+                <Text style={{ color: text, fontWeight: '600', fontSize: 14 }}>{formatCurrency(mktValue, cur)}</Text>
+              </View>
+              <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
+                <Text style={{ color: muted, fontSize: 13 }}>Total cost</Text>
+                <Text style={{ color: text, fontWeight: '600', fontSize: 14 }}>{formatCurrency(totalCost, cur)}</Text>
+              </View>
+              <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
+                <Text style={{ color: muted, fontSize: 13 }}>Shares</Text>
+                <Text style={{ color: text, fontWeight: '600', fontSize: 14 }}>{qty}</Text>
+              </View>
+              <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
+                <Text style={{ color: muted, fontSize: 13 }}>Average cost</Text>
+                <Text style={{ color: text, fontWeight: '600', fontSize: 14 }}>{formatCurrency(avgCost, cur)}</Text>
+              </View>
             </View>
           </View>
           
 
         
-          {/* Divider */}
-          <View style={{ height: 1, backgroundColor: get('border.subtle') as string, marginVertical: spacing.s12 }} />
-
-          {/* Actions: Add transaction / View history */}
-          <View style={{ gap: spacing.s8 }}>
+          {/* Actions */}
+          <View style={{ gap: spacing.s8, paddingTop: spacing.s12, borderTopWidth: 1, borderColor: border, marginTop: spacing.s4 }}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Add transaction"
               onPress={() => setShowTxSheet(true)}
-              style={{ backgroundColor: get('component.button.primary.bg') as string, height: 44, borderRadius: radius.lg, alignItems:'center', justifyContent:'center' }}
+              style={({ pressed }) => ({
+                backgroundColor: primary,
+                height: 44,
+                borderRadius: radius.md,
+                alignItems:'center',
+                justifyContent:'center',
+                opacity: pressed ? 0.8 : 1
+              })}
             >
-              <Text style={{ color: get('text.onPrimary') as string, fontWeight:'700' }}>Add Transaction</Text>
+              <Text style={{ color: onPrimary, fontWeight:'700', fontSize: 15 }}>Add Transaction</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="View all transactions"
               onPress={() => nav.navigate('HoldingHistory' as never, { symbol, portfolioId } as never)}
-              style={({ pressed }) => ({ height: 44, borderRadius: radius.lg, alignItems:'center', justifyContent:'center', backgroundColor: pressed ? (get('surface.level2') as string) : (get('component.button.secondary.bg') as string), borderWidth: 1, borderColor: get('component.button.secondary.border') as string })}
+              style={({ pressed }) => ({
+                height: 44,
+                borderRadius: radius.md,
+                alignItems:'center',
+                justifyContent:'center',
+                backgroundColor: bg,
+                opacity: pressed ? 0.8 : 1
+              })}
             >
-              <Text style={{ color: text, fontWeight:'700' }}>View Transaction History</Text>
+              <Text style={{ color: text, fontWeight:'700', fontSize: 15 }}>View History</Text>
             </Pressable>
           </View>
 
           {/* Recent transactions preview */}
           {lots.length > 0 ? (
-            <View style={{ marginTop: spacing.s12 }}>
-              <Text style={{ color: text, fontWeight:'800', marginBottom: spacing.s8 }}>Recent transactions</Text>
-              <View style={{ borderTopWidth: 1, borderColor: get('border.subtle') as string }}>
+            <View style={{ paddingTop: spacing.s12, marginTop: spacing.s12, borderTopWidth: 1, borderColor: border }}>
+              <Text style={{ color: text, fontWeight:'800', marginBottom: spacing.s8, fontSize: 16 }}>Recent Transactions</Text>
+              <View style={{ borderTopWidth: 1, borderColor: border }}>
                 {[...lots].sort((a:any,b:any)=> new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0,3).map((l:any, i:number, arr:any[]) => (
                   <View key={l.id || i}>
                     <TransactionRow lot={l} currency={cur} onEdit={onEditLot} onDelete={onDeleteLot} />
-                    {i < arr.length - 1 ? <View style={{ height: 1, backgroundColor: get('border.subtle') as string }} /> : null}
+                    {i < arr.length - 1 ? <View style={{ height: 1, backgroundColor: border }} /> : null}
                   </View>
                 ))}
               </View>
               <Pressable
                 accessibilityRole="button"
                 onPress={() => nav.navigate('HoldingHistory' as never, { symbol, portfolioId } as never)}
-                style={({ pressed }) => ({ alignSelf:'flex-start', marginTop: spacing.s8, paddingHorizontal: spacing.s12, height: 36, borderRadius: radius.pill, alignItems:'center', justifyContent:'center', backgroundColor: pressed ? (get('surface.level2') as string) : (get('component.button.secondary.bg') as string), borderWidth: 1, borderColor: get('component.button.secondary.border') as string })}
+                style={({ pressed }) => ({
+                  alignSelf:'flex-start',
+                  marginTop: spacing.s10,
+                  paddingHorizontal: spacing.s12,
+                  paddingVertical: spacing.s6,
+                  borderRadius: radius.pill,
+                  backgroundColor: bg,
+                  opacity: pressed ? 0.7 : 1
+                })}
               >
-                <Text style={{ color: text, fontWeight:'700' }}>View all</Text>
+                <Text style={{ color: text, fontWeight:'700', fontSize: 13 }}>View all</Text>
               </Pressable>
             </View>
           ) : null}
         </Card>
-
-        
-        
+        </View>
 
       </ScrollView>
 
@@ -324,4 +727,6 @@ export function AddLot() {
       <DateTimeSheet visible={open} date={date} onCancel={() => setOpen(false)} onConfirm={(d)=>{ setDate(d); setOpen(false); }} />
     </Screen>
   );
-}
+});
+
+AddLot.displayName = 'AddLot';

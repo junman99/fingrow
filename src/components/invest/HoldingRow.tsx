@@ -1,18 +1,39 @@
 
 import React from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { Pressable, View, Text } from 'react-native';
+import { Pressable, View, Text, InteractionManager } from 'react-native';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
 import SparklineMini from './SparklineMini';
 import { useInvestStore } from '../../store/invest';
 import { formatCurrency, formatPercent } from '../../lib/format';
 
-export default function HoldingRow({ sym, onPress, portfolioId, variant = 'card' }: { sym: string; onPress?: () => void; portfolioId?: string; variant?: 'card' | 'list' }) {
+const HoldingRow = React.memo(({ sym, onPress, portfolioId, variant = 'card' }: { sym: string; onPress?: () => void; portfolioId?: string; variant?: 'card' | 'list' }) => {
   const { get } = useThemeTokens();
-  const { holdings, quotes, profile, portfolios } = useInvestStore();
+  const holdings = useInvestStore(s => s.holdings);
+  const quotes = useInvestStore(s => s.quotes);
+  const portfolios = useInvestStore(s => s.portfolios);
   const nav = useNavigation<any>();
-  const handlePress = React.useCallback(() => { if (typeof onPress === 'function') return onPress(); try { nav.navigate('AddLot', { symbol: sym, portfolioId }); } catch (e) {} }, [onPress, nav, sym, portfolioId]);
+  const handlePress = React.useCallback(() => {
+    const isCashRow = sym === 'CASH';
+    const targetScreen = isCashRow ? 'CashManagement' : 'AddLot';
+    const params = isCashRow ? { portfolioId } : { symbol: sym, portfolioId };
+
+    if (typeof onPress === 'function') {
+      onPress();
+      // Give sheet a moment to start closing before navigating
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          try { nav.navigate(targetScreen, params); } catch (e) {}
+        }, 50);
+      });
+      return;
+    }
+    // Defer navigation to after interactions complete
+    InteractionManager.runAfterInteractions(() => {
+      try { nav.navigate(targetScreen, params); } catch (e) {}
+    });
+  }, [onPress, nav, sym, portfolioId]);
 
 
   const isCash = sym === 'CASH';
@@ -46,14 +67,15 @@ export default function HoldingRow({ sym, onPress, portfolioId, variant = 'card'
       onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={`Open ${sym}`}
-      style={{
+      style={({ pressed }) => ({
         backgroundColor: variant==='card' ? cardBg : variant==='list' ? 'transparent' : bgBase,
         borderRadius: variant==='card' ? radius.lg : 0,
         borderWidth: variant==='card' ? 1 : 0,
         borderColor: variant==='card' ? cardBorder : 'transparent',
         padding: variant==='card' ? spacing.s16 : spacing.s12,
         marginBottom: variant==='card' ? spacing.s8 : 0,
-      }}
+        opacity: pressed ? 0.7 : 1,
+      })}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         {/* Left: symbol/name */}
@@ -94,7 +116,11 @@ export default function HoldingRow({ sym, onPress, portfolioId, variant = 'card'
       </View>
     </Pressable>
   );
-}
+});
+
+HoldingRow.displayName = 'HoldingRow';
+
+export default HoldingRow;
 
 function withAlpha(color: string, alpha: number): string {
   if (!color) return color;

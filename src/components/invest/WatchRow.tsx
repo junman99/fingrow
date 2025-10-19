@@ -12,7 +12,19 @@ export default function WatchRow({ sym, onPress }: { sym: string; onPress?: () =
   const { get } = useThemeTokens();
   const { quotes } = useInvestStore();
   const nav = useNavigation<any>();
-  const handlePress = React.useCallback(() => { if (typeof onPress === 'function') return onPress(); try { nav.navigate('Instrument', { sym }); } catch (e) {} }, [onPress, nav, sym]);
+  const handlePress = React.useCallback(() => {
+    if (typeof onPress === 'function') {
+      onPress();
+      // Give sheet a moment to start closing before navigating
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          try { nav.navigate('AddLot', { symbol: sym }); } catch (e) {}
+        }, 50);
+      });
+      return;
+    }
+    try { nav.navigate('AddLot', { symbol: sym }); } catch (e) {}
+  }, [onPress, nav, sym]);
 
   const q = quotes[sym];
   const _line = (q?.line || []);

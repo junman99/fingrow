@@ -124,7 +124,7 @@ export default function DateTimeSheet({ visible, date, onCancel, onConfirm }: Pr
           const active = idx === selectedIndex;
           return (
             <View key={`${value}-${idx}`} style={{ height: ITEM_HEIGHT, justifyContent: 'center', alignItems: 'center' }}>
-              <Text style={{ color: active ? accent : textMuted, fontSize: 22, fontWeight: active ? '700' : '500' }}>
+              <Text style={{ color: active ? accent : textMuted, fontSize: 24, fontWeight: active ? '800' : '500', letterSpacing: active ? -0.5 : 0 }}>
                 {formatter(value)}
               </Text>
             </View>
@@ -141,7 +141,9 @@ export default function DateTimeSheet({ visible, date, onCancel, onConfirm }: Pr
           height: ITEM_HEIGHT,
           borderTopWidth: 1,
           borderBottomWidth: 1,
-          borderColor: 'rgba(255,255,255,0.16)',
+          borderColor: accent,
+          borderRadius: radius.md,
+          backgroundColor: 'rgba(255,255,255,0.03)',
         }}
       />
     </View>
@@ -227,14 +229,14 @@ export default function DateTimeSheet({ visible, date, onCancel, onConfirm }: Pr
 
   const overlayStyle = {
     flex: 1,
-    backgroundColor: 'rgba(8,10,18,0.72)',
+    backgroundColor: 'rgba(0,0,0,0.75)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.s16,
   } as const;
 
-  const modalBody = 'rgba(11,13,22,0.88)';
-  const modalBorder = 'rgba(255,255,255,0.18)';
+  const modalBody = get('surface.level1') as string;
+  const modalBorder = get('border.subtle') as string;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
@@ -247,81 +249,161 @@ export default function DateTimeSheet({ visible, date, onCancel, onConfirm }: Pr
             width: '100%',
             maxWidth: 400,
             maxHeight: 560,
-            borderRadius: radius.xl,
-            padding: spacing.s16,
+            borderRadius: 20,
+            paddingTop: spacing.s20,
+            paddingHorizontal: spacing.s24,
+            paddingBottom: spacing.s24,
             backgroundColor: modalBody,
             borderWidth: 1,
             borderColor: modalBorder,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.4,
+            shadowRadius: 24,
+            elevation: 12,
           }}
         >
       {/* Header */}
-      <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between', marginBottom: spacing.s8 }}>
-        <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={12}><Text style={{ color: accent, fontWeight:'700' }}>Cancel</Text></Pressable>
-        <Text style={{ color: textPrimary, fontWeight:'700' }}>{sel.toDateString()} · {sel.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
-        <Pressable onPress={onDone} hitSlop={12}><Text style={{ color: accent, fontWeight:'700' }}>Done</Text></Pressable>
+      <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between', marginBottom: spacing.s20, gap: spacing.s8 }}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onCancel}
+          hitSlop={12}
+          style={({ pressed }) => ({
+            paddingHorizontal: spacing.s12,
+            paddingVertical: spacing.s8,
+            borderRadius: radius.lg,
+            backgroundColor: chipBg,
+            opacity: pressed ? 0.85 : 1
+          })}
+        >
+          <Text style={{ color: textPrimary, fontWeight:'600', fontSize: 14 }}>Cancel</Text>
+        </Pressable>
+        <Text style={{ color: textPrimary, fontWeight:'700', fontSize: 13, flex: 1, textAlign: 'center' }}>{sel.toDateString()} · {sel.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+        <Pressable
+          onPress={onDone}
+          hitSlop={12}
+          style={({ pressed }) => ({
+            paddingHorizontal: spacing.s16,
+            paddingVertical: spacing.s8,
+            borderRadius: radius.lg,
+            backgroundColor: accent,
+            opacity: pressed ? 0.85 : 1
+          })}
+        >
+          <Text style={{ color: onAccent, fontWeight:'700', fontSize: 14 }}>Done</Text>
+        </Pressable>
       </View>
 
       <View style={{ position: 'relative', marginBottom: spacing.s12 }}>
         {/* Month switcher */}
-        <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between', marginBottom: spacing.s8 }}>
-          <Pressable onPress={() => setCursor(new Date(y, m-1, 1, sel.getHours(), sel.getMinutes()))} hitSlop={12}>
-            <Text style={{ color: accent, fontWeight:'700' }}>{'‹'}</Text>
+        <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between', marginBottom: spacing.s12, gap: spacing.s8 }}>
+          <Pressable
+            onPress={() => setCursor(new Date(y, m-1, 1, sel.getHours(), sel.getMinutes()))}
+            style={({ pressed }) => ({
+              width: 36,
+              height: 36,
+              borderRadius: radius.lg,
+              backgroundColor: chipBg,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: pressed ? 0.7 : 1
+            })}
+          >
+            <Text style={{ color: accent, fontWeight:'700', fontSize: 20 }}>{'‹'}</Text>
           </Pressable>
-          <Text style={{ color: textPrimary, fontWeight:'700' }}>{cursor.toLocaleString(undefined, { month:'long', year:'numeric' })}</Text>
-          <Pressable onPress={() => setCursor(new Date(y, m+1, 1, sel.getHours(), sel.getMinutes()))} hitSlop={12}>
-            <Text style={{ color: accent, fontWeight:'700' }}>{'›'}</Text>
+          <Text style={{ color: textPrimary, fontWeight:'700', fontSize: 16, flex: 1, textAlign: 'center' }}>{cursor.toLocaleString(undefined, { month:'long', year:'numeric' })}</Text>
+          <Pressable
+            onPress={() => setCursor(new Date(y, m+1, 1, sel.getHours(), sel.getMinutes()))}
+            style={({ pressed }) => ({
+              width: 36,
+              height: 36,
+              borderRadius: radius.lg,
+              backgroundColor: chipBg,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: pressed ? 0.7 : 1
+            })}
+          >
+            <Text style={{ color: accent, fontWeight:'700', fontSize: 20 }}>{'›'}</Text>
           </Pressable>
         </View>
 
         {/* Weekday header */}
-        <View style={{ flexDirection:'row', justifyContent:'space-between', marginBottom: spacing.s4 }}>
+        <View style={{ flexDirection:'row', justifyContent:'space-between', marginBottom: spacing.s8 }}>
           {['S','M','T','W','T','F','S'].map((d,i)=>(
-            <Text key={i} style={{ width: 40, textAlign:'center', color: textMuted }}>{d}</Text>
+            <Text key={i} style={{ width: 40, textAlign:'center', color: textMuted, fontWeight: '600', fontSize: 12 }}>{d}</Text>
           ))}
         </View>
 
         {/* Grid */}
-        <View style={{ flexDirection:'row', flexWrap:'wrap', rowGap: spacing.s4, columnGap: 0 }}>
+        <View style={{ flexDirection:'row', flexWrap:'wrap', rowGap: spacing.s6, columnGap: 0 }}>
           {days.map((d, idx) => {
             const selected = d.date && isSameDay(d.date, sel);
+            const isToday = d.date && isSameDay(d.date, new Date());
             return (
               <Pressable
                 key={idx}
                 onPress={() => d.date && setSelection(d.date)}
                 disabled={!d.day}
-                style={{
-                  width: 40, height: 40, borderRadius: radius.pill,
-                  alignItems:'center', justifyContent:'center',
-                  backgroundColor: selected ? accent : 'transparent',
+                style={({ pressed }) => ({
+                  width: 40,
+                  height: 40,
+                  borderRadius: radius.lg,
+                  alignItems:'center',
+                  justifyContent:'center',
+                  backgroundColor: selected ? accent : pressed ? 'rgba(255,255,255,0.1)' : 'transparent',
                   opacity: d.day ? 1 : 0,
-                }}
+                  borderWidth: isToday && !selected ? 1 : 0,
+                  borderColor: accent,
+                })}
               >
-                <Text style={{ color: selected ? onAccent : textPrimary, fontWeight: selected ? '700' : '400' }}>{d.day || ''}</Text>
+                <Text style={{ color: selected ? onAccent : textPrimary, fontWeight: selected ? '700' : isToday ? '600' : '500', fontSize: 15 }}>{d.day || ''}</Text>
               </Pressable>
             )
           })}
         </View>
 
         {/* Quick actions */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.s12 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.s16, gap: spacing.s8 }}>
           <Pressable
             onPress={handleCalendarNow}
-            style={{ backgroundColor: chipBg, borderRadius: radius.pill, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}
+            style={({ pressed }) => ({
+              backgroundColor: chipBg,
+              borderRadius: radius.lg,
+              paddingHorizontal: spacing.s14,
+              paddingVertical: spacing.s8,
+              borderWidth: 1,
+              borderColor: border,
+              opacity: pressed ? 0.7 : 1
+            })}
           >
-            <Text style={{ color: textPrimary, fontWeight: '600' }}>Now</Text>
+            <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 13 }}>Now</Text>
           </Pressable>
           <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
             <Pressable
               onPress={handleToday}
-              style={{ backgroundColor: chipBg, borderRadius: radius.pill, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}
+              style={({ pressed }) => ({
+                backgroundColor: chipBg,
+                borderRadius: radius.lg,
+                paddingHorizontal: spacing.s12,
+                paddingVertical: spacing.s8,
+                opacity: pressed ? 0.7 : 1
+              })}
             >
-              <Text style={{ color: textPrimary }}>Today</Text>
+              <Text style={{ color: textPrimary, fontWeight: '500', fontSize: 13 }}>Today</Text>
             </Pressable>
             <Pressable
               onPress={handleTomorrow}
-              style={{ backgroundColor: chipBg, borderRadius: radius.pill, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}
+              style={({ pressed }) => ({
+                backgroundColor: chipBg,
+                borderRadius: radius.lg,
+                paddingHorizontal: spacing.s12,
+                paddingVertical: spacing.s8,
+                opacity: pressed ? 0.7 : 1
+              })}
             >
-              <Text style={{ color: textPrimary }}>Tomorrow</Text>
+              <Text style={{ color: textPrimary, fontWeight: '500', fontSize: 13 }}>Tomorrow</Text>
             </Pressable>
           </View>
         </View>
@@ -334,34 +416,53 @@ export default function DateTimeSheet({ visible, date, onCancel, onConfirm }: Pr
               left: 0,
               right: 0,
               bottom: 0,
-              borderRadius: radius.lg,
-              backgroundColor: 'rgba(8,10,18,0.9)',
+              borderRadius: radius.xl,
+              backgroundColor: get('surface.level2') as string,
               borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.18)',
+              borderColor: border,
               padding: spacing.s16,
               justifyContent: 'center',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 12,
+              elevation: 8,
             }}
           >
-            <View style={{ alignItems: 'center', gap: spacing.s12 }}>
-              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Select time</Text>
+            <View style={{ alignItems: 'center', gap: spacing.s16 }}>
+              <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 18, letterSpacing: -0.3 }}>Select time</Text>
               <View style={{ flexDirection: 'row', justifyContent: 'center', gap: spacing.s12 }}>
                 {renderWheel(hourValues, hourIndex, (v) => String(v), handleHourIndex, hourRef, 64)}
                 {renderWheel(minuteValues, minuteIndex, (v) => String(v).padStart(2, '0'), handleMinuteIndex, minuteRef, 72)}
                 {renderWheel(periodValues, periodIndex, (v) => v, handlePeriodIndex, periodRef, 64)}
               </View>
             </View>
-            <View style={{ position: 'absolute', left: spacing.s16, right: spacing.s16, bottom: spacing.s16, flexDirection: 'row', justifyContent: 'space-between' }}>
+            <View style={{ position: 'absolute', left: spacing.s16, right: spacing.s16, bottom: spacing.s16, flexDirection: 'row', justifyContent: 'space-between', gap: spacing.s8 }}>
               <Pressable
                 onPress={handleTimeNow}
-                style={{ backgroundColor: chipBg, borderRadius: radius.pill, paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}
+                style={({ pressed }) => ({
+                  backgroundColor: chipBg,
+                  borderRadius: radius.lg,
+                  paddingHorizontal: spacing.s14,
+                  paddingVertical: spacing.s8,
+                  borderWidth: 1,
+                  borderColor: border,
+                  opacity: pressed ? 0.7 : 1
+                })}
               >
-                <Text style={{ color: textPrimary, fontWeight: '600' }}>Now</Text>
+                <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 13 }}>Now</Text>
               </Pressable>
               <Pressable
                 onPress={() => setViewMode('calendar')}
-                style={{ backgroundColor: accent, borderRadius: radius.pill, paddingHorizontal: spacing.s16, paddingVertical: spacing.s8 }}
+                style={({ pressed }) => ({
+                  backgroundColor: accent,
+                  borderRadius: radius.lg,
+                  paddingHorizontal: spacing.s20,
+                  paddingVertical: spacing.s8,
+                  opacity: pressed ? 0.85 : 1
+                })}
               >
-                <Text style={{ color: onAccent, fontWeight: '700' }}>OK</Text>
+                <Text style={{ color: onAccent, fontWeight: '700', fontSize: 14 }}>OK</Text>
               </Pressable>
             </View>
           </View>
@@ -369,7 +470,7 @@ export default function DateTimeSheet({ visible, date, onCancel, onConfirm }: Pr
       </View>
 
 
-      <Text style={{ color: textMuted, marginTop: spacing.s12 }}>Using device timezone</Text>
+      <Text style={{ color: textMuted, marginTop: spacing.s16, fontSize: 12, textAlign: 'center' }}>Using device timezone</Text>
         </View>
       </View>
     </Modal>

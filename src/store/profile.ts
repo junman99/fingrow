@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { FMP_API_KEY } from '../config/secrets';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
@@ -22,6 +23,8 @@ export type Profile = {
   };
   analyticsOptIn: boolean;
   tier: 'Starter' | 'Plus';
+  dataSource?: 'yahoo' | 'fmp';
+  fmpApiKey?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -46,6 +49,8 @@ const defaultProfile: Profile = {
   alerts: { budgetWarnings: true, largeTx: true, goalReminders: false },
   analyticsOptIn: false,
   tier: 'Starter',
+  dataSource: 'fmp',
+  fmpApiKey: FMP_API_KEY,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };

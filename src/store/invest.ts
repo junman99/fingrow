@@ -1,8 +1,8 @@
 
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchDailyHistoryStooq } from '../lib/stooq';
-import { fetchDailyHistoryYahoo } from '../lib/yahoo';
+import { fetchDailyHistoryYahoo, fetchYahooFundamentals } from '../lib/yahoo';
+import { fetchDailyHistoryFMP, fetchFMPFundamentals, fetchFMPBatchQuotes, setFMPApiKey } from '../lib/fmp';
 import { isCryptoSymbol, fetchCrypto, baseCryptoSymbol, fetchCryptoOhlc } from '../lib/coingecko';
 import { fetchFxUSD, type FxRates } from '../lib/fx';
 import { computePnL } from '../lib/positions';
@@ -35,6 +35,27 @@ export type Quote = {
   ts: number;
   line: Array<{ t: number; v: number }>; // sparkline / chart
   bars?: Array<{ t: number; o: number; h: number; l: number; c: number; v: number }>;
+  fundamentals?: {
+    companyName?: string;
+    sector?: string;
+    industry?: string;
+    description?: string;
+    marketCap?: number;
+    peRatio?: number;
+    forwardPE?: number;
+    eps?: number;
+    dividendYield?: number;
+    beta?: number;
+    week52High?: number;
+    week52Low?: number;
+    avgVolume?: number;
+    earningsHistory?: Array<{
+      quarter: string;
+      date: number;
+      actual?: number;
+      estimate?: number;
+    }>;
+  };
 };
 
 export type Portfolio = {
@@ -62,7 +83,7 @@ type State = {
   portfolios: Record<string, Portfolio>;
   portfolioOrder: string[];
   activePortfolioId: string | null;
-  profile?: { quoteProvider?: 'auto' | 'yahoo' | 'stooq'; currency?: string };
+  profile?: { currency?: string };
 
   // ephemeral
   quotes: Record<string, Quote>;
@@ -76,7 +97,6 @@ type State = {
   hydrate: () => Promise<void>;
   persist: () => Promise<void>;
   refreshFx: () => Promise<void>;
-  setQuoteProvider: (provider: 'auto' | 'yahoo' | 'stooq') => Promise<void>;
 
   // portfolio ops
   createPortfolio: (name: string, baseCurrency: string, opts?: { benchmark?: string, seedFromActive?: boolean, type?: 'Live'|'Paper' }) => Promise<string>;
@@ -247,6 +267,17 @@ export const useInvestStore = create<State>((set, get) => ({
       // ignore
     } finally {
       set({ ready: true });
+
+      // Initialize FMP API key on startup
+      try {
+        const { useProfileStore } = await import('./profile');
+        const profile = useProfileStore.getState().profile;
+        if (profile.dataSource === 'fmp' && profile.fmpApiKey) {
+          setFMPApiKey(profile.fmpApiKey);
+        }
+      } catch (e) {
+        console.warn('[Invest Store] Failed to initialize FMP API key:', e);
+      }
     }
   },
 
@@ -295,13 +326,6 @@ export const useInvestStore = create<State>((set, get) => ({
     (get() as any)._syncMirrors();
     await (get() as any).persist();
   },
-    setQuoteProvider: async (provider: 'auto' | 'yahoo' | 'stooq') => {
-      const s: any = get();
-      const nextProfile = { ...(s.profile || {}), quoteProvider: provider };
-      set({ profile: nextProfile });
-      try { await (get() as any).persist(); } catch {}
-      try { await (get() as any).refreshQuotes(); } catch {}
-    },
 
 
   archivePortfolio: async (id) => {
@@ -551,46 +575,119 @@ addLot: async (symbol, lot, meta, opts) => {
   refreshQuotes: async (symbols?: string[]) => {
     set({ refreshing: true, error: undefined });
     const quotes = { ...get().quotes } as any;
+
+    // Get data source preference from profile
+    let dataSource: 'yahoo' | 'fmp' = 'yahoo';
+    let fmpApiKey = '';
+    try {
+      const { useProfileStore } = await import('./profile');
+      const profile = useProfileStore.getState().profile;
+      dataSource = profile.dataSource || 'yahoo';
+      fmpApiKey = profile.fmpApiKey || '';
+
+      // Set FMP API key if using FMP
+      if (dataSource === 'fmp' && fmpApiKey) {
+        setFMPApiKey(fmpApiKey);
+      }
+    } catch (e) {
+      console.warn('[Invest Store] Failed to get profile, defaulting to Yahoo');
+    }
+
     try {
       const target = symbols && symbols.length ? symbols : (get() as any).allSymbols();
-      for (const sym of target) {
+
+      // Separate crypto and equity symbols
+      const cryptoSymbols = target.filter((s: string) => isCryptoSymbol(s));
+      const equitySymbols = target.filter((s: string) => !isCryptoSymbol(s));
+
+      // Process crypto symbols (always use CoinGecko)
+      for (const sym of cryptoSymbols) {
         try {
-          if (isCryptoSymbol(sym)) {
-            // Use CoinGecko daily history (365d) so portfolio line has proper months of data
-            const base = baseCryptoSymbol(sym);
-            const cg = await fetchCrypto(base || sym, 365);
-            const last = Number(cg?.line?.length ? cg.line[cg.line.length - 1].v : 0);
-            const prev = Number(cg?.line?.length > 1 ? cg.line[cg.line.length - 2].v : last);
-            const change = last - prev;
-            const changePct = Number(prev ? ((change / prev) * 100).toFixed(2) : 0);
-            let bars: any[] | undefined = undefined;
+          const base = baseCryptoSymbol(sym);
+          const cg = await fetchCrypto(base || sym, 365);
+          const last = Number(cg?.line?.length ? cg.line[cg.line.length - 1].v : 0);
+          const prev = Number(cg?.line?.length > 1 ? cg.line[cg.line.length - 2].v : last);
+          const change = last - prev;
+          const changePct = Number(prev ? ((change / prev) * 100).toFixed(2) : 0);
+          let bars: any[] | undefined = undefined;
+          try {
+            const ohlc = await fetchCryptoOhlc(base || sym, 365);
+            bars = (ohlc || []).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: 0 }));
+          } catch {}
+          quotes[sym] = {
+            symbol: sym,
+            last,
+            change,
+            changePct,
+            ts: Date.now(),
+            line: Array.isArray(cg?.line) ? cg.line : [],
+            bars
+          };
+        } catch (e) {
+          // keep existing quote if fetch fails
+        }
+        await new Promise(r => setTimeout(r, 120));
+      }
+
+      // Process equity symbols based on data source
+      if (dataSource === 'fmp' && fmpApiKey && equitySymbols.length > 0) {
+        // FMP: Use batch calls to minimize API usage (1 call for all quotes)
+        try {
+          const batchQuotes = await fetchFMPBatchQuotes(equitySymbols);
+
+          // Process each equity symbol
+          for (const sym of equitySymbols) {
             try {
-              const ohlc = await fetchCryptoOhlc(base || sym, 365);
-              bars = (ohlc || []).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: 0 }));
-            } catch {}
-            quotes[sym] = {
-              symbol: sym,
-              last,
-              change,
-              changePct,
-              ts: Date.now(),
-              line: Array.isArray(cg?.line) ? cg.line : [],
-              bars
-            };
-          } else {
-            // Provider-aware equity fetch
-            const provider = (get().profile?.quoteProvider ?? 'auto') as 'auto'|'yahoo'|'stooq';
-            let rawBars: any[] = [];
-            if (provider === 'stooq') {
-              try { rawBars = await fetchDailyHistoryStooq(sym as any, { retries: 2 } as any); } catch {}
-            } else if (provider === 'yahoo') {
-              try { rawBars = await fetchDailyHistoryYahoo(sym as any, '5y' as any); } catch {}
-            } else {
-              try { rawBars = await fetchDailyHistoryStooq(sym as any, { retries: 2 } as any); } catch {}
-              if (!rawBars || !rawBars.length) {
-                try { rawBars = await fetchDailyHistoryYahoo(sym as any, '5y' as any); } catch {}
+              const quote = batchQuotes[sym];
+              if (!quote) continue;
+
+              // Fetch historical data and fundamentals
+              const [rawBars, fundamentals] = await Promise.all([
+                fetchDailyHistoryFMP(sym, '5y').catch(() => []),
+                fetchFMPFundamentals(sym).catch(() => null),
+              ]);
+
+              if (rawBars && rawBars.length > 0) {
+                const last = quote.price || (rawBars.length ? rawBars[rawBars.length-1].close : 0);
+                const change = quote.change || 0;
+                const changePct = quote.changesPercentage || 0;
+                const line = rawBars.map(b => ({ t: b.date, v: Number(b.close.toFixed(2)) }));
+                const cbars = rawBars.map(b => ({ t: b.date, o: b.open, h: b.high, l: b.low, c: b.close, v: b.volume }));
+
+                quotes[sym] = {
+                  symbol: sym,
+                  last,
+                  change,
+                  changePct,
+                  ts: Date.now(),
+                  line,
+                  bars: cbars,
+                  fundamentals: fundamentals || undefined
+                };
               }
+            } catch (e) {
+              console.error('[Invest Store] Failed to fetch FMP data for:', sym, e);
             }
+            await new Promise(r => setTimeout(r, 120));
+          }
+        } catch (e) {
+          console.error('[Invest Store] FMP batch failed, falling back to Yahoo:', e);
+          // Fall back to Yahoo if FMP fails
+          dataSource = 'yahoo';
+        }
+      }
+
+      // Yahoo Finance (default or fallback)
+      if (dataSource === 'yahoo' && equitySymbols.length > 0) {
+        for (const sym of equitySymbols) {
+          try {
+            let rawBars: any[] = [];
+            try {
+              rawBars = await fetchDailyHistoryYahoo(sym as any, '5y' as any);
+            } catch (e) {
+              console.error('[Invest Store] Failed to fetch Yahoo data for:', sym, e);
+            }
+
             if (!rawBars || !rawBars.length) { /* keep existing quote */ }
             else {
               const last = rawBars.length ? rawBars[rawBars.length-1].close : 0;
@@ -599,15 +696,27 @@ addLot: async (symbol, lot, meta, opts) => {
               const changePct = Number((prevClose ? (change / prevClose) * 100 : 0).toFixed(2));
               const line = rawBars.map(b => ({ t: b.date, v: Number((b.close ?? 0).toFixed ? (b.close as any).toFixed(2) : Number(b.close ?? 0).toFixed(2)) }));
               const cbars = rawBars.map(b => ({ t: b.date, o: b.open ?? b.close, h: b.high ?? b.close, l: b.low ?? b.close, c: b.close ?? 0, v: b.volume ?? 0 }));
-              quotes[sym] = { symbol: sym, last, change, changePct, ts: Date.now(), line, bars: cbars };
+
+              // Fetch fundamentals for stocks/ETFs
+              let fundamentals = undefined;
+              try {
+                const fund = await fetchYahooFundamentals(sym);
+                if (fund) {
+                  fundamentals = fund;
+                }
+              } catch (e) {
+                // Silently fail - using placeholder data
+              }
+
+              quotes[sym] = { symbol: sym, last, change, changePct, ts: Date.now(), line, bars: cbars, fundamentals };
             }
+          } catch (e) {
+            // keep existing quote if fetch fails for this symbol
           }
-} catch (e) {
-          // keep existing quote if fetch fails for this symbol
+          await new Promise(r => setTimeout(r, 120));
         }
-        // small delay to avoid hammering providers
-        await new Promise(r => setTimeout(r, 120));
       }
+
       set({ quotes, lastUpdated: Date.now(), refreshing: false });
     } catch (e: any) {
       set({ quotes, refreshing: false, error: e?.message || 'Failed to refresh' });

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { ScreenScroll } from '../../components/ScreenScroll';
@@ -15,40 +14,40 @@ type Goal = ReturnType<typeof useGoalsStore>['goals'][number];
 
 const milestoneLabels = [25, 50, 75, 90, 100];
 const motivationBank = [
-  'Every dollar is a vote for your future self.',
-  'Momentum unlocked! Keep stacking those wins.',
-  'Your future self just fist-bumped you.',
-  'You’re crafting freedom with every save.',
-  'Look at you, turning dreams into line items!',
-  'The finish line is waving you forward.',
-  'Small saves, big flex. Keep going!',
-  'Savings streak! Your goal just leveled up.',
-  'Rain or shine, your hustle stays consistent.',
-  'You’re not just saving—you’re building a story.'
+  "Every dollar is a vote for your future self.",
+  "Momentum unlocked! Keep stacking those wins.",
+  "Your future self just fist-bumped you.",
+  "You're crafting freedom with every save.",
+  "Look at you, turning dreams into line items!",
+  "The finish line is waving you forward.",
+  "Small saves, big flex. Keep going!",
+  "Savings streak! Your goal just leveled up.",
+  "Rain or shine, your hustle stays consistent.",
+  "You're not just saving—you're building a story."
 ];
 
 function getMotivation(indexSeed: number, pct: number) {
   if (pct >= 100) {
-    return 'Goal conquered! Queue the confetti and pick your next adventure.';
+    return "Goal conquered! Queue the confetti and pick your next adventure.";
   }
   if (pct >= 75) {
-    return 'Final lap! One more push and you’ll be legendary.';
+    return "Final lap! One more push and you'll be legendary.";
   }
   if (pct >= 50) {
-    return 'You’re past halfway! Momentum is totally on your side.';
+    return "You're past halfway! Momentum is totally on your side.";
   }
   if (pct >= 25) {
-    return 'Quarter down already—your habit is paying off.';
+    return "Quarter down already—your habit is paying off.";
   }
   return motivationBank[indexSeed % motivationBank.length];
 }
 
 function getBadgeSet(progress: number, goalCount: number) {
   const badges: { label: string; icon: string }[] = [];
-  if (goalCount >= 3) badges.push({ label: 'Multi-Goal Master', icon: '🎯' });
-  if (progress >= 80) badges.push({ label: 'Momentum Hero', icon: '⚡️' });
-  if (progress >= 100) badges.push({ label: 'Goal Crusher', icon: '🏆' });
-  if (badges.length === 0) badges.push({ label: 'Fresh Start', icon: '🚀' });
+  if (goalCount >= 3) badges.push({ label: "Multi-Goal Master", icon: "🎯" });
+  if (progress >= 80) badges.push({ label: "Momentum Hero", icon: "⚡️" });
+  if (progress >= 100) badges.push({ label: "Goal Crusher", icon: "🏆" });
+  if (badges.length === 0) badges.push({ label: "Fresh Start", icon: "🚀" });
   return badges.slice(0, 3);
 }
 
@@ -62,12 +61,14 @@ const GoalCard: React.FC<{
   const remaining = Math.max(0, (goal.targetAmount || 0) - (goal.currentAmount || 0));
   const nextMilestone = milestoneLabels.find(m => m > progress) ?? 100;
   const milestoneDelta = Math.max(0, Math.round(((nextMilestone / 100) * (goal.targetAmount || 0)) - (goal.currentAmount || 0)));
-  const accent = get('accent.primary') as string;
+  const accentPrimary = get('accent.primary') as string;
+  const surface1 = get('surface.level1') as string;
   const surface2 = get('surface.level2') as string;
   const textPrimary = get('text.primary') as string;
   const textMuted = get('text.muted') as string;
-  const progressColor = progress >= 100 ? get('semantic.success') as string : accent;
-  const ringBackground = withAlpha(surface2, isDark ? 0.4 : 0.8);
+  const borderSubtle = get('border.subtle') as string;
+  const progressColor = progress >= 100 ? get('semantic.success') as string : accentPrimary;
+  const ringBackground = surface2;
   const sparkEmoji = progress >= 100 ? '🎉' : progress >= 75 ? '🔥' : progress >= 40 ? '💪' : '✨';
 
   return (
@@ -77,9 +78,9 @@ const GoalCard: React.FC<{
       style={({ pressed }) => ({
         borderRadius: radius.xl,
         padding: spacing.s16,
-        backgroundColor: get('surface.level1') as string,
+        backgroundColor: surface1,
         borderWidth: 1,
-        borderColor: withAlpha(get('border.subtle') as string, isDark ? 0.5 : 1),
+        borderColor: borderSubtle,
         opacity: pressed ? 0.9 : 1,
         gap: spacing.s12
       })}
@@ -140,7 +141,7 @@ const GoalCard: React.FC<{
             opacity: pressed ? 0.7 : 1
           })}
         >
-          <Text style={{ color: get('accent.primary') as string, fontWeight: '700', fontSize: 12 }}>View journey</Text>
+          <Text style={{ color: accentPrimary, fontWeight: '700', fontSize: 12 }}>View journey</Text>
           <Icon name="chevron-right" size={16} colorToken="accent.primary" />
         </Pressable>
       </View>
@@ -177,33 +178,27 @@ const GoalsRoot: React.FC = () => {
   const badges = getBadgeSet(totals.pct, goals?.length || 0);
   const accentPrimary = get('accent.primary') as string;
   const accentSecondary = get('accent.secondary') as string;
-  const heroGradient: [string, string] = isDark ? ['#0d111f', '#19142c'] : [accentPrimary, accentSecondary];
-  const heroText = isDark ? '#f2f5ff' : get('text.onPrimary') as string;
-  const heroTextMuted = withAlpha(heroText, 0.72);
-  const badgeAccent = isDark ? '#9cecff' : accentPrimary;
+  const textPrimary = get('text.primary') as string;
+  const textMuted = get('text.muted') as string;
+  const textOnPrimary = get('text.onPrimary') as string;
+  const surface1 = get('surface.level1') as string;
+  const surface2 = get('surface.level2') as string;
+  const borderSubtle = get('border.subtle') as string;
+  const badgeAccent = accentPrimary;
 
   return (
     <ScreenScroll contentStyle={{ paddingBottom: Math.max(insets.bottom, spacing.s24) }}>
       <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s16 }}>
-        <LinearGradient
-          colors={isDark ? ['#0d111f', '#18152d'] : [accentPrimary, accentSecondary]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
-            borderRadius: radius.xl,
-            padding: spacing.s16,
-            gap: spacing.s12
-          }}
-        >
-          <Text style={{ color: heroTextMuted, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '700' }}>
+        <View style={{ gap: spacing.s12 }}>
+          <Text style={{ color: textMuted, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '700' }}>
             Savings quest
           </Text>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <View>
-              <Text style={{ color: heroText, fontSize: 28, fontWeight: '800' }}>
+              <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.5 }}>
                 {formatCurrency(totals.saved)}
               </Text>
-              <Text style={{ color: heroTextMuted, marginTop: spacing.s4 }}>
+              <Text style={{ color: textMuted, marginTop: spacing.s4 }}>
                 Saved across {goals?.length || 0} goal{goals && goals.length === 1 ? '' : 's'}
               </Text>
             </View>
@@ -211,25 +206,23 @@ const GoalsRoot: React.FC = () => {
               borderRadius: radius.lg,
               paddingHorizontal: spacing.s12,
               paddingVertical: spacing.s8,
-              backgroundColor: withAlpha(heroText, isDark ? 0.18 : 0.24)
+              backgroundColor: withAlpha(accentPrimary, isDark ? 0.20 : 0.12),
+              borderWidth: 1,
+              borderColor: borderSubtle
             }}>
-              <Text style={{ color: heroText, fontWeight: '700' }}>{totals.pct}% complete</Text>
+              <Text style={{ color: textPrimary, fontWeight: '700' }}>{totals.pct}% complete</Text>
             </View>
           </View>
-          <Text style={{ color: heroTextMuted, fontSize: 14 }}>
+          <Text style={{ color: textMuted, fontSize: 14 }}>
             {heroMessage}
           </Text>
           <Button
-            variant="secondary"
+            variant="primary"
             title="+ Launch new goal"
             onPress={() => nav.navigate('GoalCreate')}
-            style={{
-              alignSelf: 'flex-start',
-              backgroundColor: withAlpha(heroText, isDark ? 0.22 : 0.18),
-              borderColor: withAlpha(heroText, 0.28)
-            }}
+            style={{ alignSelf: 'flex-start' }}
           />
-        </LinearGradient>
+        </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.s8 }}>
           {badges.map(badge => (
@@ -242,13 +235,13 @@ const GoalsRoot: React.FC = () => {
                 paddingHorizontal: spacing.s12,
                 paddingVertical: spacing.s8,
                 borderRadius: radius.pill,
-                backgroundColor: withAlpha(badgeAccent, isDark ? 0.25 : 0.14),
+                backgroundColor: withAlpha(badgeAccent, isDark ? 0.20 : 0.12),
                 borderWidth: 1,
-                borderColor: withAlpha(badgeAccent, 0.45)
+                borderColor: borderSubtle
               }}
             >
               <Text style={{ fontSize: 14 }}>{badge.icon}</Text>
-              <Text style={{ color: badgeAccent, fontWeight: '700', fontSize: 12 }}>{badge.label}</Text>
+              <Text style={{ color: accentPrimary, fontWeight: '700', fontSize: 12 }}>{badge.label}</Text>
             </View>
           ))}
         </ScrollView>
@@ -257,16 +250,16 @@ const GoalsRoot: React.FC = () => {
           <View style={{
             borderRadius: radius.xl,
             padding: spacing.s16,
-            backgroundColor: get('surface.level1') as string,
+            backgroundColor: surface1,
             borderWidth: 1,
-            borderColor: withAlpha(get('border.subtle') as string, isDark ? 0.6 : 1),
+            borderColor: borderSubtle,
             gap: spacing.s8
           }}>
-            <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>
+            <Text style={{ color: textPrimary, fontWeight: '700' }}>
               Highlight: {topGoal.icon ? `${topGoal.icon} ` : ''}{topGoal.title}
             </Text>
-            <Text style={{ color: get('text.muted') as string }}>
-              You’re {Math.min(100, Math.round(((topGoal.currentAmount || 0) / Math.max(1, topGoal.targetAmount || 1)) * 100))}% of the way there. Keep the streak alive!
+            <Text style={{ color: textMuted }}>
+              You're {Math.min(100, Math.round(((topGoal.currentAmount || 0) / Math.max(1, topGoal.targetAmount || 1)) * 100))}% of the way there. Keep the streak alive!
             </Text>
             <Button
               size="sm"
@@ -284,7 +277,7 @@ const GoalsRoot: React.FC = () => {
                 opacity: pressed ? 0.7 : 1
               })}
             >
-              <Text style={{ color: get('accent.primary') as string, fontWeight: '700', fontSize: 12 }}>View journey</Text>
+              <Text style={{ color: accentPrimary, fontWeight: '700', fontSize: 12 }}>View journey</Text>
               <Icon name="chevron-right" size={16} colorToken="accent.primary" />
             </Pressable>
           </View>
@@ -293,16 +286,16 @@ const GoalsRoot: React.FC = () => {
         {(goals || []).length === 0 ? (
           <View style={{
             padding: spacing.s20,
-            backgroundColor: get('surface.level1') as string,
+            backgroundColor: surface1,
             borderRadius: radius.xl,
             borderWidth: 1,
-            borderColor: withAlpha(get('border.subtle') as string, isDark ? 0.6 : 1),
+            borderColor: borderSubtle,
             gap: spacing.s12,
             alignItems: 'flex-start'
           }}>
-            <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 18 }}>No goals yet</Text>
-            <Text style={{ color: get('text.muted') as string }}>
-              Plant a goal, set your target, and we’ll track your climb with confetti, badges, and nudges.
+            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 18 }}>No goals yet</Text>
+            <Text style={{ color: textMuted }}>
+              Plant a goal, set your target, and we'll track your climb with confetti, badges, and nudges.
             </Text>
             <Button title="Start my first goal" onPress={() => nav.navigate('GoalCreate')} />
           </View>

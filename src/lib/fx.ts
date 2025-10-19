@@ -1,5 +1,5 @@
 // FX via exchangerate.host (free; uses ECB rates).
-// We normalize to base USD for equities & crypto (Stooq & CoinGecko nominally in USD).
+// We normalize to base USD for equities & crypto (Yahoo Finance & CoinGecko nominally in USD).
 export type FxRates = { base: string; ts: number; rates: Record<string, number> };
 
 /** Fetch latest FX rates with base USD (e.g., USD->SGD). */

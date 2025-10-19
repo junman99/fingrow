@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, Alert, TextInput, Switch, Pressable } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { ScreenScroll } from '../../components/ScreenScroll';
 import Button from '../../components/Button';
@@ -235,15 +234,16 @@ export default function AddBill() {
   const showAdvanced = advancedOpen && !(amountMode === 'final' && mode === 'exact' && proportionalTax);
   const derivedAdj = (amountMode === 'final' && mode === 'exact' && proportionalTax) ? Math.round((amountNum - sumExacts) * 100) / 100 : 0;
 
-  const heroGradient: [string, string] = isDark ? ['#0d111f', '#19142c'] : [get('accent.primary') as string, get('accent.secondary') as string];
-  const heroText = isDark ? '#f2f5ff' : get('text.onPrimary') as string;
-  const heroTextMuted = withAlpha(heroText, 0.72);
+  const accentPrimary = get('accent.primary') as string;
+  const accentSecondary = get('accent.secondary') as string;
   const surface1 = get('surface.level1') as string;
   const surface2 = get('surface.level2') as string;
   const textPrimary = get('text.primary') as string;
   const textMuted = get('text.muted') as string;
   const textOnPrimary = get('text.onPrimary') as string;
+  const textOnSurface = get('text.onSurface') as string;
   const borderSubtle = get('border.subtle') as string;
+  const backgroundDefault = get('background.default') as string;
 
   const sectionCardStyle = useMemo(() => ({
     backgroundColor: surface1,
@@ -276,35 +276,25 @@ export default function AddBill() {
     paddingHorizontal: spacing.s12,
     paddingVertical: spacing.s8,
     borderRadius: radius.pill,
-    backgroundColor: active ? withAlpha(get('accent.primary') as string, isDark ? 0.3 : 0.16) : surface2,
+    backgroundColor: active ? withAlpha(accentPrimary, isDark ? 0.20 : 0.12) : surface2,
     borderWidth: 1,
-    borderColor: active ? get('accent.primary') as string : withAlpha(borderSubtle, 0.7)
+    borderColor: active ? accentPrimary : withAlpha(borderSubtle, 0.7)
   });
 
   return (
     <ScreenScroll contentStyle={{ paddingBottom: spacing.s32 }}>
       <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s16 }}>
-        <LinearGradient
-          colors={heroGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
-            borderRadius: radius.xl,
-            padding: spacing.s16,
-            gap: spacing.s12,
-            overflow: 'hidden'
-          }}
-        >
-          <Text style={{ color: heroTextMuted, fontSize: 12, letterSpacing: 0.8, fontWeight: '700', textTransform: 'uppercase' }}>
+        <View style={{ gap: spacing.s8 }}>
+          <Text style={{ color: textMuted, fontSize: 12, letterSpacing: 0.8, fontWeight: '700', textTransform: 'uppercase' }}>
             New shared bill
           </Text>
-          <Text style={{ color: heroText, fontSize: 30, fontWeight: '800', lineHeight: 34 }}>
+          <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', lineHeight: 36, letterSpacing: -0.5 }}>
             {finalAmount > 0 ? formatCurrency(finalAmount) : 'Set the total'}
           </Text>
-          <Text style={{ color: heroTextMuted, fontSize: 14 }}>
+          <Text style={{ color: textMuted, fontSize: 14 }}>
             {splitLabel} • {participantIds.length} participant{participantIds.length === 1 ? '' : 's'} • {payerLabel}
           </Text>
-        </LinearGradient>
+        </View>
 
         <View style={sectionCardStyle}>
           <View style={{ gap: spacing.s4 }}>
@@ -354,7 +344,7 @@ export default function AddBill() {
                   style={({ pressed }) => ({
                     flex: 1,
                     borderRadius: radius.pill,
-                    backgroundColor: active ? get('accent.primary') as string : 'transparent',
+                    backgroundColor: active ? accentPrimary : 'transparent',
                     paddingVertical: spacing.s8,
                     paddingHorizontal: spacing.s12,
                     alignItems: 'center',
@@ -396,7 +386,7 @@ export default function AddBill() {
             </View>
             <View style={{ flexDirection: 'row', gap: spacing.s4 }}>
               <Pressable onPress={() => setParticipants(Object.fromEntries(activeMembers.map(m => [m.id, true])))} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
-                <Text style={{ color: get('accent.primary') as string, fontWeight: '600', fontSize: 12 }}>Select all</Text>
+                <Text style={{ color: accentPrimary, fontWeight: '600', fontSize: 12 }}>Select all</Text>
               </Pressable>
               <Pressable onPress={() => setParticipants(Object.fromEntries(activeMembers.map(m => [m.id, false])))} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
                 <Text style={{ color: textMuted, fontWeight: '600', fontSize: 12 }}>Clear</Text>
@@ -416,7 +406,7 @@ export default function AddBill() {
                     opacity: pressed ? 0.8 : 1
                   })}
                 >
-                  <Text style={{ color: active ? get('accent.primary') as string : textPrimary, fontWeight: '600' }}>{member.name}</Text>
+                  <Text style={{ color: active ? accentPrimary : textPrimary, fontWeight: '600' }}>{member.name}</Text>
                 </Pressable>
               );
             })}
@@ -452,7 +442,7 @@ export default function AddBill() {
                   style={({ pressed }) => ({
                     flex: 1,
                     borderRadius: radius.pill,
-                    backgroundColor: active ? get('accent.primary') as string : 'transparent',
+                    backgroundColor: active ? accentPrimary : 'transparent',
                     paddingVertical: spacing.s8,
                     paddingHorizontal: spacing.s12,
                     alignItems: 'center',
@@ -679,7 +669,7 @@ export default function AddBill() {
                   style={({ pressed }) => ({
                     flex: 1,
                     borderRadius: radius.pill,
-                    backgroundColor: active ? get('accent.primary') as string : 'transparent',
+                    backgroundColor: active ? accentPrimary : 'transparent',
                     paddingVertical: spacing.s8,
                     paddingHorizontal: spacing.s12,
                     alignItems: 'center',
@@ -706,7 +696,7 @@ export default function AddBill() {
                       opacity: pressed ? 0.8 : 1
                     })}
                   >
-                    <Text style={{ color: active ? get('accent.primary') as string : textPrimary, fontWeight: '600' }}>{member.name}</Text>
+                    <Text style={{ color: active ? accentPrimary : textPrimary, fontWeight: '600' }}>{member.name}</Text>
                   </Pressable>
                 );
               })}
@@ -728,7 +718,7 @@ export default function AddBill() {
                         opacity: pressed ? 0.8 : 1
                       })}
                     >
-                      <Text style={{ color: active ? get('accent.primary') as string : textPrimary, fontWeight: '600' }}>{member.name}</Text>
+                      <Text style={{ color: active ? accentPrimary : textPrimary, fontWeight: '600' }}>{member.name}</Text>
                     </Pressable>
                   );
                 })}
@@ -747,7 +737,7 @@ export default function AddBill() {
                       borderRadius: radius.lg,
                       borderWidth: 1,
                       borderColor: withAlpha(borderSubtle, 0.7),
-                      backgroundColor: active ? withAlpha(get('accent.primary') as string, isDark ? 0.18 : 0.12) : surface2,
+                      backgroundColor: active ? withAlpha(accentPrimary, isDark ? 0.20 : 0.12) : surface2,
                       paddingHorizontal: spacing.s12,
                       paddingVertical: spacing.s10,
                       gap: spacing.s8

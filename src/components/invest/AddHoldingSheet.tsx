@@ -5,15 +5,13 @@ import BottomSheet from '../BottomSheet';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
 import Icon from '../Icon';
-import { toStooqSymbol } from '../../lib/stooq';
 import { toYahooSymbol } from '../../lib/yahoo';
 import { baseCryptoSymbol, fetchCryptoOhlc } from '../../lib/coingecko';
 import { fetchDailyHistoryYahoo } from '../../lib/yahoo';
-import { fetchDailyHistoryStooq } from '../../lib/stooq';
 import { useInvestStore } from '../../store/invest';
 import { useProfileStore } from '../../store/profile';
 
-type Item = { key: string; symbol: string; provider: 'Yahoo'|'Stooq'|'CoinGecko' };
+type Item = { key: string; symbol: string; provider: 'Yahoo'|'CoinGecko' };
 
 type Props = {
   visible: boolean;
@@ -45,7 +43,7 @@ export default function AddHoldingSheet({ visible, onClose, portfolioId, mode='h
     return selectedKeys.map((k) => {
       const [code, ...rest] = k.split(':');
       const sym = rest.join(':');
-      const provider = code === 'Y' ? 'Yahoo' : code === 'S' ? 'Stooq' : code === 'C' ? 'CoinGecko' : 'Yahoo';
+      const provider = code === 'C' ? 'CoinGecko' : 'Yahoo';
       return { key: k, sym, provider };
     });
   }, [selectedKeys]);
@@ -66,12 +64,13 @@ export default function AddHoldingSheet({ visible, onClose, portfolioId, mode='h
     if (!raw) { setItems([]); return; }
     const outMap: Record<string, Item> = {};
     // direct symbol transforms
-    const y = toYahooSymbol(raw);
-    if (y) outMap[`Y:${y}`] = { key: `Y:${y}`, symbol: y, provider: 'Yahoo' };
-    const s = toStooqSymbol(raw);
-    if (s) outMap[`S:${s}`] = { key: `S:${s}`, symbol: s.toUpperCase(), provider: 'Stooq' };
     const c = baseCryptoSymbol(raw);
-    if (c) outMap[`C:${c}`] = { key: `C:${c}`, symbol: c, provider: 'CoinGecko' };
+    if (c) {
+      outMap[`C:${c}`] = { key: `C:${c}`, symbol: c, provider: 'CoinGecko' };
+    } else {
+      const y = toYahooSymbol(raw);
+      if (y) outMap[`Y:${y}`] = { key: `Y:${y}`, symbol: y, provider: 'Yahoo' };
+    }
 
     // local suggestions by name/symbol prefix (offline-friendly)
     const SUGGEST: Array<{ symbol: string; name: string }> = [
@@ -116,11 +115,9 @@ export default function AddHoldingSheet({ visible, onClose, portfolioId, mode='h
           if (it.provider === 'CoinGecko') {
             const bars = await fetchCryptoOhlc(it.symbol, 1);
             out[it.key] = bars && bars.length ? (bars[bars.length - 1].c ?? null) : null;
-          } else if (it.provider === 'Yahoo') {
-            const bars = await fetchDailyHistoryYahoo(it.symbol, '1y');
-            out[it.key] = bars && bars.length ? (bars[bars.length - 1].close ?? null) : null;
           } else {
-            const bars = await fetchDailyHistoryStooq(it.symbol);
+            // Yahoo Finance
+            const bars = await fetchDailyHistoryYahoo(it.symbol, '1y');
             out[it.key] = bars && bars.length ? (bars[bars.length - 1].close ?? null) : null;
           }
         } catch (e) {

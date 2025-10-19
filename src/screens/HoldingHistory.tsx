@@ -4,13 +4,13 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
 import { Screen } from '../components/Screen';
-import { Card } from '../components/Card';
 import TransactionRow from '../components/invest/TransactionRow';
 import TransactionEditorSheet from '../components/invest/TransactionEditorSheet';
 import { useInvestStore } from '../store/invest';
 import { computePnL } from '../lib/positions';
 import { formatCurrency } from '../lib/format';
 import { exportHoldingTxCsv } from '../lib/export';
+import Icon from '../components/Icon';
 
 export default function HoldingHistory() {
   const { get } = useThemeTokens();
@@ -77,141 +77,151 @@ export default function HoldingHistory() {
         alwaysBounceVertical={Platform.OS === 'ios'}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        contentContainerStyle={{ padding: spacing.s16, gap: spacing.s16 }}
+        contentContainerStyle={{ paddingBottom: spacing.s24 }}
       >
-        {/* Hero header */}
-        <Card>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.s12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
-              <View style={{ width: 64, height: 64, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: get('surface.level2') as string }}>
-                <Text style={{ fontSize: 26, fontWeight: '900', color: get('text.primary') as string }}>{symbol?.slice(0,1)}</Text>
-              </View>
-              <View>
-                <Text style={{ color: text, fontWeight: '900', fontSize: 20 }}>{symbol}</Text>
-                <Text style={{ color: muted }}>Transaction History</Text>
-              </View>
+        {/* Header */}
+        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s12 }}>
+          <Text style={{ color: text, fontWeight: '800', fontSize: 28, letterSpacing: -0.5 }}>{symbol}</Text>
+          <Text style={{ color: muted, fontSize: 14, marginTop: spacing.s2 }}>Transaction History</Text>
+        </View>
+
+
+        {/* Summary Cards */}
+        <View style={{ paddingHorizontal: spacing.s16, marginBottom: spacing.s16 }}>
+          <View style={{ flexDirection: 'row', gap: spacing.s8, marginBottom: spacing.s8 }}>
+            <View style={{ flex: 1, backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s12 }}>
+              <Text style={{ color: muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.s4 }}>Shares</Text>
+              <Text style={{ color: text, fontSize: 20, fontWeight: '800' }}>{pnl.qty}</Text>
             </View>
+            <View style={{ flex: 1, backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s12 }}>
+              <Text style={{ color: muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.s4 }}>Avg Cost</Text>
+              <Text style={{ color: text, fontSize: 20, fontWeight: '800' }}>{formatCurrency(pnl.avgCost, cur)}</Text>
+            </View>
+          </View>
 
-            <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Export CSV"
-                onPress={async () => { try { if (portfolioId) await exportHoldingTxCsv(portfolioId, symbol); } catch {} }}
-                style={({ pressed }) => ({ height: 40, paddingHorizontal: spacing.s12, borderRadius: radius.pill, alignItems:'center', justifyContent:'center', backgroundColor: pressed ? (get('surface.level2') as string) : (get('component.button.secondary.bg') as string), borderWidth: 1, borderColor: get('component.button.secondary.border') as string })}
-              >
-                <Text style={{ color: text, fontWeight: '700' }}>Export CSV</Text>
-              </Pressable>
+          <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
+            <View style={{ flex: 1, backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s12 }}>
+              <Text style={{ color: muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.s4 }}>Realized</Text>
+              <Text style={{ color: (pnl.realized >= 0 ? get('semantic.success') : get('semantic.danger')) as string, fontSize: 18, fontWeight: '800' }}>
+                {formatCurrency(pnl.realized, cur)}
+              </Text>
+            </View>
+            <View style={{ flex: 1, backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s12 }}>
+              <Text style={{ color: muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.s4 }}>Unrealized</Text>
+              <Text style={{ color: (pnl.unrealized >= 0 ? get('semantic.success') : get('semantic.danger')) as string, fontSize: 18, fontWeight: '800' }}>
+                {formatCurrency(pnl.unrealized, cur)}
+              </Text>
+            </View>
+          </View>
+        </View>
 
+        {/* Filters and Actions */}
+        <View style={{ paddingHorizontal: spacing.s16, marginBottom: spacing.s16, flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+          <View style={{ flexDirection: 'row', gap: spacing.s6, flex: 1 }}>
+            {(['all','buys','sells'] as const).map(k => (
               <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Add transaction"
-                onPress={() => { setEditLotState(null); setShowTxSheet(true); }}
+                key={k}
+                onPress={() => setFilter(k)}
                 style={({ pressed }) => ({
-                  height: 40,
-                  paddingHorizontal: spacing.s12,
+                  paddingHorizontal: spacing.s16,
+                  paddingVertical: spacing.s8,
                   borderRadius: radius.pill,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: pressed ? (get('surface.level2') as string) : (get('component.button.primary.bg') as string),
+                  backgroundColor: filter === k ? (get('accent.primary') as string) : (get('surface.level1') as string),
+                  opacity: pressed ? 0.8 : 1
                 })}
               >
-                <Text style={{ color: get('text.onPrimary') as string, fontWeight: '700' }}>Add</Text>
+                <Text style={{ color: filter === k ? (get('text.onPrimary') as string) : text, fontWeight: '700', textTransform: 'capitalize', fontSize: 14 }}>
+                  {k}
+                </Text>
               </Pressable>
-            </View>
+            ))}
           </View>
 
-          {/* Quick stats */}
-          <View style={{ marginTop: spacing.s12, flexDirection: 'row', gap: spacing.s12, alignItems: 'center' }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: get('text.muted') as string }}>Total transactions</Text>
-              <Text style={{ color: text, fontWeight: '800', fontSize: 18 }}>{lots.length}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: get('text.muted') as string }}>Realized / Unrealized</Text>
-              <Text style={{ color: (pnl.realized >= 0 ? get('semantic.success') : get('semantic.danger')) as string, fontWeight: '800' }}>{formatCurrency(pnl.realized, cur)} / {formatCurrency(pnl.unrealized, cur)}</Text>
-            </View>
-          </View>
-        </Card>
+          <Pressable
+            onPress={() => { setEditLotState(null); setShowTxSheet(true); }}
+            style={({ pressed }) => ({
+              width: 40,
+              height: 40,
+              borderRadius: radius.full,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: get('component.button.primary.bg') as string,
+              opacity: pressed ? 0.9 : 1
+            })}
+          >
+            <Icon name="plus" size={20} colorToken="text.onPrimary" />
+          </Pressable>
 
-        {/* Summary */}
-        <Card>
-          <View style={{ gap: spacing.s8 }}>
-            <Text style={{ color: text, fontWeight: '800' }}>Summary</Text>
-            <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
-              <Text style={{ color: get('text.muted') as string }}>Shares</Text>
-              <Text style={{ color: text, fontWeight:'700' }}>{pnl.qty}</Text>
-            </View>
-            <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
-              <Text style={{ color: get('text.muted') as string }}>Average cost</Text>
-              <Text style={{ color: text }}>{formatCurrency(pnl.avgCost, cur)}</Text>
-            </View>
-            <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
-              <Text style={{ color: get('text.muted') as string }}>Market value</Text>
-              <Text style={{ color: text }}>{formatCurrency((pnl.qty || 0) * (Number(last) || 0), cur)}</Text>
-            </View>
-            <View style={{ height: 1, backgroundColor: get('border.subtle') as string, marginVertical: spacing.s4 }} />
-            <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
-              <Text style={{ color: get('text.muted') as string }}>Realized P&L</Text>
-              <Text style={{ color: (pnl.realized >= 0 ? get('semantic.success') : get('semantic.danger')) as string, fontWeight:'700' }}>{formatCurrency(pnl.realized, cur)}</Text>
-            </View>
-            <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
-              <Text style={{ color: get('text.muted') as string }}>Unrealized P&L</Text>
-              <Text style={{ color: (pnl.unrealized >= 0 ? get('semantic.success') : get('semantic.danger')) as string, fontWeight:'700' }}>{formatCurrency(pnl.unrealized, cur)}</Text>
-            </View>
-          </View>
-        </Card>
-
-        {/* Filters */}
-        <View style={{ flexDirection:'row', gap: spacing.s8 }}>
-          {(['all','buys','sells'] as const).map(k => (
-            <Pressable key={k} accessibilityRole="button" onPress={() => setFilter(k)}
-              style={({ pressed }) => ({ paddingHorizontal: spacing.s12, paddingVertical: spacing.s6, borderRadius: radius.pill, borderWidth: 1, borderColor: get('component.button.secondary.border') as string, backgroundColor: filter===k ? (get('accent.primary') as string) : (pressed ? (get('surface.level2') as string) : (get('surface.level1') as string)) })}>
-              <Text style={{ color: filter===k ? (get('text.onPrimary') as string) : text, fontWeight:'700', textTransform:'capitalize' }}>{k}</Text>
-            </Pressable>
-          ))}
+          <Pressable
+            onPress={async () => { try { if (portfolioId) await exportHoldingTxCsv(portfolioId, symbol); } catch {} }}
+            style={({ pressed }) => ({
+              width: 40,
+              height: 40,
+              borderRadius: radius.full,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: get('surface.level1') as string,
+              opacity: pressed ? 0.9 : 1
+            })}
+          >
+            <Icon name="download" size={20} color={text} />
+          </Pressable>
         </View>
 
         {/* Transactions grouped by month */}
-        {monthGroups.length === 0 ? (
-          <Card>
-            <Text style={{ color: muted }}>No transactions yet.</Text>
-          </Card>
-        ) : (
-          monthGroups.map(group => (
-            <Card key={group.key} padding={0}>
-              <View style={{ paddingHorizontal: spacing.s12, paddingVertical: spacing.s12, gap: spacing.s6 }}>
-                <Text style={{ color: text, fontWeight:'800' }}>{(() => {
-                  const [y,m] = group.key.split('-').map((x:string)=> Number(x));
-                  const d = new Date(y, (m||1)-1, 1);
-                  return d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
-                })()}</Text>
-                {(() => {
-                  const totals = group.items.reduce((acc:any, l:any) => {
-                    const fee = Number((l.fee ?? l.fees) || 0);
-                    const gross = Number(l.qty) * Number(l.price);
-                    if (l.side === 'buy') { acc.bq += Number(l.qty)||0; acc.bv += gross + fee; }
-                    else { acc.sq += Number(l.qty)||0; acc.sv += gross - fee; }
-                    return acc;
-                  }, { bq:0, bv:0, sq:0, sv:0 });
-                  const net = totals.sv - totals.bv; // positive means net inflow
-                  return (
-                    <View style={{ flexDirection:'row', gap: spacing.s12, flexWrap:'wrap' }}>
-                      <Text style={{ color: get('text.muted') as string }}>Buys: {totals.bq} • {formatCurrency(totals.bv, cur)}</Text>
-                      <Text style={{ color: get('text.muted') as string }}>Sells: {totals.sq} • {formatCurrency(totals.sv, cur)}</Text>
-                      <Text style={{ color: (net >= 0 ? (get('semantic.success') as string) : (get('semantic.danger') as string)), fontWeight:'700' }}>Net: {formatCurrency(net, cur)}</Text>
-                    </View>
-                  );
-                })()}
-              </View>
-              {group.items.map((l: any, i: number) => (
-                <View key={l.id || i}>
-                  <TransactionRow lot={l} currency={cur} onEdit={onEditLot} onDelete={onDeleteLot} />
-                  {i < group.items.length - 1 ? <View style={{ height: 1, backgroundColor: get('border.subtle') as string }} /> : null}
+        <View style={{ paddingHorizontal: spacing.s16 }}>
+          {monthGroups.length === 0 ? (
+            <View style={{
+              backgroundColor: get('surface.level1') as string,
+              borderRadius: radius.lg,
+              padding: spacing.s20,
+              alignItems: 'center'
+            }}>
+              <Text style={{ color: text, fontWeight: '700', fontSize: 15, marginBottom: spacing.s4 }}>No transactions yet</Text>
+              <Text style={{ color: muted, fontSize: 13, textAlign: 'center' }}>Add your first transaction to start tracking</Text>
+            </View>
+          ) : (
+            monthGroups.map(group => (
+              <View key={group.key} style={{ marginBottom: spacing.s16 }}>
+                <View style={{ marginBottom: spacing.s8 }}>
+                  <Text style={{ color: text, fontWeight: '800', fontSize: 16 }}>
+                    {(() => {
+                      const [y, m] = group.key.split('-').map((x: string) => Number(x));
+                      const d = new Date(y, (m || 1) - 1, 1);
+                      return d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+                    })()}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: spacing.s8, marginTop: spacing.s4 }}>
+                    {(() => {
+                      const totals = group.items.reduce((acc: any, l: any) => {
+                        const fee = Number((l.fee ?? l.fees) || 0);
+                        const gross = Number(l.qty) * Number(l.price);
+                        if (l.side === 'buy') { acc.bq += Number(l.qty) || 0; acc.bv += gross + fee; }
+                        else { acc.sq += Number(l.qty) || 0; acc.sv += gross - fee; }
+                        return acc;
+                      }, { bq: 0, bv: 0, sq: 0, sv: 0 });
+                      return (
+                        <>
+                          <Text style={{ color: muted, fontSize: 12 }}>
+                            {group.items.length} {group.items.length === 1 ? 'transaction' : 'transactions'}
+                          </Text>
+                        </>
+                      );
+                    })()}
+                  </View>
                 </View>
-              ))}
-            </Card>
-          ))
-        )}
+                <View style={{ backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, overflow: 'hidden' }}>
+                  {group.items.map((l: any, i: number) => (
+                    <View key={l.id || i}>
+                      <TransactionRow lot={l} currency={cur} onEdit={onEditLot} onDelete={onDeleteLot} />
+                      {i < group.items.length - 1 ? <View style={{ height: 1, backgroundColor: get('border.subtle') as string, marginHorizontal: spacing.s12 }} /> : null}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))
+          )}
+        </View>
       </ScrollView>
 
       <TransactionEditorSheet

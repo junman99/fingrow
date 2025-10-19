@@ -21,13 +21,14 @@ const Key: React.FC<{
   onPress: () => void;
   variant?: KeyVariant;
 }> = ({ label, onPress, variant = 'digit' }) => {
-  const { get } = useThemeTokens();
+  const { get, isDark } = useThemeTokens();
   const accent = get('accent.primary') as string;
   const secondary = get('accent.secondary') as string;
   const textMuted = get('text.muted') as string;
   const textOnPrimary = get('text.onPrimary') as string;
-  const keySurface = 'rgba(255,255,255,0.10)';
-  const lightGlyph = 'rgba(248,249,252,0.95)';
+  const textPrimary = get('text.primary') as string;
+  const surface2 = get('surface.level2') as string;
+  const borderSubtle = get('border.subtle') as string;
 
   const isOperator = variant === 'operator';
   const isBackspace = variant === 'backspace';
@@ -36,10 +37,10 @@ const Key: React.FC<{
     ? secondary
     : isOperator
     ? 'transparent'
-    : keySurface;
+    : surface2;
 
-  const borderColor = isOperator ? 'rgba(255,255,255,0.18)' : 'transparent';
-  const textColor = isBackspace ? textOnPrimary : isOperator ? accent : lightGlyph;
+  const borderColor = isOperator ? borderSubtle : 'transparent';
+  const textColor = isBackspace ? textOnPrimary : isOperator ? accent : textPrimary;
 
   return (
     <Pressable
@@ -78,10 +79,10 @@ const ActionButton: React.FC<{
 }> = ({ label, onPress, variant = 'primary', disabled }) => {
   const { get } = useThemeTokens();
   const accent = get('accent.primary') as string;
-  const surface = 'rgba(255,255,255,0.10)';
+  const surface2 = get('surface.level2') as string;
   const textOnPrimary = get('text.onPrimary') as string;
   const textPrimary = get('text.primary') as string;
-  const secondaryLabel = 'rgba(248,249,252,0.92)';
+  const borderSubtle = get('border.subtle') as string;
 
   const isPrimary = variant === 'primary';
 
@@ -96,15 +97,15 @@ const ActionButton: React.FC<{
         borderRadius: radius.lg,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: isPrimary ? accent : surface,
+        backgroundColor: isPrimary ? accent : surface2,
         borderWidth: isPrimary ? 0 : 1,
-        borderColor: isPrimary ? 'transparent' : `${accent}33`,
+        borderColor: isPrimary ? 'transparent' : borderSubtle,
         opacity: pressed ? 0.9 : disabled ? 0.5 : 1,
       })}
     >
       <Text
         style={{
-          color: isPrimary ? textOnPrimary : secondaryLabel,
+          color: isPrimary ? textOnPrimary : textPrimary,
           fontWeight: '700',
         }}
       >
@@ -119,29 +120,29 @@ const Row: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 );
 
 const Keypad: React.FC<KeypadProps> = ({ onKey, onBackspace, onDone, onOk, onEvaluate, header }) => {
-  const { get } = useThemeTokens();
+  const { get, isDark } = useThemeTokens();
   const insets = useSafeAreaInsets();
   const padBottom = Math.max(insets.bottom + spacing.s2, spacing.s8);
-  const glassBackground = 'rgba(8,10,18,0.82)';
-  const borderTint = 'rgba(255,255,255,0.10)';
+  const surface1 = get('surface.level1') as string;
+  const borderSubtle = get('border.subtle') as string;
   const textMuted = get('text.muted') as string;
 
   return (
     <View
       style={{
         paddingHorizontal: spacing.s16,
-        paddingTop: spacing.s4,
+        paddingTop: spacing.s6,
         paddingBottom: padBottom,
         gap: spacing.s8,
-        backgroundColor: glassBackground,
+        backgroundColor: surface1,
         borderTopLeftRadius: radius.xl,
         borderTopRightRadius: radius.xl,
         borderTopWidth: 1,
-        borderTopColor: borderTint,
+        borderTopColor: borderSubtle,
         ...(elevation.level1 as any),
       }}
     >
-      <View style={{ alignItems: 'center', paddingBottom: spacing.s4 }}>
+      <View style={{ alignItems: 'center', paddingBottom: spacing.s2 }}>
         <View
           style={{
             width: 38,
@@ -152,7 +153,7 @@ const Keypad: React.FC<KeypadProps> = ({ onKey, onBackspace, onDone, onOk, onEva
         />
       </View>
       {header ? (
-        <View style={{ paddingBottom: spacing.s4 }}>{header}</View>
+        <View style={{ paddingBottom: spacing.s2 }}>{header}</View>
       ) : null}
       <Row>
         <Key label="7" onPress={() => onKey('7')} />

@@ -13,7 +13,6 @@ import {
   Platform,
 } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,6 +40,7 @@ type SummaryChipProps = {
   onPress?: () => void;
   fullWidth?: boolean;
   style?: StyleProp<ViewStyle>;
+  compact?: boolean;
 };
 
 type RGB = { r: number; g: number; b: number };
@@ -138,7 +138,7 @@ function evaluateExpression(expr: string): number {
 }
 
 export default function Add() {
-  const { get } = useThemeTokens();
+  const { get, isDark } = useThemeTokens();
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView | null>(null);
@@ -184,11 +184,8 @@ export default function Add() {
   const textPrimary = get('text.primary') as string;
   const textMuted = get('text.muted') as string;
   const textOnPrimary = get('text.onPrimary') as string;
+  const textOnSurface = get('text.onSurface') as string;
   const borderSubtle = get('border.subtle') as string;
-  // Use an even darker purple background for the category selection area
-  // to give a stronger, more solid backdrop behind the header and chips.
-  const heroGradientStart = '#16051f';
-  const heroGradientEnd = '#210828';
 
   const showToast = useCallback((message: string, duration = 1600) => {
     setToast(message);
@@ -235,8 +232,8 @@ export default function Add() {
 
   const { add: addRecurring } = useRecurringStore();
   const { width: screenW, height: screenH } = Dimensions.get('window');
-  const keypadHeightEstimate = 360;
-  const keypadReserve = keypadHeightEstimate + insets.bottom + spacing.s16;
+  const keypadHeightEstimate = 400;
+  const keypadReserve = keypadHeightEstimate + spacing.s12;
   const whenLabel = useMemo(() => fmtChipTime(txDate), [txDate]);
   const noteChipLabel = useMemo(() => {
     if (!note.trim()) return 'Add note';
@@ -283,16 +280,18 @@ export default function Add() {
           accessibilityRole="button"
           onPress={() => setMode(value)}
           style={({ pressed }) => ({
-            paddingHorizontal: spacing.s8,
-            paddingVertical: spacing.s4,
+            paddingHorizontal: spacing.s12,
+            paddingVertical: spacing.s6,
             borderRadius: radius.pill,
-            backgroundColor: active ? 'rgba(255,255,255,0.22)' : 'transparent',
-            opacity: pressed ? 0.9 : 1,
-            minWidth: 48,
+            backgroundColor: active ? accentPrimary : 'transparent',
+            transform: [{ scale: pressed ? 0.95 : 1 }],
+            minWidth: 56,
             alignItems: 'center',
           })}
         >
-          <Text style={{ color: 'rgba(255,255,255,0.9)', fontWeight: '700', letterSpacing: 0.6 }}>{label}</Text>
+          <Text style={{ color: active ? textOnPrimary : textMuted, fontWeight: active ? '800' : '600', letterSpacing: 0.8, fontSize: 12 }}>
+            {label}
+          </Text>
         </Pressable>
       );
     };
@@ -301,11 +300,13 @@ export default function Add() {
       <View
         style={{
           flexDirection: 'row',
-          backgroundColor: 'rgba(255,255,255,0.12)',
+          backgroundColor: surface2,
           borderRadius: radius.pill,
           paddingHorizontal: spacing.s4,
           paddingVertical: spacing.s4,
-          gap: spacing.s2,
+          gap: spacing.s4,
+          borderWidth: 1,
+          borderColor: borderSubtle,
         }}
       >
         {Option('expense', 'EXP')}
@@ -314,7 +315,7 @@ export default function Add() {
     );
   };
 
-  const SummaryChip = ({ icon, label, onPress, fullWidth, style }: SummaryChipProps) => {
+  const SummaryChip = ({ icon, label, onPress, fullWidth, style, compact }: SummaryChipProps) => {
     const iconName =
       icon === 'category'
         ? 'receipt'
@@ -332,7 +333,7 @@ export default function Add() {
         onPress={onPress}
         style={({ pressed }) => [
           {
-            opacity: pressed ? 0.85 : 1,
+            transform: [{ scale: pressed ? 0.96 : 1 }],
             alignSelf: fullWidth ? 'stretch' : undefined,
           },
           style,
@@ -342,33 +343,77 @@ export default function Add() {
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            gap: spacing.s6,
-            paddingHorizontal: spacing.s10,
-            paddingVertical: spacing.s6,
-            borderRadius: radius.pill,
-            backgroundColor: 'rgba(255,255,255,0.12)',
+            gap: compact ? spacing.s6 : spacing.s6,
+            paddingLeft: compact ? spacing.s8 : spacing.s8,
+            paddingRight: compact ? spacing.s10 : spacing.s10,
+            paddingVertical: compact ? spacing.s4 : spacing.s4,
+            borderRadius: radius.xl,
+            backgroundColor: surface1,
+            borderWidth: 1,
+            borderColor: borderSubtle,
           }}
         >
-          <Icon name={iconName} size={14} colorToken="text.onSurface" />
-          <Text style={{ color: 'rgba(250,250,252,0.95)', fontWeight: '600', fontSize: 12 }}>{label}</Text>
+          <View
+            style={{
+              width: compact ? 20 : 22,
+              height: compact ? 20 : 22,
+              borderRadius: radius.md,
+              backgroundColor: surface2,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Icon name={iconName} size={compact ? 11 : 12} colorToken="text.muted" />
+          </View>
+          <Text style={{ color: textOnSurface, fontWeight: '600', fontSize: compact ? 12 : 12, flex: fullWidth ? 1 : undefined }}>
+            {label}
+          </Text>
         </View>
       </Pressable>
     );
   };
 
   const containerPad = spacing.s16;
-  const gridGap = spacing.s8;
+  const gridGap = spacing.s12;
   const availableWidth = Math.max(0, screenW - containerPad * 2);
   const numColumns = availableWidth >= 320 ? 4 : 3;
   const itemWidth = Math.floor((availableWidth - gridGap * (numColumns - 1)) / numColumns);
-  const tileMaxHeight = Math.max(240, screenH - keypadHeightEstimate - insets.bottom - spacing.s32);
+  // Calculate available space for categories: total height minus keypad, header, and padding
+  const categoryHeaderHeight = 75; // "Choose category" title + subtitle + margins
+  const tileMaxHeight = Math.max(200, screenH - keypadReserve - categoryHeaderHeight - insets.top - spacing.s12);
 
   const renderCat = (item: Cat, index: number) => {
     const IconComp = item.icon as any;
     const selected = category?.key === item.key;
-    const base = withAlpha(mixColor(surface1, '#0e121f', 0.6), 0.2);
-    const bg = selected ? withAlpha(accentPrimary, 0.2) : base;
-    const border = selected ? withAlpha(accentPrimary, 0.35) : 'rgba(255,255,255,0.18)';
+
+    // Modern color scheme for categories
+    const categoryColors: Record<string, string> = {
+      food: '#FF6B6B',
+      groceries: '#4ECDC4',
+      transport: '#45B7D1',
+      fuel: '#FFA07A',
+      shopping: '#FF8B94',
+      entertain: '#C06C84',
+      bills: '#F67280',
+      utilities: '#6C5CE7',
+      health: '#FF7675',
+      fitness: '#00B894',
+      home: '#FDCB6E',
+      education: '#74B9FF',
+      pets: '#FD79A8',
+      travel: '#A29BFE',
+      subs: '#6C5CE7',
+      gifts: '#FF6348',
+      more: '#95A5A6',
+      salary: '#00B894',
+      refund: '#74B9FF',
+      bonus: '#FDCB6E',
+      freelance: '#A29BFE',
+    };
+
+    const categoryColor = categoryColors[item.key] || accentPrimary;
+
+    const bg = selected ? withAlpha(categoryColor, isDark ? 0.20 : 0.12) : surface1;
 
     return (
       <Pressable
@@ -376,10 +421,7 @@ export default function Add() {
         onPress={() => setCategory(item)}
         style={({ pressed }) => ({
           width: itemWidth,
-          alignItems: 'center',
-          marginRight: index % numColumns === numColumns - 1 ? 0 : gridGap,
-          marginBottom: gridGap,
-          opacity: pressed ? 0.85 : 1,
+          transform: [{ scale: pressed ? 0.96 : 1 }],
         })}
       >
         <View
@@ -387,17 +429,40 @@ export default function Add() {
             width: '100%',
             borderRadius: radius.lg,
             paddingVertical: spacing.s10,
-            paddingHorizontal: spacing.s6,
+            paddingHorizontal: spacing.s8,
             backgroundColor: bg,
-            borderWidth: 1,
-            borderColor: border,
             alignItems: 'center',
             justifyContent: 'center',
-            ...(selected ? elevation.level2 : elevation.level1),
+            borderWidth: selected ? 2 : 1,
+            borderColor: selected ? categoryColor : borderSubtle,
           }}
         >
-          <IconComp size={20} color={selected ? accentPrimary : textPrimary} />
-          <Text style={{ marginTop: spacing.s6, color: selected ? accentPrimary : textPrimary, fontWeight: '600' }} numberOfLines={1}>
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: radius.md,
+              backgroundColor: selected ? categoryColor : surface2,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: spacing.s6,
+            }}
+          >
+            <IconComp
+              size={20}
+              color={selected ? textOnPrimary : textMuted}
+              strokeWidth={selected ? 2.5 : 2}
+            />
+          </View>
+          <Text
+            style={{
+              color: selected ? textPrimary : textMuted,
+              fontWeight: selected ? '700' : '600',
+              fontSize: 11,
+              textAlign: 'center',
+            }}
+            numberOfLines={1}
+          >
             {item.label}
           </Text>
         </View>
@@ -513,11 +578,11 @@ export default function Add() {
   };
 
   const keypadHeader = (
-    <View style={{ gap: spacing.s6 }}>
+    <View style={{ gap: spacing.s6, paddingBottom: spacing.s4 }}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, paddingRight: spacing.s4 }}
+        contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, paddingRight: spacing.s4, paddingVertical: spacing.s2 }}
       >
         <SummaryChip
           icon="category"
@@ -551,7 +616,7 @@ export default function Add() {
 
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <ModeToggle />
-        <Text style={{ color: 'rgba(255,255,255,0.96)', fontSize: 32, fontWeight: '800' }}>${displayValue}</Text>
+        <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800' }}>${displayValue}</Text>
       </View>
 
       <SummaryChip
@@ -562,49 +627,34 @@ export default function Add() {
           setNoteOpen(true);
         }}
         fullWidth
+        compact
       />
     </View>
   );
 
   return (
-    <Screen style={{ paddingBottom: 0 }} inTab>
+    <Screen style={{ paddingBottom: 0, backgroundColor: backgroundDefault }} inTab>
       <View style={{ flex: 1 }}>
-        <LinearGradient
-          colors={[heroGradientStart, heroGradientEnd, backgroundDefault]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0.2, y: 1 }}
-          // increased height so gradient covers header and the summary chips row
-          style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 520 }}
-        />
-
-        <View style={{ flex: 1, paddingTop: spacing.s8, paddingHorizontal: containerPad, paddingBottom: keypadReserve }}>
-          <View style={{ marginBottom: spacing.s12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <View>
-                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Choose a category</Text>
-                <Text style={{ color: textMuted, marginTop: spacing.s4 }}>Tailor budgets and insights by tagging spend.</Text>
-              </View>
-              <Pressable
-                onPress={() => setCategory((mode === 'expense' ? EXPENSE_CATS : INCOME_CATS)[0])}
-                style={({ pressed }) => ({
-                  paddingHorizontal: spacing.s10,
-                  paddingVertical: spacing.s6,
-                  borderRadius: radius.pill,
-                  backgroundColor: surface2,
-                  opacity: pressed ? 0.88 : 1,
-                })}
-              >
-                <Text style={{ color: textMuted, fontWeight: '600', fontSize: 12 }}>Reset</Text>
-              </Pressable>
+        <View style={{ flex: 1, paddingTop: spacing.s10, paddingHorizontal: containerPad, paddingBottom: keypadReserve + spacing.s12 }}>
+          <View style={{ marginBottom: spacing.s8 }}>
+            <View style={{ marginBottom: spacing.s12 }}>
+              <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 20, letterSpacing: -0.5 }}>
+                Choose category
+              </Text>
+              <Text style={{ color: textMuted, marginTop: spacing.s4, fontSize: 13 }}>
+                Tag your transaction for better insights
+              </Text>
             </View>
 
             <ScrollView
               ref={scrollRef}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingTop: spacing.s8, paddingBottom: spacing.s12 }}
+              contentContainerStyle={{ paddingBottom: spacing.s12 }}
               style={{ maxHeight: tileMaxHeight }}
             >
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>{(mode === 'expense' ? EXPENSE_CATS : INCOME_CATS).map((item, index) => renderCat(item, index))}</View>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s12 }}>
+                {(mode === 'expense' ? EXPENSE_CATS : INCOME_CATS).map((item, index) => renderCat(item, index))}
+              </View>
             </ScrollView>
           </View>
         </View>
@@ -638,7 +688,7 @@ export default function Add() {
         />
 
         <Modal visible={accountOpen} transparent animationType="fade" onRequestClose={() => setAccountOpen(false)}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(8,10,18,0.72)', justifyContent: 'center', alignItems: 'center', padding: spacing.s16 }}>
+          <View style={{ flex: 1, backgroundColor: withAlpha(backgroundDefault, 0.92), justifyContent: 'center', alignItems: 'center', padding: spacing.s16 }}>
             <TouchableWithoutFeedback onPress={() => setAccountOpen(false)}>
               <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }} />
             </TouchableWithoutFeedback>
@@ -648,9 +698,9 @@ export default function Add() {
                 maxWidth: 360,
                 borderRadius: radius.xl,
                 padding: spacing.s16,
-                backgroundColor: 'rgba(11,13,22,0.88)',
+                backgroundColor: surface1,
                 borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.18)',
+                borderColor: borderSubtle,
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
@@ -688,7 +738,7 @@ export default function Add() {
         </Modal>
 
         <Modal visible={noteOpen} transparent animationType="fade" onRequestClose={onNoteCancel}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(8,10,18,0.72)', justifyContent: 'center', alignItems: 'center', padding: spacing.s16 }}>
+          <View style={{ flex: 1, backgroundColor: withAlpha(backgroundDefault, 0.92), justifyContent: 'center', alignItems: 'center', padding: spacing.s16 }}>
             <TouchableWithoutFeedback onPress={onNoteCancel}>
               <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }} />
             </TouchableWithoutFeedback>
@@ -698,9 +748,9 @@ export default function Add() {
                 maxWidth: 360,
                 borderRadius: radius.xl,
                 padding: spacing.s16,
-                backgroundColor: 'rgba(11,13,22,0.88)',
+                backgroundColor: surface1,
                 borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.18)',
+                borderColor: borderSubtle,
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
@@ -778,7 +828,7 @@ export default function Add() {
 
         <Modal visible={recurringOpen} transparent animationType="fade" onRequestClose={() => setRecurringOpen(false)}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-            <View style={{ flex: 1, backgroundColor: 'rgba(8,10,18,0.72)', justifyContent: 'center', alignItems: 'center', padding: spacing.s16 }}>
+            <View style={{ flex: 1, backgroundColor: withAlpha(backgroundDefault, 0.92), justifyContent: 'center', alignItems: 'center', padding: spacing.s16 }}>
               <TouchableWithoutFeedback onPress={() => setRecurringOpen(false)}>
                 <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }} />
               </TouchableWithoutFeedback>
@@ -788,9 +838,9 @@ export default function Add() {
                   maxWidth: 460,
                   borderRadius: radius.xl,
                   padding: spacing.s16,
-                  backgroundColor: 'rgba(11,13,22,0.98)',
+                  backgroundColor: surface1,
                   borderWidth: 1,
-                  borderColor: 'rgba(255,255,255,0.06)',
+                  borderColor: borderSubtle,
                   maxHeight: Math.max(520, Math.min(820, Dimensions.get('window').height - 80)),
                 }}
               >

@@ -15,6 +15,7 @@ import { Insights } from '../screens/Insights';
 import Settings from '../screens/Settings';
 import Profile from '../screens/Profile';
 import ProfileEdit from '../screens/ProfileEdit';
+import Achievements from '../screens/Achievements';
 import GroupsNavigator from './GroupsNavigator';
 import MoneyNavigator from './MoneyNavigator';
 import GoalsNavigator from './GoalsNavigator';
@@ -30,9 +31,8 @@ const Tab = createBottomTabNavigator();
 function BottomTabs() {
   const { get, isDark } = useThemeTokens();
   const insets = useSafeAreaInsets();
-  const tabBarBorderColor =
-    (get('border.subtle') as string) ?? (isDark ? 'rgba(255,255,255,0.16)' : 'rgba(180,196,255,0.35)');
-  const tabBarBackground = (get('surface.primary') as string) ?? (isDark ? '#131420' : '#FFFFFF');
+  const tabBarBorderColor = get('border.subtle') as string;
+  const tabBarBackground = get('surface.level1') as string;
 
   const tabBarStyle = React.useMemo(
     () => ({
@@ -42,11 +42,11 @@ function BottomTabs() {
       borderTopColor: tabBarBorderColor,
       backgroundColor: tabBarBackground,
       height: 45 + insets.bottom,
-      elevation: 8,
-      shadowColor: '#000000',
-      shadowOpacity: isDark ? 0.18 : 0.08,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: -1 },
+      elevation: 0,
+      shadowColor: isDark ? '#000000' : '#2D2424',
+      shadowOpacity: isDark ? 0.15 : 0.04,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: -2 },
     }),
     [insets.bottom, isDark, tabBarBackground, tabBarBorderColor],
   );
@@ -99,6 +99,7 @@ type RootParamList = {
   Add: undefined;
   BudgetModal: undefined;
   InsightsModal: undefined;
+  AchievementsModal: undefined;
   ProfileModal: undefined;
   ProfileEdit: undefined;
   Bills: undefined;
@@ -120,6 +121,7 @@ export default function RootNavigator() {
         <Root.Screen name="Add" component={Add} options={{ presentation: 'modal' }} />
         <Root.Screen name="BudgetModal" component={Budgets} options={{ presentation: 'modal' }} />
         <Root.Screen name="InsightsModal" component={Insights} options={{ presentation: 'modal' }} />
+        <Root.Screen name="AchievementsModal" component={Achievements} options={{ presentation: 'modal' }} />
         <Root.Screen name="ProfileModal" component={Profile} options={{ presentation: 'modal' }} />
         <Root.Screen name="ProfileEdit" component={ProfileEdit} options={{ presentation: 'modal' }} />
         <Root.Screen name="Bills" component={BillsList} options={{ presentation: 'modal', headerShown: false }} />

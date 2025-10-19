@@ -4,7 +4,6 @@ import { Screen } from '../components/Screen';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { useInvestStore } from '../store/invest';
-import { toStooqSymbol } from '../lib/stooq';
 import { baseCryptoSymbol } from '../lib/coingecko';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
@@ -22,12 +21,15 @@ export default function Search() {
   const results: Item[] = useMemo(() => {
     const sym = q.trim().toUpperCase();
     if (!sym) return [];
-    // For MVP, we just map to .US provider symbol
-    const st = toStooqSymbol(sym);
     const out: Item[] = [];
-    if (st) out.push({ symbol: sym, provider: st.toUpperCase() });
+    // Check if it's a crypto symbol
     const base = baseCryptoSymbol(sym);
-    if (base) out.push({ symbol: sym, provider: 'COINGECKO' });
+    if (base) {
+      out.push({ symbol: sym, provider: 'COINGECKO' });
+    } else {
+      // Default to Yahoo Finance for stocks/ETFs
+      out.push({ symbol: sym, provider: 'YAHOO' });
+    }
     return out;
   }, [q]);
 
