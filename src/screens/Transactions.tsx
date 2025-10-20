@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { View, Text, Pressable, StyleSheet, FlatList } from 'react-native';
+import { View, Text, Pressable, StyleSheet, FlatList, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Screen } from '../components/Screen';
 import Icon from '../components/Icon';
@@ -10,7 +10,7 @@ import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
 import { useTxStore } from '../store/transactions';
 import { Swipeable } from 'react-native-gesture-handler';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Tx = ReturnType<typeof useTxStore.getState>['transactions'][number];
@@ -66,37 +66,132 @@ const RANGE_OPTIONS: { label: string; value: typeof RANGE_SEQUENCE[number] }[] =
   value: key,
 }));
 
-const Row = ({ item, onRemove }: { item: Tx; onRemove: () => void }) => {
+// Animated pressable component
+const AnimatedPressable: React.FC<{
+  onPress: () => void;
+  children: React.ReactNode;
+  style?: any;
+}> = ({ onPress, children, style }) => {
+  const scaleAnim = React.useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  return (
+    <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+      <Animated.View style={[style, { transform: [{ scale: scaleAnim }] }]}>
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
+};
+
+const Row = ({ item, onRemove, onEdit }: { item: Tx; onRemove: () => void; onEdit: () => void }) => {
   const { get } = useThemeTokens();
   const isIncome = item.type === 'income';
 
   const renderRightActions = () => (
-    <Pressable accessibilityRole="button" onPress={onRemove}>
-      <View style={{ width: 88, height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: get('semantic.danger') as string }}>
-        <Text style={{ color: get('text.onPrimary') as string, fontWeight: '700' }}>Delete</Text>
-      </View>
-    </Pressable>
+    <View style={{ flexDirection: 'row' }}>
+      <Pressable accessibilityRole="button" onPress={onEdit}>
+        <View style={{ width: 80, height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: get('accent.primary') as string }}>
+          <Icon name="edit" size={20} colorToken="text.onPrimary" />
+          <Text style={{ color: get('text.onPrimary') as string, fontWeight: '700', fontSize: 13, marginTop: spacing.s4 }}>Edit</Text>
+        </View>
+      </Pressable>
+      <Pressable accessibilityRole="button" onPress={onRemove}>
+        <View style={{ width: 80, height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: get('semantic.danger') as string }}>
+          <Icon name="trash" size={20} colorToken="text.onPrimary" />
+          <Text style={{ color: get('text.onPrimary') as string, fontWeight: '700', fontSize: 13, marginTop: spacing.s4 }}>Delete</Text>
+        </View>
+      </Pressable>
+    </View>
   );
 
   const d = new Date(item.date);
+  const amount = Math.abs(Number(item.amount) || 0);
+  const categoryInitial = (item.category || 'T').charAt(0).toUpperCase();
+
+  const fmtTime = (date: Date) => {
+    if (isNaN(date.getTime())) return '';
+    const h = date.getHours();
+    const m = date.getMinutes();
+    const hh = ((h % 12) || 12).toString();
+    const mm = m.toString().padStart(2, '0');
+    const ampm = h < 12 ? 'AM' : 'PM';
+    return `${hh}:${mm} ${ampm}`;
+  };
 
   return (
     <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
-      <View style={{ paddingVertical: spacing.s12, paddingHorizontal: spacing.s16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: get('border.subtle') as string }}>
+      <View style={{
+        paddingVertical: spacing.s12,
+        paddingHorizontal: spacing.s16,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: get('border.subtle') as string,
+        backgroundColor: get('surface.level1') as string
+      }}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {/* left icon square */}
-          <View style={{ width: 40, height: 40, borderRadius: radius.md, backgroundColor: isIncome ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', marginRight: spacing.s12, alignItems:'center', justifyContent:'center' }}>
-            <Text style={{ color: isIncome ? (get('semantic.success') as string) : (get('semantic.danger') as string), fontWeight: '700' }}>{(item.category || '').slice(0,1).toUpperCase()}</Text>
+          {/* Category indicator - circular with initial */}
+          <View style={{
+            width: 40,
+            height: 40,
+            borderRadius: radius.md,
+            backgroundColor: isIncome ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+            marginRight: spacing.s12,
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <Text style={{
+              color: isIncome ? (get('semantic.success') as string) : (get('semantic.danger') as string),
+              fontWeight: '700',
+              fontSize: 16
+            }}>
+              {categoryInitial}
+            </Text>
           </View>
 
-          {/* middle */}
+          {/* Content */}
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text numberOfLines={1} style={{ color: get('text.primary') as string, fontWeight: '700' }}>{item.note || item.category}</Text>
-            <Text numberOfLines={1} style={{ color: get('text.muted') as string, marginTop: 2 }}>{isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {item.category || 'General'}</Text>
+            <Text numberOfLines={1} style={{
+              color: get('text.primary') as string,
+              fontWeight: '700',
+              fontSize: 15
+            }}>
+              {item.note || item.category || 'Transaction'}
+            </Text>
+            <Text numberOfLines={1} style={{
+              color: get('text.muted') as string,
+              fontSize: 13,
+              marginTop: 2
+            }}>
+              {fmtTime(d)} • {item.category}
+            </Text>
           </View>
 
-          {/* right amount */}
-          <Text style={{ color: isIncome ? (get('semantic.success') as string) : (get('semantic.danger') as string), fontWeight: '700' }}>{`${isIncome ? '+' : '-'}$${Math.abs(Number(item.amount) || 0).toFixed(2)}`}</Text>
+          {/* Amount */}
+          <Text style={{
+            color: isIncome ? (get('semantic.success') as string) : (get('semantic.danger') as string),
+            fontWeight: '700',
+            fontSize: 15,
+            marginLeft: spacing.s8
+          }}>
+            {isIncome ? '+' : '-'}${amount.toFixed(2)}
+          </Text>
         </View>
       </View>
     </Swipeable>
@@ -138,8 +233,9 @@ export const Transactions: React.FC = () => {
   const { get } = useThemeTokens();
   const { transactions, remove } = useTxStore();
   const insets = useSafeAreaInsets();
+  const nav = useNavigation();
   const [filter, setFilter] = useState<'all'|'income'|'expense'>('all');
-  const [range, setRange] = useState<'ALL'|'7D'|'30D'|'MONTH'|'CUSTOM'>('30D');
+  const [range, setRange] = useState<'ALL'|'7D'|'30D'|'MONTH'|'CUSTOM'>('MONTH');
   const [search, setSearch] = useState('');
   const [searchOn, setSearchOn] = useState(false);
   const [totalMode, setTotalMode] = useState<'SPENT'|'NET'>('SPENT');
@@ -151,6 +247,26 @@ export const Transactions: React.FC = () => {
   const typeButtonRef = useRef<View>(null);
   const rangeButtonRef = useRef<View>(null);
   const normalizedSearch = search.trim().toLowerCase();
+
+  // Animation for search bar
+  const searchHeightAnim = useRef(new Animated.Value(0)).current;
+  const searchOpacityAnim = useRef(new Animated.Value(0)).current;
+
+  // Animate search bar when toggled
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(searchHeightAnim, {
+        toValue: searchOn ? 1 : 0,
+        duration: 250,
+        useNativeDriver: false,
+      }),
+      Animated.timing(searchOpacityAnim, {
+        toValue: searchOn ? 1 : 0,
+        duration: 250,
+        useNativeDriver: false,
+      }),
+    ]).start();
+  }, [searchOn, searchHeightAnim, searchOpacityAnim]);
 
   const openTypeMenu = useCallback(() => {
     const ref: any = typeButtonRef.current;
@@ -185,7 +301,7 @@ export const Transactions: React.FC = () => {
   // Reset filters whenever this modal/screen gains focus
   useFocusEffect(useCallback(() => {
     setFilter('all');
-    setRange('30D');
+    setRange('MONTH');
     setSearch('');
     setSearchOn(false);
     setTypeMenuVisible(false);
@@ -296,8 +412,12 @@ export const Transactions: React.FC = () => {
   }, [transactions, filter, normalizedSearch, range]);
   const onPrimary = get('text.onPrimary') as string;
   const textPrimary = get('text.primary') as string;
+  const muted = get('text.muted') as string;
+  const textOnPrimary = get('text.onPrimary') as string;
   const success = get('semantic.success') as string;
   const danger = get('semantic.danger') as string;
+  const surface1 = get('surface.level1') as string;
+  const borderSubtle = get('border.subtle') as string;
   const backgroundHex = ((get('background.default') as string) || '').toLowerCase();
   const isLightTheme = backgroundHex.includes('#f7') || backgroundHex.includes('#f8') || backgroundHex.includes('fff');
   const heroForeground = isLightTheme ? onPrimary : textPrimary;
@@ -325,6 +445,10 @@ export const Transactions: React.FC = () => {
     try { await remove(tx.id); } catch {}
   };
 
+  const onEdit = (tx: Tx) => {
+    (nav as any).navigate('EditTransaction', { id: tx.id });
+  };
+
   return (
     <Screen inTab style={{ paddingBottom: 0 }}>
       {/* AppHeader removed; hero card now contains close + summary */}
@@ -335,192 +459,296 @@ export const Transactions: React.FC = () => {
           keyExtractor={(s) => s.key}
           bounces={false}
           contentContainerStyle={{ paddingBottom: listPaddingBottom }}
+          ListEmptyComponent={
+            sectionsRaw.length === 0 ? (
+              <View style={{
+                marginHorizontal: spacing.s16,
+                marginTop: spacing.s24,
+                padding: spacing.s24,
+                borderRadius: radius.xl,
+                backgroundColor: get('surface.level1') as string,
+                alignItems: 'center',
+                gap: spacing.s12,
+                borderWidth: 1,
+                borderColor: get('border.subtle') as string
+              }}>
+                <View style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: radius.lg,
+                  backgroundColor: withOpacity(get('accent.primary') as string, 0.1),
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Icon name="inbox" size={28} colorToken="accent.primary" />
+                </View>
+                <Text style={{
+                  color: get('text.primary') as string,
+                  fontWeight: '700',
+                  fontSize: 18,
+                  textAlign: 'center'
+                }}>
+                  No transactions found
+                </Text>
+                <Text style={{
+                  color: get('text.muted') as string,
+                  fontSize: 14,
+                  textAlign: 'center',
+                  lineHeight: 20
+                }}>
+                  {normalizedSearch.length > 0
+                    ? 'Try adjusting your search or filters'
+                    : filter !== 'all' || range !== 'ALL'
+                    ? 'No transactions match your current filters'
+                    : 'Start tracking your finances by adding your first transaction'}
+                </Text>
+              </View>
+            ) : null
+          }
           ListHeaderComponent={
             <View style={styles.headerContainer}>
-              <LinearGradient
-                colors={gradientColors}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.heroCard}
-              >
-                <View style={styles.heroHeader}>
-                  <View style={styles.heroHeaderText}>
-                    <Text style={[styles.heroTitle, { color: heroForeground }]}>Transaction history</Text>
-                    <Text style={[styles.heroSubtitle, { color: heroMuted }]}>
-                      All accounts • {filtered.length} items
-                    </Text>
-                  </View>
-                  <Pressable
-                    onPress={() => setSearchOn((s) => !s)}
-                    style={({ pressed }) => [
-                      styles.heroIconButton,
-                      {
-                        borderColor: heroControlBorder,
-                        backgroundColor: searchOn ? heroControlActive : heroControlBg,
-                        opacity: pressed ? 0.85 : 1,
-                      },
-                    ]}
-                  >
-                    <Icon name="filter" size={16} colorToken={heroIconToken} />
-                    <Text style={{ color: heroForeground, fontWeight: '600', fontSize: 12 }}>
-                      {searchOn ? 'Close search' : 'Search'}
-                    </Text>
-                  </Pressable>
-                </View>
+              {/* Page Header with Stats */}
+              <View style={{ marginBottom: spacing.s16 }}>
+                <Text style={{ fontSize: 32, fontWeight: '800', color: textPrimary, letterSpacing: -0.5 }}>
+                  History
+                </Text>
+                <Text style={{ color: muted, fontSize: 14, marginTop: spacing.s2 }}>
+                  {rangeLabel} • {filtered.length} transaction{filtered.length !== 1 ? 's' : ''}
+                </Text>
 
-                <View style={styles.heroControlsRow}>
-                  <Pressable
-                    onPress={() => setTotalMode((prev) => (prev === 'SPENT' ? 'NET' : 'SPENT'))}
-                    style={({ pressed }) => [
-                      styles.controlPill,
-                      {
-                        borderColor: heroControlBorder,
-                        backgroundColor: heroControlActive,
-                        opacity: pressed ? 0.85 : 1,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.controlPillLabel, { color: heroTextFaint }]}>Totals</Text>
-                    <View style={styles.controlPillValueRow}>
-                      <Icon name="trending-up" size={16} colorToken={heroIconToken} />
-                      <Text style={[styles.controlPillValue, { color: heroForeground }]}>{totalLabel}</Text>
+                {/* Overview Stats - Direct on Background */}
+                <View style={{ marginTop: spacing.s16, gap: spacing.s12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s12 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: muted, fontSize: 12, fontWeight: '600', marginBottom: spacing.s4 }}>
+                        Total Spending
+                      </Text>
+                      <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
+                        ${expenseTotal.toFixed(0)}
+                      </Text>
                     </View>
-                    <Text style={[styles.controlHint, { color: heroTextFaint }]}>Tap to switch view</Text>
-                  </Pressable>
-
-                  <View ref={typeButtonRef} collapsable={false} style={{ flexGrow: 1, minWidth: 140 }}>
-                    <Pressable
-                      onPress={openTypeMenu}
-                      style={({ pressed }) => [
-                        styles.controlPill,
-                        {
-                          borderColor: heroControlBorder,
-                          backgroundColor: filter === 'all' ? heroControlBg : heroControlActive,
-                          opacity: pressed ? 0.85 : 1,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.controlPillLabel, { color: heroTextFaint }]}>Type</Text>
-                      <View style={styles.controlPillValueRow}>
-                        <Icon name="filter" size={16} colorToken={heroIconToken} />
-                        <Text style={[styles.controlPillValue, { color: heroForeground }]}>{typeLabel}</Text>
-                      </View>
-                    </Pressable>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: muted, fontSize: 12, fontWeight: '600', marginBottom: spacing.s4 }}>
+                        Total Income
+                      </Text>
+                      <Text style={{ color: success, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
+                        +${incomeTotal.toFixed(0)}
+                      </Text>
+                    </View>
                   </View>
 
-                  <View ref={rangeButtonRef} collapsable={false} style={{ flexGrow: 1, minWidth: 140 }}>
-                    <Pressable
-                      onPress={openRangeMenu}
-                      style={({ pressed }) => [
-                        styles.controlPill,
-                        {
-                          borderColor: heroControlBorder,
-                          backgroundColor: range === 'ALL' ? heroControlBg : heroControlActive,
-                          opacity: pressed ? 0.85 : 1,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.controlPillLabel, { color: heroTextFaint }]}>Range</Text>
-                      <View style={styles.controlPillValueRow}>
-                        <Icon name="history" size={16} colorToken={heroIconToken} />
-                        <Text style={[styles.controlPillValue, { color: heroForeground }]}>{rangeLabel}</Text>
-                      </View>
-                    </Pressable>
-                  </View>
-                </View>
-
-                {searchOn ? (
-                  <View style={[styles.searchContainer, { backgroundColor: searchContainerBg, borderColor: heroControlBorder }]}>
-                    <Input value={search} onChangeText={setSearch} placeholder="Search notes or categories" style={{ margin: 0 }} />
-                  </View>
-                ) : null}
-
-                <View style={styles.heroStatsRow}>
-                  <View style={[styles.heroStatCard, { backgroundColor: heroTileBg, borderColor: heroControlBorder }]}>
-                    <Text style={[styles.heroStatLabel, { color: heroMuted }]}>Net movement</Text>
-                    {typeof percentChange === 'number' ? (
-                      <View
-                        style={[
-                          styles.heroBadge,
-                          styles.heroBadgeInline,
-                          { backgroundColor: percentChange >= 0 ? successSoft : dangerSoft }
-                        ]}
-                      >
-                        <Text style={[styles.heroBadgeText, { color: heroForeground }]}>
-                          {`${percentChange >= 0 ? '▲' : '▼'} ${Math.abs(percentChange).toFixed(1)}%`}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <View>
+                      <Text style={{ color: muted, fontSize: 13 }}>
+                        Net: <Text style={{ color: netTotal >= 0 ? success : danger, fontWeight: '700' }}>
+                          {netTotal >= 0 ? '+' : ''}${netTotal.toFixed(2)}
+                        </Text>
+                      </Text>
+                      <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s2 }}>
+                        Avg per transaction: ${avgTxn.toFixed(2)}
+                      </Text>
+                    </View>
+                    {typeof percentChange === 'number' && (
+                      <View style={{
+                        paddingHorizontal: spacing.s10,
+                        paddingVertical: spacing.s6,
+                        borderRadius: radius.pill,
+                        backgroundColor: withOpacity(percentChange >= 0 ? success : danger, 0.15)
+                      }}>
+                        <Text style={{ color: percentChange >= 0 ? success : danger, fontWeight: '700', fontSize: 12 }}>
+                          {percentChange >= 0 ? '▲' : '▼'} {Math.abs(percentChange).toFixed(1)}% vs prior
                         </Text>
                       </View>
-                    ) : null}
-                    <Text style={[styles.heroStatValue, { color: heroForeground }]}>
-                      {`${netTotal >= 0 ? '+' : '-'}$${Math.abs(netTotal).toFixed(2)}`}
-                    </Text>
-                    <View style={[styles.heroDivider, { backgroundColor: heroDivider }]} />
-                    <Text style={[styles.heroStatFootnote, { color: heroMuted }]}>
-                      Average ticket {avgTxn ? `$${avgTxn.toFixed(2)}` : '—'}
-                    </Text>
-                  </View>
-
-                  <View style={[styles.heroStatCard, { backgroundColor: heroTileBg, borderColor: heroControlBorder }]}>
-                    <View style={styles.heroStatTopRow}>
-                      <Text style={[styles.heroStatLabel, { color: heroMuted }]}>Income vs spend</Text>
-                    </View>
-                    <View style={styles.heroSplitStat}>
-                      <Text style={[styles.heroSplitLabel, { color: heroMuted }]}>Income</Text>
-                      <Text style={[styles.heroSplitValue, { color: heroForeground }]}>
-                        ${incomeTotal.toFixed(2)}
-                      </Text>
-                    </View>
-                    <View style={[styles.heroDivider, { backgroundColor: heroDivider }]} />
-                    <View style={styles.heroSplitStat}>
-                      <Text style={[styles.heroSplitLabel, { color: heroMuted }]}>Spending</Text>
-                      <Text style={[styles.heroSplitValue, { color: heroForeground }]}>
-                        ${expenseTotal.toFixed(2)}
-                      </Text>
-                    </View>
-                    <View style={[styles.heroDivider, { backgroundColor: heroDivider }]} />
-                    <Text style={[styles.heroStatFootnote, { color: heroMuted }]}>
-                      {filtered.length} transactions
-                    </Text>
+                    )}
                   </View>
                 </View>
+              </View>
 
-              </LinearGradient>
+              {/* Filters Row */}
+              <View style={{ flexDirection: 'row', gap: spacing.s8, marginBottom: searchOn ? spacing.s4 : spacing.s0, alignItems: 'center' }}>
+                <View ref={typeButtonRef} collapsable={false}>
+                  <AnimatedPressable onPress={openTypeMenu}>
+                    <View
+                      style={{
+                        paddingVertical: spacing.s8,
+                        paddingHorizontal: spacing.s12,
+                        borderRadius: radius.pill,
+                        backgroundColor: filter === 'all' ? (get('accent.primary') as string) : surface1,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: spacing.s6
+                      }}
+                    >
+                      <Icon name="filter" size={16} color={filter === 'all' ? textOnPrimary : textPrimary} />
+                      <Text style={{ color: filter === 'all' ? textOnPrimary : textPrimary, fontWeight: '600', fontSize: 13 }}>
+                        {typeLabel}
+                      </Text>
+                    </View>
+                  </AnimatedPressable>
+                </View>
+
+                <View ref={rangeButtonRef} collapsable={false}>
+                  <AnimatedPressable onPress={openRangeMenu}>
+                    <View
+                      style={{
+                        paddingVertical: spacing.s8,
+                        paddingHorizontal: spacing.s12,
+                        borderRadius: radius.pill,
+                        backgroundColor: range === 'MONTH' ? (get('accent.primary') as string) : surface1,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: spacing.s6
+                      }}
+                    >
+                      <Icon name="calendar" size={16} color={range === 'MONTH' ? textOnPrimary : textPrimary} />
+                      <Text style={{ color: range === 'MONTH' ? textOnPrimary : textPrimary, fontWeight: '600', fontSize: 13 }}>
+                        {rangeLabel}
+                      </Text>
+                    </View>
+                  </AnimatedPressable>
+                </View>
+
+                <View style={{ flex: 1 }} />
+
+                <AnimatedPressable onPress={() => setSearchOn((s) => !s)}>
+                  <View
+                    style={{
+                      paddingVertical: spacing.s8,
+                      paddingHorizontal: spacing.s12,
+                      borderRadius: radius.pill,
+                      backgroundColor: searchOn ? (get('accent.primary') as string) : surface1,
+                    }}
+                  >
+                    <Icon
+                      name={searchOn ? 'x' : 'search'}
+                      size={16}
+                      colorToken={searchOn ? 'text.onPrimary' : 'text.primary'}
+                    />
+                  </View>
+                </AnimatedPressable>
+              </View>
+
+              <Animated.View
+                style={{
+                  height: searchHeightAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 44],
+                  }),
+                  opacity: searchOpacityAnim,
+                  overflow: 'hidden',
+                }}
+              >
+                <View>
+                  <Input
+                    value={search}
+                    onChangeText={setSearch}
+                    placeholder="Search notes or categories"
+                    style={{ margin: 0 }}
+                  />
+                </View>
+              </Animated.View>
             </View>
           }
           renderItem={({ item }) => {
             const isCollapsed = !!collapsed[item.key];
             const displayTotal = totalMode === 'SPENT' ? item.totalSpent : item.totalNet;
             const isPositive = displayTotal >= 0;
+            const dayIncome = item.data.filter(t => t.type === 'income').reduce((a, t) => a + Number(t.amount || 0), 0);
+            const dayExpense = item.data.filter(t => t.type !== 'income').reduce((a, t) => a + Number(t.amount || 0), 0);
+            const hasLargeTransaction = item.data.some(t => Math.abs(Number(t.amount) || 0) >= 500);
+
             return (
-              <View style={{ marginHorizontal: spacing.s16, marginBottom: spacing.s12, borderRadius: radius.lg, backgroundColor: get('surface.level1') as string }}>
+              <View style={{
+                marginHorizontal: spacing.s16,
+                marginBottom: spacing.s12,
+                borderRadius: radius.xl,
+                backgroundColor: get('surface.level1') as string,
+                borderWidth: 1,
+                borderColor: get('border.subtle') as string,
+                overflow: 'hidden'
+              }}>
                 {/* Card Header */}
-                <Pressable onPress={() => setCollapsed(prev => ({ ...prev, [item.key]: !prev[item.key] }))}>
-                  <View style={{ paddingVertical: spacing.s12, paddingHorizontal: spacing.s16 }}>
+                <AnimatedPressable
+                  onPress={() => setCollapsed(prev => ({ ...prev, [item.key]: !prev[item.key] }))}
+                >
+                  <View style={{
+                    paddingVertical: spacing.s16,
+                    paddingHorizontal: spacing.s16,
+                    backgroundColor: get('surface.level1') as string
+                  }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 16 }}>{item.title}</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
-                        <Text style={{ color: isPositive ? (totalMode==='NET' ? (get('semantic.success') as string) : (get('text.primary') as string)) : (get('semantic.danger') as string), fontWeight: '700' }}>
-                          {totalMode==='SPENT'
-                            ? `-$${Math.abs(displayTotal).toFixed(2)}`
-                            : `${isPositive ? '+' : '-'}$${Math.abs(displayTotal).toFixed(2)}`}
-                        </Text>
-                        <Text style={{ color: get('icon.default') as string, transform: [{ rotate: (!!collapsed[item.key]) ? '180deg' : '0deg' }] }}>⌄</Text>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Text style={{
+                            color: get('text.primary') as string,
+                            fontWeight: '800',
+                            fontSize: 17,
+                            letterSpacing: -0.3
+                          }}>
+                            {item.title}
+                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+                            <Text style={{
+                              color: get('text.muted') as string,
+                              fontSize: 13,
+                              fontWeight: '500'
+                            }}>
+                              {item.data.length} transaction{item.data.length !== 1 ? 's' : ''}
+                            </Text>
+                            {hasLargeTransaction && (
+                              <>
+                                <Text style={{ color: get('text.muted') as string }}>•</Text>
+                                <View style={{
+                                  paddingHorizontal: spacing.s6,
+                                  paddingVertical: spacing.s2,
+                                  borderRadius: radius.pill,
+                                  backgroundColor: withOpacity(get('semantic.warning') as string, 0.15)
+                                }}>
+                                  <Text style={{
+                                    color: get('semantic.warning') as string,
+                                    fontSize: 10,
+                                    fontWeight: '700'
+                                  }}>
+                                    Large txn
+                                  </Text>
+                                </View>
+                              </>
+                            )}
+                          </View>
+                        </View>
+                        {(dayIncome > 0 || dayExpense > 0) && (
+                          <View style={{ flexDirection: 'row', gap: spacing.s8, marginTop: spacing.s6 }}>
+                            {dayExpense > 0 && (
+                              <Text style={{ color: get('text.muted') as string, fontSize: 12 }}>
+                                Spent: ${dayExpense.toFixed(2)}
+                              </Text>
+                            )}
+                            {dayIncome > 0 && (
+                              <Text style={{ color: get('semantic.success') as string, fontSize: 12, fontWeight: '600' }}>
+                                Earned: +${dayIncome.toFixed(2)}
+                              </Text>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                      <View style={{ marginLeft: spacing.s8 }}>
+                        <Icon
+                          name={isCollapsed ? 'chevron-down' : 'chevron-up'}
+                          size={20}
+                          colorToken="icon.default"
+                        />
                       </View>
                     </View>
                   </View>
-                </Pressable>
-                {/* Divider when expanded and has items */}
-                {!isCollapsed && item.data.length > 0 ? (
-                  <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: get('border.subtle') as string, marginHorizontal: spacing.s16 }} />
-                ) : null}
+                </AnimatedPressable>
                 {/* Card Body */}
-                {!isCollapsed && item.data.length > 0 ? (
+                {!isCollapsed && item.data.length > 0 && (
                   <View>
                     {item.data.map((tx) => (
-                      <Row key={tx.id} item={tx} onRemove={() => onDelete(tx)} />
+                      <Row key={tx.id} item={tx} onRemove={() => onDelete(tx)} onEdit={() => onEdit(tx)} />
                     ))}
                   </View>
-                ) : null}
+                )}
               </View>
             );
           }}
@@ -639,10 +867,9 @@ const styles = StyleSheet.create({
   },
   heroStatCard: {
     flex: 1,
-    borderRadius: radius.lg,
-    padding: spacing.s12,
+    borderRadius: radius.xl,
+    padding: spacing.s16,
     gap: spacing.s8,
-    borderWidth: 1,
     minWidth: 0,
   },
   heroStatLabel: {

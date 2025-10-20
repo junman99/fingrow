@@ -83,7 +83,15 @@ export type IconName =
   | 'shield-check'
   | 'sparkles'
   | 'gem'
-  | 'sunrise';
+  | 'sunrise'
+  | 'search'
+  | 'alert-circle'
+  | 'arrow-up'
+  | 'arrow-down'
+  | 'chevron-down'
+  | 'chevron-up'
+  | 'shopping-bag'
+  | 'inbox';
 
 type Props = {
   name: IconName;
@@ -147,6 +155,14 @@ const featherMap: Record<Exclude<IconName, 'arrow-bold-left' | 'arrow-bold-right
   'sparkles': 'star',
   'gem': 'hexagon',
   'sunrise': 'sunrise',
+  'search': 'search',
+  'alert-circle': 'alert-circle',
+  'arrow-up': 'arrow-up',
+  'arrow-down': 'arrow-down',
+  'chevron-down': 'chevron-down',
+  'chevron-up': 'chevron-up',
+  'shopping-bag': 'shopping-bag',
+  'inbox': 'inbox',
 };
 
 const Icon: React.FC<Props> = ({ name, size = 24, colorToken = 'icon.default', color: colorProp }) => {

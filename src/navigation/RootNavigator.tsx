@@ -21,6 +21,7 @@ import MoneyNavigator from './MoneyNavigator';
 import GoalsNavigator from './GoalsNavigator';
 import InvestNavigator from './InvestNavigator';
 import Add from '../screens/Add';
+import EditTransaction from '../screens/EditTransaction';
 import { useTheme, useThemeTokens } from '../theme/ThemeProvider';
 import Icon from '../components/Icon';
 
@@ -97,6 +98,7 @@ type RootParamList = {
   Goals: undefined;
   TransactionsModal: undefined;
   Add: undefined;
+  EditTransaction: { id: string };
   BudgetModal: undefined;
   InsightsModal: undefined;
   AchievementsModal: undefined;
@@ -119,6 +121,7 @@ export default function RootNavigator() {
         <Root.Screen name="Goals" component={GoalsNavigator} options={{ presentation: 'modal' }} />
         <Root.Screen name="TransactionsModal" component={Transactions} options={{ presentation: 'modal' }} />
         <Root.Screen name="Add" component={Add} options={{ presentation: 'modal' }} />
+        <Root.Screen name="EditTransaction" component={EditTransaction} options={{ presentation: 'modal' }} />
         <Root.Screen name="BudgetModal" component={Budgets} options={{ presentation: 'modal' }} />
         <Root.Screen name="InsightsModal" component={Insights} options={{ presentation: 'modal' }} />
         <Root.Screen name="AchievementsModal" component={Achievements} options={{ presentation: 'modal' }} />

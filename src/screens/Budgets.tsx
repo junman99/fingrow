@@ -108,7 +108,7 @@ export const Budgets: React.FC = () => {
   // Upcoming bills hold (detect recurring from last 6+ months data)
   const allTx = require('../store/transactions').useTxStore.getState().transactions || [];
   const recSeries = detectRecurring(allTx, today);
-  
+
   // Prefer explicit templates (user-managed bills); fall back to detection if none
   const { items: tmpl } = require('../store/recurring').useRecurringStore.getState();
   const tmplItems = (tmpl || []).map((t:any)=>{
@@ -465,7 +465,7 @@ export const Budgets: React.FC = () => {
                 <Text style={{ color: textMuted }}>
                   {topCategory
                     ? `${fmtMoney(topCategory.spent)} spent · ${topCategory.cap > 0 ? `${Math.round(Math.min(100, topCategory.ratio * 100))}% of cap` : 'No cap yet'}`
-                    : 'We’ll surface your most active envelope once you have more data.'}
+                    : `We'll surface your most active envelope once you have more data.`}
                 </Text>
                 {categoryCoveragePct != null ? (
                   <Text style={{ color: textMuted }}>
@@ -682,7 +682,7 @@ export const Budgets: React.FC = () => {
           style={{ borderRadius: radius.xl, padding: spacing.s16, gap: spacing.s12 }}
         >
           <Text style={{ color: heroText, fontWeight: '700', fontSize: 16 }}>Need a backup?</Text>
-          <Text style={{ color: heroMuted }}>Tap below to export this period’s ledger and review it offline.</Text>
+          <Text style={{ color: heroMuted }}>Tap below to export this period's ledger and review it offline.</Text>
           <Button title="Export CSV (this period)" variant="secondary" onPress={() => exportPeriodCsv(startOfDay(period.start), endOfDay(period.end))} />
         </LinearGradient>
       </View>
