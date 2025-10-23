@@ -83,13 +83,13 @@ export default function PortfolioDetailSheet({
     const openRows: Array<{ sym: string; value: number }> = [];
     Object.values(p.holdings || {}).forEach((h: any) => {
       if (!h) return;
-      const lots = (h.lots || []) as Array<{ side: 'buy' | 'sell'; qty: number }>;
-      const qty = lots.reduce((acc, lot) => acc + (lot.side === 'buy' ? lot.qty : -lot.qty), 0);
+      const lots = h.lots || [];
+      const qty = lots.reduce((acc: number, lot: any) => acc + (lot.side === 'buy' ? lot.qty : -lot.qty), 0);
       if (qty <= 0) return;
       const sym = h.symbol;
-      const q = quotes[sym] || {};
-      const last = Number(q.last || 0);
-      const change = Number(q.change || 0);
+      const q = quotes[sym];
+      const last = Number(q?.last || 0);
+      const change = Number(q?.change || 0);
       const positionValue = qty * last;
       holdingsValue += positionValue;
       dayDelta += change * qty;
@@ -210,7 +210,7 @@ export default function PortfolioDetailSheet({
         key: 'edit-watch',
         label: 'Edit watchlist',
         description: 'Curate symbols you are tracking',
-        icon: 'edit-3',
+        icon: 'edit',
         onPress: () => {
           setMenuVisible(false);
           onEditWatchlist();

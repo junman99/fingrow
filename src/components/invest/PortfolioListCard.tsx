@@ -109,7 +109,7 @@ function DeltaBadge({ amount, currency, label, gradient }: { amount: number; cur
   const onPrimary = get('text.onPrimary') as string;
   const base0 = gradient?.[0] || success;
   const base1 = gradient?.[1] || success;
-  const colors = up
+  const colors: readonly [string, string] = up
     ? [withAlpha(base0, 0.92), withAlpha(base1, 0.78)]
     : [withAlpha(danger, 0.92), withAlpha(base0, 0.7)];
   return (

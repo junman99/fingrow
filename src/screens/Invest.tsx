@@ -18,6 +18,7 @@ import EditPortfolioModal from '../components/invest/EditPortfolioModal';
 import HoldingsFilterSheet from '../components/invest/HoldingsFilterSheet';
 import HoldingsSortSheet from '../components/invest/HoldingsSortSheet';
 import Icon from '../components/Icon';
+import { GlobalIndicesTicker } from '../components/GlobalIndicesTicker';
 
 function withAlpha(hex: string, alpha: number) {
   if (!hex) return hex;
@@ -471,6 +472,11 @@ export const Invest = React.memo(() => {
           </View>
         </View>
 
+        {/* Global Indices Ticker */}
+        <View style={{ marginLeft: -spacing.s16, marginRight: -spacing.s16 }}>
+          <GlobalIndicesTicker />
+        </View>
+
         {/* Value Display */}
         <View>
           <Text style={{ color: textMuted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '600', marginBottom: spacing.s4 }}>
@@ -555,6 +561,44 @@ export const Invest = React.memo(() => {
             onCreate={() => setShowCreateSheet(true)}
           />
         </View>
+
+        {/* DCA Planning Action */}
+        <AnimatedPressable onPress={() => nav.navigate('DCAPlanner' as never)}>
+          <View
+            style={{
+              backgroundColor: withAlpha(accentPrimary, isDark ? 0.2 : 0.12),
+              borderRadius: radius.lg,
+              padding: spacing.s16,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: radius.md,
+                  backgroundColor: accentPrimary,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Icon name="target" size={22} color={get('text.onPrimary') as string} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>
+                  Plan DCA Strategy
+                </Text>
+                <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>
+                  Compare indices & project returns
+                </Text>
+              </View>
+            </View>
+            <Icon name="chevron-right" size={20} colorToken="text.muted" />
+          </View>
+        </AnimatedPressable>
       </View>
 
       <AddHoldingSheet

@@ -473,7 +473,7 @@ export const AddLot = React.memo(() => {
                                       position: 'absolute',
                                       top: estimateY,
                                       left: '50%',
-                                      width: 100 / sortedEarnings.length + '%',
+                                      width: `${100 / sortedEarnings.length}%`,
                                       height: 1,
                                       backgroundColor: muted,
                                       opacity: 0.3,

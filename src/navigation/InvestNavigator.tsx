@@ -7,6 +7,7 @@ import EditWatchlist from '../screens/EditWatchlist';
 import EditLot from '../screens/EditLot';
 import HoldingHistory from '../screens/HoldingHistory';
 import CashManagement from '../screens/CashManagement';
+import DCAPlanner from '../screens/DCAPlanner';
 
 const Stack = createNativeStackNavigator();
 
@@ -20,6 +21,7 @@ export default function InvestNavigator() {
       <Stack.Screen name="Search" component={Search} />
       <Stack.Screen name="EditWatchlist" component={EditWatchlist} />
       <Stack.Screen name="EditLot" component={EditLot} />
+      <Stack.Screen name="DCAPlanner" component={DCAPlanner} />
     </Stack.Navigator>
   );
 }

@@ -1,0 +1,114 @@
+{
+  "common": {
+    "cancel": "取消",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "close": "关闭",
+    "done": "完成",
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功",
+    "search": "搜索",
+    "confirm": "确认"
+  },
+  "settings": {
+    "title": "设置",
+    "quickActions": "快捷操作",
+    "editProfile": "编辑个人资料",
+    "accounts": "账户",
+    "budgets": "预算",
+    "achievements": {
+      "title": "成就",
+      "viewAll": "查看所有成就",
+      "comingSoon": "完整成就界面即将推出！"
+    },
+    "appearance": {
+      "title": "外观",
+      "description": "选择您喜欢的视觉风格",
+      "auto": "自动",
+      "autoDesc": "跟随设备设置",
+      "light": "浅色",
+      "lightDesc": "奶油色和暖色调",
+      "dark": "深色",
+      "darkDesc": "咖啡色和薄荷色"
+    },
+    "language": {
+      "title": "语言",
+      "description": "选择您偏好的语言",
+      "system": "跟随系统",
+      "systemDesc": "使用设备语言",
+      "english": "English (英语)",
+      "chinese": "中文",
+      "chineseSimplified": "简体中文"
+    },
+    "money": {
+      "title": "财务设置",
+      "description": "货币和预算周期",
+      "primaryCurrency": "主要货币",
+      "budgetCycleDay": "预算周期日",
+      "monthlyReset": "每月第{{day}}天重置",
+      "refreshRates": "刷新汇率",
+      "refreshRatesDesc": "更新货币转换"
+    },
+    "notifications": {
+      "title": "通知",
+      "description": "了解您的财务状况",
+      "budgetAlerts": "预算提醒",
+      "budgetAlertsDesc": "超支时警告",
+      "largeTx": "大额交易",
+      "largeTxDesc": "标记异常支出",
+      "goalReminders": "目标提醒",
+      "goalRemindersDesc": "储蓄和债务提醒"
+    },
+    "investments": {
+      "title": "投资",
+      "description": "市场数据和投资组合工具",
+      "yahooFinance": "雅虎财经",
+      "yahooDesc": "免费，无需API密钥",
+      "fmp": "FinancialModelingPrep",
+      "fmpDesc": "每天150次免费调用",
+      "apiKey": "API密钥",
+      "apiKeyDesc": "在financialmodelingprep.com获取",
+      "apiKeyPlaceholder": "输入您的FMP API密钥...",
+      "exportPortfolio": "导出投资组合",
+      "exportPortfolioDesc": "下载为CSV文件",
+      "noPortfolio": "没有投资组合",
+      "selectPortfolio": "请先在投资标签中选择一个投资组合。",
+      "exportFailed": "导出失败"
+    },
+    "privacy": {
+      "title": "隐私",
+      "description": "控制您的数据",
+      "analytics": "匿名分析",
+      "analyticsDesc": "帮助改进FinGrow"
+    },
+    "account": {
+      "title": "账户",
+      "description": "会话和数据管理",
+      "support": "获取支持",
+      "supportDesc": "帮助中心和联系方式",
+      "signOut": "退出登录",
+      "signOutDesc": "结束当前会话",
+      "signOutConfirm": "退出登录？",
+      "signOutMessage": "您可以随时重新登录。"
+    },
+    "developer": {
+      "title": "开发者工具",
+      "seedSpending": "生成演示支出数据（5个月）",
+      "seedInvesting": "生成演示投资数据（6个月）",
+      "clearAll": "清除所有数据",
+      "clearAllConfirm": "清除所有数据？",
+      "clearAllMessage": "这将删除所有交易、账户和设置。"
+    },
+    "footer": "FinGrow • 为下一代精心打造",
+    "currency": {
+      "title": "选择货币",
+      "description": "用于转换和报告",
+      "search": "搜索货币...",
+      "label": "货币"
+    },
+    "cycleDay": "周期日",
+    "noEmail": "未设置邮箱"
+  }
+}

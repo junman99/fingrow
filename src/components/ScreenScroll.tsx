@@ -3,14 +3,34 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { Platform, KeyboardAvoidingView, View, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeTokens } from '../theme/ThemeProvider';
+
+/**
+ * ScreenScroll Component - Spacing Guide
+ *
+ * QUICK REFERENCE:
+ *
+ * 1. Modal screens (full-bleed to bottom):
+ *    <ScreenScroll inTab>
+ *
+ * 2. Navigator screens (Goals, Money, Invest):
+ *    <ScreenScroll contentStyle={{ paddingBottom: Math.max(insets.bottom, spacing.s24) }}>
+ *
+ * 3. Bottom tab screens:
+ *    <ScreenScroll inTab>
+ *
+ * See /SCREEN_SPACING_GUIDE.md for full documentation
+ */
+
 type ScrollProps = {
   children: React.ReactNode;
   style?: any;
+  /** Custom content styles. Use for bottom padding in navigator screens */
   contentStyle?: any;
   allowBounce?: boolean;
   stickyHeaderIndices?: number[];
   onScroll?: any;
   scrollEventThrottle?: number;
+  /** Set true for modal screens or bottom tab screens to remove bottom padding */
   inTab?: boolean;
   refreshing?: boolean;
   onRefresh?: () => void;

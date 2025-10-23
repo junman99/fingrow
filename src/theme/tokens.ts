@@ -1,7 +1,7 @@
 import { palette } from './palette';
 
-export const spacing = { s0:0, s2:2, s4:4, s6:6, s8:8, s10:10, s12:12, s16:16, s24:24, s32: 32} as const;
-export const radius  = { sm:8, md:12, lg:16, xl:24, pill:999 } as const;
+export const spacing = { s0:0, s2:2, s4:4, s6:6, s8:8, s10:10, s12:12, s14:14, s16:16, s20:20, s24:24, s32: 32} as const;
+export const radius  = { sm:8, md:12, lg:16, xl:24, pill:999, full:9999 } as const;
 export const elevation = {
   level0: { shadowColor: 'transparent', shadowOpacity: 0, elevation: 0 },
   level1: { shadowColor: palette.black, shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 1 },

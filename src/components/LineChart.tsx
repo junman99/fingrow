@@ -335,6 +335,43 @@ export default function LineChart({
     [data, disableParent, enableParent]
   );
 
+  // Two-finger pan gesture for horizontal scrolling when zoomed
+  const panGesture = React.useMemo(() =>
+    Gesture.Pan()
+      .minPointers(2)
+      .maxPointers(2)
+      .runOnJS(true)
+      .onBegin(() => {
+        savedPanRef.current = panOffsetRef.current;
+      })
+      .onStart(() => {
+        if (disableParent) disableParent();
+      })
+      .onUpdate((event) => {
+        // Only pan when zoomed in
+        if (scaleRef.current <= 1) return;
+
+        // Convert horizontal translation to pan offset
+        // Negative translationX means swiping left (pan right), positive means swiping right (pan left)
+        const totalRange = data.length ? data[data.length - 1].t - data[0].t : 1;
+        const panDelta = -(event.translationX / plotWidth) * (totalRange / scaleRef.current) / totalRange;
+
+        // Calculate new pan with limits
+        const maxPan = 0.5 - (0.5 / scaleRef.current);
+        const newPan = Math.max(-maxPan, Math.min(maxPan, savedPanRef.current + panDelta));
+
+        panOffsetRef.current = newPan;
+        setPanOffset(newPan);
+      })
+      .onEnd(() => {
+        if (enableParent) enableParent();
+      })
+      .onFinalize(() => {
+        if (enableParent) enableParent();
+      }),
+    [data, plotWidth, disableParent, enableParent]
+  );
+
   // Single-finger touch gesture for tooltip - works for both hold and drag
   const tooltipGesture = React.useMemo(() =>
     Gesture.Pan()
@@ -375,8 +412,11 @@ export default function LineChart({
     [enableTooltip, handleTouch, disableParent, enableParent]
   );
 
-  // Combine gestures - pinch takes priority over tooltip
-  const composedGesture = Gesture.Exclusive(pinchGesture, tooltipGesture);
+  // Combine gestures - pinch and pan work simultaneously, tooltip is separate
+  const composedGesture = Gesture.Exclusive(
+    Gesture.Simultaneous(pinchGesture, panGesture),
+    tooltipGesture
+  );
 
   return (
     <GestureDetector gesture={composedGesture}>

@@ -14,6 +14,7 @@ import { useGroupsStore } from './store/groups';
 import { useAuthStore } from './store/auth';
 import { seedInvestSixMonths } from './lib/demo_invest';
 import { useInvestStore } from './store/invest';
+import './i18n/config';
 
 function StatusBarThemed() {
   const { isDark } = useTheme();

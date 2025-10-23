@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import { useTranslation } from 'react-i18next';
 import { ScreenScroll } from '../components/ScreenScroll';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens, useTheme } from '../theme/ThemeProvider';
@@ -28,6 +29,7 @@ import { seedInvestSixMonths, clearInvestDemo } from '../lib/demo_invest';
 import { exportPortfolioCsv } from '../lib/export';
 import { useAuthStore } from '../store/auth';
 import { useAchievementsStore, getAllAchievementsWithStatus, ACHIEVEMENTS } from '../store/achievements';
+import { changeLanguage, getCurrentLanguage, setSystemLanguage } from '../i18n/config';
 
 type ThemeOption = { label: string; value: ThemeMode; icon: string; description: string };
 
@@ -164,6 +166,14 @@ const SettingRow: React.FC<{
   return content;
 };
 
+type LanguageOption = { label: string; value: string; icon: string; description: string };
+
+const languageOptions: LanguageOption[] = [
+  { label: 'Follow system', value: 'system', icon: 'smartphone', description: 'Use device language' },
+  { label: 'English', value: 'en', icon: 'globe', description: 'English' },
+  { label: '中文', value: 'zh', icon: 'globe', description: 'Chinese (Simplified)' },
+];
+
 export const Settings: React.FC = () => {
   const nav = useNavigation<any>();
   const { get, isDark } = useThemeTokens();
@@ -172,6 +182,7 @@ export const Settings: React.FC = () => {
   const { signOut } = useAuthStore();
   const { refreshFx } = useInvestStore();
   const activePortfolioId = useInvestStore(state => state.activePortfolioId);
+  const { t, i18n } = useTranslation();
 
   const [currencySheet, setCurrencySheet] = useState(false);
   const [currencyQuery, setCurrencyQuery] = useState('');
@@ -198,6 +209,20 @@ export const Settings: React.FC = () => {
     try {
       await Haptics.selectionAsync();
     } catch {}
+  };
+
+  const handleLanguageChange = async (value: string) => {
+    try {
+      if (value === 'system') {
+        await setSystemLanguage();
+      } else {
+        await changeLanguage(value);
+      }
+      update({ language: value });
+      await Haptics.selectionAsync();
+    } catch (err) {
+      console.error('Language change error:', err);
+    }
   };
 
   const handleCurrencyChange = async (code: string) => {
@@ -331,7 +356,7 @@ export const Settings: React.FC = () => {
         {/* Quick Actions Grid */}
         <View style={{ gap: spacing.s12 }}>
           <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 16, letterSpacing: -0.3 }}>
-            Quick actions
+            {t('settings.quickActions')}
           </Text>
           <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
             <AnimatedPressable
@@ -364,7 +389,7 @@ export const Settings: React.FC = () => {
                   <Icon name="edit" size={20} color={get('accent.primary') as string} />
                 </View>
                 <Text style={{ color: get('text.primary') as string, fontWeight: '600', fontSize: 13, textAlign: 'center' }}>
-                  Edit profile
+                  {t('settings.editProfile')}
                 </Text>
               </View>
             </AnimatedPressable>
@@ -399,7 +424,7 @@ export const Settings: React.FC = () => {
                   <Icon name="wallet" size={20} color={get('accent.secondary') as string} />
                 </View>
                 <Text style={{ color: get('text.primary') as string, fontWeight: '600', fontSize: 13, textAlign: 'center' }}>
-                  Accounts
+                  {t('settings.accounts')}
                 </Text>
               </View>
             </AnimatedPressable>
@@ -434,7 +459,7 @@ export const Settings: React.FC = () => {
                   <Icon name="target" size={20} color={get('semantic.success') as string} />
                 </View>
                 <Text style={{ color: get('text.primary') as string, fontWeight: '600', fontSize: 13, textAlign: 'center' }}>
-                  Budgets
+                  {t('settings.budgets')}
                 </Text>
               </View>
             </AnimatedPressable>
@@ -596,6 +621,83 @@ export const Settings: React.FC = () => {
                 <AnimatedPressable
                   key={option.value}
                   onPress={() => handleThemeChange(option.value)}
+                >
+                  <View
+                    style={{
+                      borderRadius: radius.lg,
+                      borderWidth: 2,
+                      borderColor: selected ? (get('accent.primary') as string) : (get('border.subtle') as string),
+                      padding: spacing.s16,
+                      backgroundColor: selected
+                        ? withAlpha(get('accent.primary') as string, 0.08)
+                        : (get('surface.level1') as string),
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+                      <View
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: radius.md,
+                          backgroundColor: selected
+                            ? (get('accent.primary') as string)
+                            : (get('surface.level2') as string),
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Icon
+                          name={option.icon as any}
+                          size={22}
+                          color={selected ? (get('text.onPrimary') as string) : (get('text.primary') as string)}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            color: get('text.primary') as string,
+                            fontWeight: '700',
+                            fontSize: 16,
+                          }}
+                        >
+                          {option.label}
+                        </Text>
+                        <Text style={{ color: get('text.muted') as string, fontSize: 13, marginTop: spacing.s2 }}>
+                          {option.description}
+                        </Text>
+                      </View>
+                      {selected && (
+                        <View
+                          style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: radius.pill,
+                            backgroundColor: get('accent.primary') as string,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Icon name="check" size={14} color={get('text.onPrimary') as string} />
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </AnimatedPressable>
+              );
+            })}
+          </View>
+        </SettingsSection>
+
+        {/* Language Selection */}
+        <SettingsSection title={t('settings.language.title')} description={t('settings.language.description')} icon="languages">
+          <View style={{ gap: spacing.s8 }}>
+            {languageOptions.map(option => {
+              const currentLang = profile.language || i18n.language;
+              const selected = currentLang === option.value;
+              return (
+                <AnimatedPressable
+                  key={option.value}
+                  onPress={() => handleLanguageChange(option.value)}
                 >
                   <View
                     style={{

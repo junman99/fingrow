@@ -231,6 +231,8 @@ export const Budgets: React.FC = () => {
     return items.slice(0, 3);
   }, [alertsOn, budget, cats, holdItems.length, paceDelta]);
 
+  const [showCategoryInsights, setShowCategoryInsights] = useState(false);
+
   const trackedCategorySpend = cats.reduce((sum, c) => sum + c.spent, 0);
   const totalCategoryCap = cats.reduce((sum, c) => sum + (c.cap || 0), 0);
   const categoryCoveragePct = totalCategoryCap > 0 ? Math.min(999, Math.round((trackedCategorySpend / totalCategoryCap) * 100)) : null;
@@ -241,8 +243,6 @@ export const Budgets: React.FC = () => {
     { key: 'monthly', label: 'Monthly' },
     { key: 'biweekly', label: 'Bi-weekly' }
   ];
-
-  const [showCategoryInsights, setShowCategoryInsights] = useState(false);
   const [budgetText, setBudgetText] = useState(monthlyBudget != null ? String(monthlyBudget) : '');
   const [thresholdText, setThresholdText] = useState(String(Math.round(warnThreshold * 100)));
 

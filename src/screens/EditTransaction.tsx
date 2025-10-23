@@ -105,14 +105,14 @@ export default function EditTransaction() {
   const tx = useMemo(() => transactions.find(t => t.id === id), [transactions, id]);
 
   const [note, setNote] = useState(tx?.note || '');
-  const [amount, setAmount] = useState(String(Math.abs(tx?.amount ?? '')));
+  const [amount, setAmount] = useState(String(Math.abs(tx?.amount ?? 0)));
   const [type, setType] = useState<'income' | 'expense'>(tx?.type || 'expense');
   const [category, setCategory] = useState(tx?.category || '');
 
   useEffect(() => {
     if (tx) {
       setNote(tx.note || '');
-      setAmount(String(Math.abs(tx.amount ?? '')));
+      setAmount(String(Math.abs(tx.amount ?? 0)));
       setType(tx.type || 'expense');
       setCategory(tx.category || '');
     }

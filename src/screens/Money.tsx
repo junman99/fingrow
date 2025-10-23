@@ -280,7 +280,7 @@ const Money: React.FC = () => {
     const suggest = Math.floor(spendable * 0.25);
     insights.push({
       message: `Strong cash position. Consider deploying ${formatCurrency(suggest)} into investments.`,
-      action: { label: 'Plan DCA', onPress: () => nav.navigate('DCAPlanner', { suggest }) },
+      action: { label: 'Plan DCA', onPress: () => nav.navigate('Invest', { screen: 'DCAPlanner', params: { suggest } }) },
     });
   }
 
@@ -462,7 +462,7 @@ const Money: React.FC = () => {
           />
           <Button
             title="Plan auto-DCA"
-            onPress={() => nav.navigate('DCAPlanner', { suggest: Math.floor(spendable * 0.25) })}
+            onPress={() => nav.navigate('Invest', { screen: 'DCAPlanner', params: { suggest: Math.floor(spendable * 0.25) } })}
             variant="secondary"
           />
         </View>

@@ -1,0 +1,47 @@
+SCREEN SPACING - QUICK COPY/PASTE TEMPLATES
+==============================================
+
+1️⃣ MODAL SCREENS (Insights, any modal)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<ScreenScroll inTab>
+  <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s16 }}>
+
+
+2️⃣ NAVIGATOR SCREENS (Goals, inside stack navigators)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const insets = useSafeAreaInsets();
+
+<ScreenScroll contentStyle={{ paddingBottom: Math.max(insets.bottom, spacing.s24) }}>
+  <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s16 }}>
+
+
+3️⃣ TAB SCREENS (Home, Money, Invest - with bottom tab bar)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<ScreenScroll inTab>
+  <View style={{
+    paddingHorizontal: spacing.s16,
+    paddingTop: spacing.s12,
+    paddingBottom: spacing.s32
+  }}>
+
+
+DECISION TREE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Is it a modal? → Use `inTab`
+Is it in a navigator? → Use `contentStyle` with insets
+Is it in bottom tabs? → Use `inTab`
+
+
+STANDARD SPACING VALUES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+spacing.s16 - Top, horizontal padding
+spacing.s16 - Gap between sections
+spacing.s12 - Gap within sections
+spacing.s24 - Bottom padding with safe area
+
+
+COMMON FIXES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Big gap at top? → Check paddingTop (should be spacing.s16)
+Big gap at bottom? → Add `inTab` prop
+Content cut off? → Remove `inTab`, add contentStyle with insets

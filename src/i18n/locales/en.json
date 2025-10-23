@@ -1,0 +1,114 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "done": "Done",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "search": "Search",
+    "confirm": "Confirm"
+  },
+  "settings": {
+    "title": "Settings",
+    "quickActions": "Quick actions",
+    "editProfile": "Edit profile",
+    "accounts": "Accounts",
+    "budgets": "Budgets",
+    "achievements": {
+      "title": "Achievements",
+      "viewAll": "View all achievements",
+      "comingSoon": "Full achievements screen coming soon!"
+    },
+    "appearance": {
+      "title": "Appearance",
+      "description": "Choose your visual vibe",
+      "auto": "Auto",
+      "autoDesc": "Match device settings",
+      "light": "Light",
+      "lightDesc": "Cream & warm tones",
+      "dark": "Dark",
+      "darkDesc": "Espresso & mint"
+    },
+    "language": {
+      "title": "Language",
+      "description": "Choose your preferred language",
+      "system": "Follow system",
+      "systemDesc": "Use device language",
+      "english": "English",
+      "chinese": "中文 (Chinese)",
+      "chineseSimplified": "简体中文"
+    },
+    "money": {
+      "title": "Money settings",
+      "description": "Currency and budget cycles",
+      "primaryCurrency": "Primary currency",
+      "budgetCycleDay": "Budget cycle day",
+      "monthlyReset": "Monthly reset on day {{day}}",
+      "refreshRates": "Refresh exchange rates",
+      "refreshRatesDesc": "Update currency conversions"
+    },
+    "notifications": {
+      "title": "Notifications",
+      "description": "Stay informed about your money",
+      "budgetAlerts": "Budget alerts",
+      "budgetAlertsDesc": "Warn when overspending",
+      "largeTx": "Large transactions",
+      "largeTxDesc": "Flag unusual spending",
+      "goalReminders": "Goal nudges",
+      "goalRemindersDesc": "Savings & debt reminders"
+    },
+    "investments": {
+      "title": "Investments",
+      "description": "Market data and portfolio tools",
+      "yahooFinance": "Yahoo Finance",
+      "yahooDesc": "Free, no API key needed",
+      "fmp": "FinancialModelingPrep",
+      "fmpDesc": "150 calls/day free tier",
+      "apiKey": "API Key",
+      "apiKeyDesc": "Get yours at financialmodelingprep.com",
+      "apiKeyPlaceholder": "Enter your FMP API key...",
+      "exportPortfolio": "Export portfolio",
+      "exportPortfolioDesc": "Download as CSV file",
+      "noPortfolio": "No portfolio",
+      "selectPortfolio": "Select a portfolio in the Invest tab first.",
+      "exportFailed": "Export failed"
+    },
+    "privacy": {
+      "title": "Privacy",
+      "description": "Control your data",
+      "analytics": "Anonymous analytics",
+      "analyticsDesc": "Help improve FinGrow"
+    },
+    "account": {
+      "title": "Account",
+      "description": "Session and data management",
+      "support": "Get support",
+      "supportDesc": "Help center and contact",
+      "signOut": "Sign out",
+      "signOutDesc": "End current session",
+      "signOutConfirm": "Sign out?",
+      "signOutMessage": "You can sign back in anytime."
+    },
+    "developer": {
+      "title": "DEVELOPER TOOLS",
+      "seedSpending": "Seed demo spending (5 months)",
+      "seedInvesting": "Seed demo investing (6 months)",
+      "clearAll": "Clear all data",
+      "clearAllConfirm": "Clear all data?",
+      "clearAllMessage": "This will remove all transactions, accounts, and settings."
+    },
+    "footer": "FinGrow • Made with care for the next generation",
+    "currency": {
+      "title": "Choose currency",
+      "description": "Used for conversions and reports",
+      "search": "Search currencies...",
+      "label": "CURRENCY"
+    },
+    "cycleDay": "CYCLE DAY",
+    "noEmail": "No email set"
+  }
+}

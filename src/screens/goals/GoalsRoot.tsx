@@ -7,10 +7,8 @@ import Button from '../../components/Button';
 import Icon from '../../components/Icon';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
-import { useGoalsStore } from '../../store/goals';
+import { useGoalsStore, type Goal } from '../../store/goals';
 import { formatCurrency } from '../../lib/format';
-
-type Goal = ReturnType<typeof useGoalsStore>['goals'][number];
 
 const milestoneLabels = [25, 50, 75, 90, 100];
 const motivationBank = [
