@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import { View, Text, Pressable, ScrollView, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Icon from '../Icon';
 import { useThemeTokens } from '../../theme/ThemeProvider';
@@ -307,7 +307,7 @@ const PortfolioListCard = React.memo(({ selectionMode, selectedIds, onToggleSele
         )}
       </View>
 
-      <View style={{ gap: spacing.s12 }}>
+      <View style={{ gap: spacing.s12 }} pointerEvents="box-none">
         {!items.length ? (
           <View
             style={{
@@ -399,31 +399,41 @@ const PortfolioListCard = React.memo(({ selectionMode, selectedIds, onToggleSele
           const gainColor = totalGain >= 0 ? successColor : dangerColor;
 
           const handlePress = () => {
+            console.log('🔵 [Portfolio Card] Press detected!', {
+              portfolioName: p.name,
+              portfolioId: p.id,
+              selectionMode,
+              hasOnOpenPortfolio: !!onOpenPortfolio
+            });
             if (selectionMode) {
               onToggleSelect && onToggleSelect(p.id);
             } else {
+              console.log('🟢 [Portfolio Card] Setting active portfolio:', p.id);
               setActive(p.id);
-              onOpenPortfolio && onOpenPortfolio(p.id);
+              if (onOpenPortfolio) {
+                console.log('🟢 [Portfolio Card] Calling onOpenPortfolio with id:', p.id);
+                onOpenPortfolio(p.id);
+                console.log('🟢 [Portfolio Card] onOpenPortfolio called successfully');
+              } else {
+                console.error('🔴 [Portfolio Card] onOpenPortfolio is undefined!');
+              }
             }
           };
+
+          console.log('🎨 [Portfolio Card] Rendering card for:', p.name);
 
           return (
             <Pressable
               key={p.id}
               onPress={handlePress}
-              accessibilityRole="button"
-              accessibilityLabel={`${selectionMode ? 'Select' : 'Open'} ${p.name} portfolio`}
+              style={({ pressed }) => ({
+                borderRadius: radius.lg,
+                backgroundColor: get('surface.level1') as string,
+                padding: spacing.s16,
+                gap: spacing.s12,
+                opacity: pressed ? 0.7 : 1,
+              })}
             >
-              {({ pressed }) => (
-                <View
-                  style={{
-                    borderRadius: radius.lg,
-                    backgroundColor: get('surface.level1') as string,
-                    padding: spacing.s16,
-                    gap: spacing.s12,
-                    opacity: pressed ? 0.8 : 1,
-                  }}
-                >
                   {/* Header Row */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <View style={{ flex: 1, gap: spacing.s2 }}>
@@ -472,8 +482,6 @@ const PortfolioListCard = React.memo(({ selectionMode, selectedIds, onToggleSele
                       })}
                     </View>
                   )}
-                </View>
-              )}
             </Pressable>
           );
         })}

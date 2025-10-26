@@ -26,6 +26,7 @@ import { spacing, radius, elevation } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { useTxStore, TxType } from '../store/transactions';
 import { useRecurringStore } from '../store/recurring';
+import { useAccountsStore } from '../store/accounts';
 import {
   Utensils, ShoppingBasket, Bus, Fuel, Ticket, ShoppingBag, Wallet, Plane, HeartPulse, Dumbbell, House, Gift,
   TrendingUp, Repeat, ArrowLeftRight, GraduationCap, PawPrint, Plug, Droplets, MoreHorizontal
@@ -143,12 +144,26 @@ export default function Add() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { accounts, hydrate: hydrateAccounts, updateAccountBalance, setDefaultAccount } = useAccountsStore();
 
   // Quick time & account selection
   const [txDate, setTxDate] = useState<Date>(new Date());
   const [dtOpen, setDtOpen] = useState<boolean>(false);
-  const [account, setAccount] = useState<string>('Wallet');
+  const [account, setAccount] = useState<string>('');
   const [accountOpen, setAccountOpen] = useState<boolean>(false);
+
+  // Hydrate accounts and set default
+  useEffect(() => {
+    hydrateAccounts();
+  }, [hydrateAccounts]);
+
+  useEffect(() => {
+    if (!account && accounts.length > 0) {
+      // Try to use default account, otherwise use first account
+      const defaultAccount = accounts.find(a => a.isDefault);
+      setAccount(defaultAccount?.name || accounts[0].name);
+    }
+  }, [accounts, account]);
   const [note, setNote] = useState<string>('');
   const [noteOpen, setNoteOpen] = useState<boolean>(false);
   const [noteDraft, setNoteDraft] = useState<string>('');
@@ -559,6 +574,12 @@ export default function Add() {
       note: note.trim() ? note.trim() : undefined,
       account,
     });
+
+    // Update account balance if account is selected
+    if (account) {
+      await updateAccountBalance(account, amt, mode === 'expense');
+    }
+
     return true;
   };
 
@@ -695,44 +716,167 @@ export default function Add() {
             <View
               style={{
                 width: '100%',
-                maxWidth: 360,
+                maxWidth: 400,
                 borderRadius: radius.xl,
                 padding: spacing.s16,
                 backgroundColor: surface1,
                 borderWidth: 1,
                 borderColor: borderSubtle,
+                maxHeight: '80%',
               }}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
-                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 18 }}>Choose account</Text>
-                <Pressable onPress={() => setAccountOpen(false)} hitSlop={12}>
-                  <Text style={{ color: textMuted, fontWeight: '600' }}>Close</Text>
-                </Pressable>
+              <View style={{ marginBottom: spacing.s12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s4 }}>
+                  <View>
+                    <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 20 }}>Choose account</Text>
+                    <Text style={{ color: textMuted, fontSize: 13, marginTop: spacing.s4 }}>
+                      {accounts.length === 0 ? 'No accounts yet' : `${accounts.length} account${accounts.length === 1 ? '' : 's'} available`}
+                    </Text>
+                  </View>
+                  <Pressable onPress={() => setAccountOpen(false)} hitSlop={12}>
+                    <Icon name="x" size={20} color={textMuted} />
+                  </Pressable>
+                </View>
+                {accounts.length > 0 && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6, paddingTop: spacing.s8 }}>
+                    <Icon name="info" size={14} color={textMuted} />
+                    <Text style={{ color: textMuted, fontSize: 12, flex: 1 }}>
+                      Long press to set as default account
+                    </Text>
+                  </View>
+                )}
               </View>
 
-              <View style={{ gap: spacing.s8 }}>
-                {['Wallet', 'Cash', 'Credit card', 'Savings'].map((name) => {
-                  const active = account === name;
-                  return (
+              {accounts.length === 0 ? (
+                <View style={{ gap: spacing.s12, paddingVertical: spacing.s16 }}>
+                  <Text style={{ color: textMuted, textAlign: 'center' }}>
+                    Add your first account to track where your money comes from and goes to.
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      setAccountOpen(false);
+                      nav.navigate('AddAccount');
+                    }}
+                    style={({ pressed }) => ({
+                      paddingVertical: spacing.s12,
+                      paddingHorizontal: spacing.s16,
+                      borderRadius: radius.lg,
+                      backgroundColor: accentPrimary,
+                      opacity: pressed ? 0.85 : 1,
+                    })}
+                  >
+                    <Text style={{ color: textOnPrimary, fontWeight: '700', textAlign: 'center' }}>Add account</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+                  <View style={{ gap: spacing.s8 }}>
+                    {accounts.map((acc) => {
+                      const active = account === acc.name;
+                      const isDefault = acc.isDefault;
+                      const kindLabel = acc.kind ? acc.kind.charAt(0).toUpperCase() + acc.kind.slice(1) : 'Account';
+                      const kindIcon =
+                        acc.kind === 'credit' ? 'credit-card' :
+                        acc.kind === 'savings' ? 'piggy-bank' :
+                        acc.kind === 'checking' ? 'building-2' :
+                        acc.kind === 'cash' ? 'wallet' :
+                        acc.kind === 'investment' ? 'trending-up' : 'wallet';
+
+                      return (
+                        <Pressable
+                          key={acc.id}
+                          onPress={() => {
+                            setAccount(acc.name);
+                            setAccountOpen(false);
+                          }}
+                          onLongPress={async () => {
+                            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            await setDefaultAccount(acc.id);
+                            showToast(`${acc.name} set as default`);
+                          }}
+                          style={({ pressed }) => ({
+                            paddingVertical: spacing.s12,
+                            paddingHorizontal: spacing.s12,
+                            borderRadius: radius.lg,
+                            backgroundColor: active ? mixColor(accentPrimary, surface1, 0.4) : surface2,
+                            opacity: pressed ? 0.9 : 1,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: spacing.s12,
+                            borderWidth: active ? 2 : isDefault ? 1.5 : 0,
+                            borderColor: active ? accentPrimary : isDefault ? accentSecondary : 'transparent',
+                          })}
+                        >
+                          <View
+                            style={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: radius.md,
+                              backgroundColor: active ? accentPrimary : withAlpha(accentPrimary, isDark ? 0.2 : 0.15),
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <Icon name={kindIcon as any} size={20} color={active ? textOnPrimary : accentPrimary} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6 }}>
+                              <Text style={{ color: textPrimary, fontWeight: active ? '700' : '600', fontSize: 15 }}>
+                                {acc.name}
+                              </Text>
+                              {isDefault && (
+                                <View
+                                  style={{
+                                    paddingHorizontal: spacing.s6,
+                                    paddingVertical: 2,
+                                    borderRadius: radius.sm,
+                                    backgroundColor: withAlpha(accentSecondary, isDark ? 0.3 : 0.2),
+                                  }}
+                                >
+                                  <Text style={{ color: accentSecondary, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 }}>
+                                    DEFAULT
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                            <Text style={{ color: textMuted, fontSize: 12, marginTop: 2 }}>
+                              {kindLabel}{acc.institution ? ` • ${acc.institution}` : ''}{acc.mask ? ` • ${acc.mask}` : ''}
+                            </Text>
+                          </View>
+                          <Text style={{ color: active ? textPrimary : textMuted, fontWeight: '700', fontSize: 14 }}>
+                            ${acc.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+
                     <Pressable
-                      key={name}
                       onPress={() => {
-                        setAccount(name);
                         setAccountOpen(false);
+                        nav.navigate('AddAccount');
                       }}
                       style={({ pressed }) => ({
-                        paddingVertical: spacing.s10,
+                        paddingVertical: spacing.s12,
                         paddingHorizontal: spacing.s12,
                         borderRadius: radius.lg,
-                        backgroundColor: active ? mixColor(accentPrimary, surface1, 0.4) : surface2,
+                        backgroundColor: surface2,
                         opacity: pressed ? 0.9 : 1,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: spacing.s8,
+                        borderWidth: 1,
+                        borderColor: borderSubtle,
+                        borderStyle: 'dashed',
+                        marginTop: spacing.s4,
                       })}
                     >
-                      <Text style={{ color: textPrimary, fontWeight: active ? '700' : '500' }}>{name}</Text>
+                      <Icon name="plus-circle" size={18} color={accentPrimary} />
+                      <Text style={{ color: accentPrimary, fontWeight: '600' }}>Add new account</Text>
                     </Pressable>
-                  );
-                })}
-              </View>
+                  </View>
+                </ScrollView>
+              )}
             </View>
           </View>
         </Modal>

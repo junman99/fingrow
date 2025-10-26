@@ -89,6 +89,11 @@ export const Invest = React.memo(() => {
   const onStartDeleteMode = React.useCallback(() => { setDeleteMode(true); setSelectedPids([]); }, []);
   const [currentPortfolioId, setCurrentPortfolioId] = React.useState<string|null>(null);
 
+  // Debug currentPortfolioId changes
+  React.useEffect(() => {
+    console.log('🔵 [Invest] currentPortfolioId changed:', currentPortfolioId);
+  }, [currentPortfolioId]);
+
   // Close portfolio detail sheet when navigating away from Invest screen
   React.useEffect(() => {
     const unsubscribe = nav.addListener('blur', () => {
@@ -432,6 +437,17 @@ export const Invest = React.memo(() => {
   }, [portfolios, quotes, fxRates]);
 
 
+  console.log('🔍 [Invest] Rendering. States:', {
+    currentPortfolioId,
+    showAddHolding,
+    showHoldingsFilter,
+    showHoldingsSort,
+    showManager,
+    editPortfolioId,
+    showCreateSheet,
+    portfolioCount: Object.keys(portfolios || {}).length
+  });
+
   return (
     <ScreenScroll
       refreshing={refreshing}
@@ -557,7 +573,10 @@ export const Invest = React.memo(() => {
             onDeleteSelected={onDeleteSelected}
             onStartDeleteMode={onStartDeleteMode}
             onOpenManager={() => setShowManager(true)}
-            onOpenPortfolio={(id) => setCurrentPortfolioId(id)}
+            onOpenPortfolio={(id) => {
+              console.log('🟢 [Invest] onOpenPortfolio callback called with id:', id);
+              setCurrentPortfolioId(id);
+            }}
             onCreate={() => setShowCreateSheet(true)}
           />
         </View>
@@ -601,76 +620,91 @@ export const Invest = React.memo(() => {
         </AnimatedPressable>
       </View>
 
-      <AddHoldingSheet
-        visible={showAddHolding}
-        onClose={() => {
-          setShowAddHolding(false);
-          if (modalPortfolioId) { setCurrentPortfolioId(modalPortfolioId); }
-          setModalPortfolioId(null);
-        }}
-        portfolioId={modalPortfolioId}
-        mode={addMode}
-      />
+      {showAddHolding && (
+        <AddHoldingSheet
+          visible={true}
+          onClose={() => {
+            setShowAddHolding(false);
+            if (modalPortfolioId) { setCurrentPortfolioId(modalPortfolioId); }
+            setModalPortfolioId(null);
+          }}
+          portfolioId={modalPortfolioId}
+          mode={addMode}
+        />
+      )}
 
-      <PortfolioDetailSheet
-        portfolioId={currentPortfolioId}
-        visible={!!currentPortfolioId}
-        dimmed={showAddHolding}
-        onClose={() => {
-          if (!showAddHolding) {
-            setCurrentPortfolioId(null);
-          }
-        }}
-        onEditWatchlist={() => { const id = currentPortfolioId; setCurrentPortfolioId(null); nav.navigate('EditWatchlist' as never, { portfolioId: id } as never); }}
-        onFilterHoldings={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setShowHoldingsFilter(true); }}
-        onSortHoldings={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setShowHoldingsSort(true); }}
-        onAddHolding={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setAddMode('holdings'); setShowAddHolding(true); }}
-        onOpenManager={() => setShowManager(true)}
-        onAddWatchlist={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setAddMode('watchlist'); setShowAddHolding(true); }}
-      />
+      {currentPortfolioId && (
+        <PortfolioDetailSheet
+          portfolioId={currentPortfolioId}
+          visible={!!currentPortfolioId}
+          dimmed={showAddHolding}
+          onClose={() => {
+            console.log('🟡 [Invest] PortfolioDetailSheet onClose called');
+            if (!showAddHolding) {
+              setCurrentPortfolioId(null);
+            }
+          }}
+          onEditWatchlist={() => { const id = currentPortfolioId; setCurrentPortfolioId(null); nav.navigate('EditWatchlist' as never, { portfolioId: id } as never); }}
+          onFilterHoldings={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setShowHoldingsFilter(true); }}
+          onSortHoldings={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setShowHoldingsSort(true); }}
+          onAddHolding={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setAddMode('holdings'); setShowAddHolding(true); }}
+          onOpenManager={() => setShowManager(true)}
+          onAddWatchlist={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setAddMode('watchlist'); setShowAddHolding(true); }}
+        />
+      )}
 
-      <HoldingsFilterSheet
-        visible={showHoldingsFilter}
-        onClose={() => { setShowHoldingsFilter(false); if (modalPortfolioId) { setCurrentPortfolioId(modalPortfolioId); setModalPortfolioId(null); } }}
-        valueQuery={qHold}
-        onChangeQuery={setQHold}
-        valueMinWeight={minWeight}
-        onChangeMinWeight={setMinWeight}
-        onClear={() => { setQHold(''); setMinWeight(0); }}
-      />
+      {showHoldingsFilter && (
+        <HoldingsFilterSheet
+          visible={true}
+          onClose={() => { setShowHoldingsFilter(false); if (modalPortfolioId) { setCurrentPortfolioId(modalPortfolioId); setModalPortfolioId(null); } }}
+          valueQuery={qHold}
+          onChangeQuery={setQHold}
+          valueMinWeight={minWeight}
+          onChangeMinWeight={setMinWeight}
+          onClear={() => { setQHold(''); setMinWeight(0); }}
+        />
+      )}
 
-      <HoldingsSortSheet
-        visible={showHoldingsSort}
-        onClose={() => { setShowHoldingsSort(false); if (modalPortfolioId) { setCurrentPortfolioId(modalPortfolioId); setModalPortfolioId(null); } }}
-        valueKey={sortKey}
-        valueDir={sortDir}
-        onChange={(k,d) => { setSortKey(k); setSortDir(d); }}
-      />
+      {showHoldingsSort && (
+        <HoldingsSortSheet
+          visible={true}
+          onClose={() => { setShowHoldingsSort(false); if (modalPortfolioId) { setCurrentPortfolioId(modalPortfolioId); setModalPortfolioId(null); } }}
+          valueKey={sortKey}
+          valueDir={sortDir}
+          onChange={(k,d) => { setSortKey(k); setSortDir(d); }}
+        />
+      )}
 
-      <PortfolioManagerModal
-        visible={showManager}
-        onClose={() => setShowManager(false)}
-        onStartDelete={() => { setShowManager(false); onStartDeleteMode(); }}
-        onRequestEdit={(id: string) => { setShowManager(false); setEditPortfolioId(id); }}
-      />
+      {showManager && (
+        <PortfolioManagerModal
+          visible={true}
+          onClose={() => setShowManager(false)}
+          onStartDelete={() => { setShowManager(false); onStartDeleteMode(); }}
+          onRequestEdit={(id: string) => { setShowManager(false); setEditPortfolioId(id); }}
+        />
+      )}
 
-      <EditPortfolioModal
-        visible={!!editPortfolioId}
-        onClose={() => setEditPortfolioId(null)}
-        portfolioId={editPortfolioId}
-      />
+      {editPortfolioId && (
+        <EditPortfolioModal
+          visible={true}
+          onClose={() => setEditPortfolioId(null)}
+          portfolioId={editPortfolioId}
+        />
+      )}
 
-      <CreatePortfolioModal
-        visible={showCreateSheet}
-        onClose={() => setShowCreateSheet(false)}
-        defaultCurrency={(profile?.currency || 'SGD').toUpperCase()}
-        onConfirm={async (name, currency, type, benchmark) => {
-          const id = await (useInvestStore.getState() as any).createPortfolio(name, currency, { type, benchmark: benchmark === 'NONE' ? undefined : benchmark });
-          await (useInvestStore.getState() as any).setActivePortfolio(id);
-          setShowCreateSheet(false);
-          setCurrentPortfolioId(id);
-        }}
-      />
+      {showCreateSheet && (
+        <CreatePortfolioModal
+          visible={true}
+          onClose={() => setShowCreateSheet(false)}
+          defaultCurrency={(profile?.currency || 'SGD').toUpperCase()}
+          onConfirm={async (name, currency, type, benchmark) => {
+            const id = await (useInvestStore.getState() as any).createPortfolio(name, currency, { type, benchmark: benchmark === 'NONE' ? undefined : benchmark });
+            await (useInvestStore.getState() as any).setActivePortfolio(id);
+            setShowCreateSheet(false);
+            setCurrentPortfolioId(id);
+          }}
+        />
+      )}
     </ScreenScroll>
   );
 });

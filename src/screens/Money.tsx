@@ -163,6 +163,18 @@ const Money: React.FC = () => {
   };
 
   const accountsList = accounts || [];
+
+  // Separate credit cards from regular accounts
+  const cashAccounts = useMemo(
+    () => accountsList.filter(acc => acc.kind !== 'credit' && acc.includeInNetWorth !== false),
+    [accountsList]
+  );
+
+  const creditCards = useMemo(
+    () => accountsList.filter(acc => acc.kind === 'credit' && acc.includeInNetWorth !== false),
+    [accountsList]
+  );
+
   const includedAccounts = useMemo(
     () => accountsList.filter(acc => acc.includeInNetWorth !== false),
     [accountsList]
@@ -192,8 +204,9 @@ const Money: React.FC = () => {
     return spent / 30;
   }, [transactions]);
 
-  const totalCash = includedAccounts.reduce((s, a) => s + (a.balance || 0), 0);
+  const totalCash = cashAccounts.reduce((s, a) => s + (a.balance || 0), 0);
   const runwayDays = avgDaily > 0 ? Math.floor(totalCash / avgDaily) : 0;
+  const totalCreditCardDebt = creditCards.reduce((s, a) => s + Math.abs(a.balance || 0), 0);
 
   const portfolioCalc = useMemo(() => {
     const symbols = Object.keys(holdings || {});
@@ -251,7 +264,7 @@ const Money: React.FC = () => {
   }, [debtsList]);
 
   const spendable = Math.max(0, totalCash - upcoming.total - debtDue.total);
-  const totalDebt = debtsList.reduce((s, d) => s + (d.balance || 0), 0);
+  const totalDebt = debtsList.reduce((s, d) => s + (d.balance || 0), 0) + totalCreditCardDebt;
 
   const netWorth = totalCash + portfolioCalc.totalUSD - totalDebt;
 
@@ -340,7 +353,7 @@ const Money: React.FC = () => {
           <MetricCard
             title="Cash"
             value={formatCurrency(totalCash)}
-            subtitle={`${includedAccounts.length} account${includedAccounts.length === 1 ? '' : 's'}`}
+            subtitle={`${cashAccounts.length} account${cashAccounts.length === 1 ? '' : 's'}`}
             icon="wallet"
             bgColor={withAlpha(accentPrimary, isDark ? 0.2 : 0.12)}
             onPress={() => setShowAccountsSheet(true)}
@@ -376,7 +389,7 @@ const Money: React.FC = () => {
           <MetricCard
             title="Debts"
             value={formatCurrency(totalDebt)}
-            subtitle={`${formatCurrency(debtDue.total)} due soon`}
+            subtitle={`${debtsList.length + creditCards.length} debt${(debtsList.length + creditCards.length) === 1 ? '' : 's'}${creditCards.length > 0 ? ` • ${creditCards.length} card${creditCards.length === 1 ? '' : 's'}` : ''}`}
             icon="target"
             bgColor={withAlpha(warningColor, isDark ? 0.2 : 0.14)}
             onPress={() => setShowDebtsSheet(true)}
@@ -518,10 +531,10 @@ const Money: React.FC = () => {
             </View>
           </Card>
 
-          {accountsList.length === 0 ? (
+          {cashAccounts.length === 0 ? (
             <Card style={{ backgroundColor: cardBg, padding: spacing.s16 }}>
               <Text style={{ color: muted, marginBottom: spacing.s12 }}>
-                No accounts yet. Add your first account to start tracking.
+                No cash accounts yet. Add your first account to start tracking.
               </Text>
               <Button
                 title="Add account"
@@ -530,8 +543,14 @@ const Money: React.FC = () => {
             </Card>
           ) : (
             <View style={{ gap: spacing.s8 }}>
-              {accountsList.map(account => {
+              {cashAccounts.map(account => {
+                const kindIcon =
+                  account.kind === 'savings' ? 'piggy-bank' :
+                  account.kind === 'checking' ? 'building-2' :
+                  account.kind === 'cash' ? 'wallet' :
+                  account.kind === 'investment' ? 'trending-up' : 'wallet';
                 const excluded = account.includeInNetWorth === false;
+
                 return (
                   <Pressable
                     key={account.id}
@@ -559,12 +578,13 @@ const Money: React.FC = () => {
                           justifyContent: 'center',
                         }}
                       >
-                        <Icon name="wallet" size={20} colorToken="accent.primary" />
+                        <Icon name={kindIcon as any} size={20} colorToken="accent.primary" />
                       </View>
                       <View>
                         <Text style={{ color: text, fontWeight: '700' }}>{account.name}</Text>
                         <Text style={{ color: muted, fontSize: 13 }}>
-                          {account.institution ?? 'Manual'}
+                          {account.kind ? account.kind.charAt(0).toUpperCase() + account.kind.slice(1) : 'Account'}
+                          {account.institution ? ` • ${account.institution}` : ''}
                           {account.mask ? ` • ${account.mask}` : ''}
                           {excluded ? ' • Hidden' : ''}
                         </Text>
@@ -696,12 +716,26 @@ const Money: React.FC = () => {
                 </Text>
               </View>
               <View>
-                <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>Due soon</Text>
+                <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>Credit cards</Text>
                 <Text style={{ color: text, fontSize: 28, fontWeight: '800', marginTop: spacing.s4 }}>
-                  {formatCurrency(debtDue.total)}
+                  {formatCurrency(totalCreditCardDebt)}
                 </Text>
               </View>
             </View>
+            {(debtsList.length > 0 || creditCards.length > 0) && (
+              <View style={{ flexDirection: 'row', gap: spacing.s12, marginTop: spacing.s12 }}>
+                {creditCards.length > 0 && (
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: muted, fontSize: 11 }}>{creditCards.length} card{creditCards.length === 1 ? '' : 's'}</Text>
+                  </View>
+                )}
+                {debtsList.length > 0 && (
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: muted, fontSize: 11 }}>{debtsList.length} other debt{debtsList.length === 1 ? '' : 's'}</Text>
+                  </View>
+                )}
+              </View>
+            )}
           </Card>
 
           <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
@@ -722,51 +756,101 @@ const Money: React.FC = () => {
             />
           </View>
 
-          {debtsList.length === 0 ? (
+          {debtsList.length === 0 && creditCards.length === 0 ? (
             <Card style={{ backgroundColor: cardBg, padding: spacing.s16 }}>
               <Text style={{ color: muted }}>
-                No debts tracked. Add your debts to monitor payoff progress and due dates.
+                No debts tracked. Add your debts or credit cards to monitor payoff progress and due dates.
               </Text>
             </Card>
           ) : (
-            <View style={{ gap: spacing.s8 }}>
-              {debtsList.map(debt => {
-                const dueDate = debt.dueISO ? new Date(debt.dueISO) : null;
-                const dueLabel =
-                  dueDate && !isNaN(dueDate.getTime())
-                    ? dueDate.toLocaleDateString()
-                    : 'No due date';
-                return (
-                  <Pressable
-                    key={debt.id}
-                    onPress={() => {
-                      closeSheetThen(setShowDebtsSheet, () => nav.navigate('DebtDetail', { id: debt.id }));
-                    }}
-                    style={({ pressed }) => ({
-                      backgroundColor: cardBg,
-                      borderRadius: radius.md,
-                      padding: spacing.s16,
-                      opacity: pressed ? 0.86 : 1,
-                    })}
-                  >
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.s8 }}>
-                      <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>{debt.name}</Text>
-                      <Text style={{ color: onSurface, fontWeight: '700', fontSize: 15 }}>
-                        {formatCurrency(debt.balance)}
+            <View style={{ gap: spacing.s12 }}>
+              {creditCards.length > 0 && (
+                <View style={{ gap: spacing.s8 }}>
+                  <Text style={{ color: muted, fontSize: 13, fontWeight: '700', letterSpacing: 0.4 }}>CREDIT CARDS</Text>
+                  {creditCards.map(card => (
+                    <Pressable
+                      key={card.id}
+                      onPress={() => {
+                        closeSheetThen(setShowDebtsSheet, () => nav.navigate('AccountDetail', { id: card.id }));
+                      }}
+                      style={({ pressed }) => ({
+                        backgroundColor: cardBg,
+                        borderRadius: radius.md,
+                        padding: spacing.s16,
+                        opacity: pressed ? 0.86 : 1,
+                      })}
+                    >
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.s8, alignItems: 'center' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+                          <View
+                            style={{
+                              width: 36,
+                              height: 36,
+                              borderRadius: radius.md,
+                              backgroundColor: withAlpha(warningColor, isDark ? 0.2 : 0.15),
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <Icon name="credit-card" size={18} colorToken="semantic.warning" />
+                          </View>
+                          <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>{card.name}</Text>
+                        </View>
+                        <Text style={{ color: onSurface, fontWeight: '700', fontSize: 15 }}>
+                          {formatCurrency(Math.abs(card.balance))}
+                        </Text>
+                      </View>
+                      <Text style={{ color: muted, fontSize: 13 }}>
+                        {card.institution || 'Credit Card'}
+                        {card.mask ? ` • ${card.mask}` : ''}
                       </Text>
-                    </View>
-                    <Text style={{ color: muted, fontSize: 13 }}>
-                      {debt.type?.toUpperCase() || 'DEBT'} • {debt.apr ?? 0}% APR • Due {dueLabel}
-                    </Text>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.s8 }}>
-                      <Text style={{ color: muted, fontSize: 13 }}>Minimum payment</Text>
-                      <Text style={{ color: onSurface, fontWeight: '600', fontSize: 13 }}>
-                        {formatCurrency(debt.minDue)}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+
+              {debtsList.length > 0 && (
+                <View style={{ gap: spacing.s8 }}>
+                  <Text style={{ color: muted, fontSize: 13, fontWeight: '700', letterSpacing: 0.4 }}>OTHER DEBTS</Text>
+                  {debtsList.map(debt => {
+                    const dueDate = debt.dueISO ? new Date(debt.dueISO) : null;
+                    const dueLabel =
+                      dueDate && !isNaN(dueDate.getTime())
+                        ? dueDate.toLocaleDateString()
+                        : 'No due date';
+                    return (
+                      <Pressable
+                        key={debt.id}
+                        onPress={() => {
+                          closeSheetThen(setShowDebtsSheet, () => nav.navigate('DebtDetail', { id: debt.id }));
+                        }}
+                        style={({ pressed }) => ({
+                          backgroundColor: cardBg,
+                          borderRadius: radius.md,
+                          padding: spacing.s16,
+                          opacity: pressed ? 0.86 : 1,
+                        })}
+                      >
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.s8 }}>
+                          <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>{debt.name}</Text>
+                          <Text style={{ color: onSurface, fontWeight: '700', fontSize: 15 }}>
+                            {formatCurrency(debt.balance)}
+                          </Text>
+                        </View>
+                        <Text style={{ color: muted, fontSize: 13 }}>
+                          {debt.type?.toUpperCase() || 'DEBT'} • {debt.apr ?? 0}% APR • Due {dueLabel}
+                        </Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.s8 }}>
+                          <Text style={{ color: muted, fontSize: 13 }}>Minimum payment</Text>
+                          <Text style={{ color: onSurface, fontWeight: '600', fontSize: 13 }}>
+                            {formatCurrency(debt.minDue)}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
             </View>
           )}
         </ScrollView>

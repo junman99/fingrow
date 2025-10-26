@@ -11,6 +11,7 @@ import { useInvestStore } from '../store/invest';
 import { usePlansStore } from '../store/plans';
 import { formatCurrency } from '../lib/format';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import LineChart from '../components/LineChart';
 
 type RouteParams = { suggest?: number };
 
@@ -61,6 +62,35 @@ function calculateDCAProjection(monthlyAmount: number, years: number, annualRetu
   return futureValue;
 }
 
+// Generate chart data showing invested vs projected value over time
+function generateProjectionChartData(monthlyAmount: number, years: number, annualReturn: number): Array<{ invested: Array<{t: number; v: number}>; projected: Array<{t: number; v: number}> }> {
+  const monthlyRate = annualReturn / 12;
+  const months = years * 12;
+  const now = Date.now();
+  const monthMs = 30.44 * 24 * 60 * 60 * 1000; // Average month in milliseconds
+
+  const invested: Array<{t: number; v: number}> = [];
+  const projected: Array<{t: number; v: number}> = [];
+
+  for (let month = 0; month <= months; month++) {
+    const t = now + (month * monthMs);
+    const totalInvested = monthlyAmount * month;
+
+    // Calculate future value at this point
+    let futureValue = 0;
+    if (monthlyRate === 0) {
+      futureValue = totalInvested;
+    } else {
+      futureValue = month === 0 ? 0 : monthlyAmount * (Math.pow(1 + monthlyRate, month) - 1) / monthlyRate;
+    }
+
+    invested.push({ t, v: totalInvested });
+    projected.push({ t, v: futureValue });
+  }
+
+  return [{ invested, projected }];
+}
+
 export default function DCAPlanner() {
   const nav = useNavigation<any>();
   const route = useRoute<any>();
@@ -75,7 +105,7 @@ export default function DCAPlanner() {
   const successColor = get('semantic.success') as string;
   const bgDefault = get('background.default') as string;
 
-  const { holdings, quotes, watchlist, hydrate } = useInvestStore();
+  const { holdings, quotes, watchlist, hydrate, refreshQuotes } = useInvestStore();
   const { plan, hydrate: hydratePlan, save } = usePlansStore();
 
   const suggest = (route.params as RouteParams)?.suggest ?? 0;
@@ -88,6 +118,9 @@ export default function DCAPlanner() {
   useEffect(() => {
     hydrate();
     hydratePlan();
+    // Fetch actual market data for all indices
+    const indexSymbols = INDICES.map(idx => idx.symbol);
+    refreshQuotes(indexSymbols);
   }, []);
 
   // Custom allocation mode (original functionality)
@@ -160,12 +193,40 @@ export default function DCAPlanner() {
   const monthlyAmount = parseFloat(amount || '0') || 0;
   const yearlyAmount = monthlyAmount * 12;
 
-  // Index comparison calculations
+  // Calculate actual returns from market data
+  const indexActualReturns = useMemo(() => {
+    const returns: Record<string, number> = {};
+
+    INDICES.forEach(index => {
+      const quote = quotes[index.symbol];
+      if (quote?.line && quote.line.length >= 252) { // At least 1 year of daily data
+        // Calculate annualized return from historical data
+        const sortedData = [...quote.line].sort((a, b) => a.t - b.t);
+        const oldestPrice = sortedData[0].v;
+        const latestPrice = sortedData[sortedData.length - 1].v;
+        const timeSpanYears = (sortedData[sortedData.length - 1].t - sortedData[0].t) / (365.25 * 24 * 60 * 60 * 1000);
+
+        if (oldestPrice > 0 && timeSpanYears > 0) {
+          // Compound annual growth rate (CAGR)
+          const cagr = Math.pow(latestPrice / oldestPrice, 1 / timeSpanYears) - 1;
+          returns[index.symbol] = cagr;
+        }
+      }
+    });
+
+    return returns;
+  }, [quotes]);
+
+  // Index comparison calculations with actual market data when available
   const indexProjections = useMemo(() => {
     return INDICES.map(index => {
+      // Use actual return if available, otherwise fall back to historical average
+      const returnRate = indexActualReturns[index.symbol] ?? index.avgReturn;
+      const usingActualData = indexActualReturns[index.symbol] !== undefined;
+
       const projections = TIMEFRAMES.map(years => {
         const totalInvested = monthlyAmount * 12 * years;
-        const futureValue = calculateDCAProjection(monthlyAmount, years, index.avgReturn);
+        const futureValue = calculateDCAProjection(monthlyAmount, years, returnRate);
         const totalGains = futureValue - totalInvested;
         return {
           years,
@@ -175,9 +236,9 @@ export default function DCAPlanner() {
           returnPct: totalInvested > 0 ? (totalGains / totalInvested) * 100 : 0,
         };
       });
-      return { ...index, projections };
+      return { ...index, projections, actualReturn: returnRate, usingActualData };
     });
-  }, [monthlyAmount]);
+  }, [monthlyAmount, indexActualReturns]);
 
   function toggleIndex(symbol: string) {
     setSelectedIndices(prev => {
@@ -196,14 +257,34 @@ export default function DCAPlanner() {
     }).filter(p => selectedIndices.includes(p.symbol));
   }, [indexProjections, selectedTimeframe, selectedIndices]);
 
+  // Generate projection chart data for comparison mode
+  const projectionChartData = useMemo(() => {
+    if (mode !== 'compare' || monthlyAmount <= 0 || selectedTimeframeProjections.length === 0) {
+      return null;
+    }
+
+    // Use the best performing index for the main projection
+    const bestIndex = selectedTimeframeProjections.reduce((best, curr) =>
+      (curr.futureValue || 0) > (best.futureValue || 0) ? curr : best
+    );
+
+    const chartData = generateProjectionChartData(monthlyAmount, selectedTimeframe, bestIndex.actualReturn || bestIndex.avgReturn);
+    return {
+      invested: chartData[0].invested,
+      projected: chartData[0].projected,
+      indexName: bestIndex.name,
+      indexColor: bestIndex.color,
+    };
+  }, [mode, monthlyAmount, selectedTimeframeProjections, selectedTimeframe]);
+
   return (
-    <Screen>
+    <Screen inTab>
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{
           padding: spacing.s16,
           gap: spacing.s24,
-          paddingBottom: spacing.s32
+          paddingBottom: spacing.s16
         }}
       >
         {/* Header */}
@@ -368,6 +449,99 @@ export default function DCAPlanner() {
               </View>
             </View>
 
+            {/* Projection Chart */}
+            {projectionChartData && (
+              <Card style={{ backgroundColor: cardBg, padding: spacing.s16 }}>
+                <View style={{ gap: spacing.s12 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View>
+                      <Text style={{ color: text, fontSize: 16, fontWeight: '700' }}>
+                        Growth Projection
+                      </Text>
+                      <Text style={{ color: muted, fontSize: 12, marginTop: spacing.s2 }}>
+                        {projectionChartData.indexName} - {selectedTimeframe} years
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Chart Legend */}
+                  <View style={{ flexDirection: 'row', gap: spacing.s16, marginTop: spacing.s4 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6 }}>
+                      <View style={{ width: 12, height: 3, backgroundColor: withAlpha(muted, 0.5), borderRadius: 2 }} />
+                      <Text style={{ color: muted, fontSize: 11, fontWeight: '600' }}>Amount invested</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6 }}>
+                      <View style={{ width: 12, height: 3, backgroundColor: projectionChartData.indexColor, borderRadius: 2 }} />
+                      <Text style={{ color: text, fontSize: 11, fontWeight: '600' }}>Projected value</Text>
+                    </View>
+                  </View>
+
+                  {/* Invested Amount Line Chart */}
+                  <View style={{ position: 'relative', height: 200 }}>
+                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+                      <LineChart
+                        data={projectionChartData.invested}
+                        height={200}
+                        showArea={false}
+                        currency="USD"
+                        xTickStrategy={{ mode: 'month' }}
+                        yAxisWidth={0}
+                        padding={{ left: 12, right: 12, bottom: 24, top: 10 }}
+                      />
+                    </View>
+                    {/* Projected Value Line Chart - Overlaid */}
+                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+                      <LineChart
+                        data={projectionChartData.projected}
+                        height={200}
+                        showArea={true}
+                        currency="USD"
+                        xTickStrategy={{ mode: 'month' }}
+                        yAxisWidth={0}
+                        padding={{ left: 12, right: 12, bottom: 24, top: 10 }}
+                      />
+                    </View>
+                  </View>
+
+                  {/* Key Stats */}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      gap: spacing.s8,
+                      marginTop: spacing.s8,
+                    }}
+                  >
+                    <View
+                      style={{
+                        flex: 1,
+                        padding: spacing.s12,
+                        borderRadius: radius.md,
+                        backgroundColor: withAlpha(text, isDark ? 0.06 : 0.04),
+                      }}
+                    >
+                      <Text style={{ color: muted, fontSize: 11, marginBottom: spacing.s4 }}>Total invested</Text>
+                      <Text style={{ color: onSurface, fontSize: 16, fontWeight: '800' }}>
+                        {formatCurrency(monthlyAmount * 12 * selectedTimeframe)}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        flex: 1,
+                        padding: spacing.s12,
+                        borderRadius: radius.md,
+                        backgroundColor: withAlpha(projectionChartData.indexColor, isDark ? 0.2 : 0.12),
+                      }}
+                    >
+                      <Text style={{ color: muted, fontSize: 11, marginBottom: spacing.s4 }}>Projected gains</Text>
+                      <Text style={{ color: projectionChartData.indexColor, fontSize: 16, fontWeight: '800' }}>
+                        {formatCurrency(projectionChartData.projected[projectionChartData.projected.length - 1].v - (monthlyAmount * 12 * selectedTimeframe))}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </Card>
+            )}
+
             {/* Visual Comparison Bars */}
             {monthlyAmount > 0 && selectedTimeframeProjections.length > 0 && (
               <Card style={{ backgroundColor: cardBg, padding: spacing.s16 }}>
@@ -458,7 +632,7 @@ export default function DCAPlanner() {
                             }}
                           >
                             <Text style={{ color: successColor, fontWeight: '800', fontSize: 13 }}>
-                              {(proj.avgReturn * 100).toFixed(1)}% avg
+                              {((proj.actualReturn || proj.avgReturn) * 100).toFixed(1)}% {proj.usingActualData ? 'CAGR' : 'avg'}
                             </Text>
                           </View>
                         </View>
@@ -524,8 +698,10 @@ export default function DCAPlanner() {
                     About these projections
                   </Text>
                   <Text style={{ color: muted, fontSize: 13, lineHeight: 19 }}>
-                    Projections are based on historical average returns and assume consistent monthly investments.
-                    Past performance doesn't guarantee future results. Market conditions vary, and actual returns may differ significantly.
+                    {Object.keys(indexActualReturns).length > 0
+                      ? 'Projections use actual market data (CAGR) where available, with historical averages as fallback. '
+                      : 'Projections are based on historical average returns. '}
+                    Assumes consistent monthly investments. Past performance doesn't guarantee future results. Market conditions vary, and actual returns may differ significantly.
                   </Text>
                 </View>
               </View>
@@ -805,13 +981,6 @@ export default function DCAPlanner() {
             </Card>
           </>
         )}
-
-        {/* Back Button */}
-        <Button
-          title="Back"
-          onPress={() => nav.goBack()}
-          variant="secondary"
-        />
       </ScrollView>
     </Screen>
   );

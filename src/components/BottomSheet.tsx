@@ -16,6 +16,8 @@ type Props = {
 };
 
 export default function BottomSheet({ visible, onClose, children, height, dimmed, fullHeight }: Props) {
+  console.log('📄 [BottomSheet] Rendering with visible:', visible, 'dimmed:', dimmed);
+
   const { get } = useThemeTokens();
   const insets = useSafeAreaInsets();
   const screenH = Dimensions.get('window').height;
@@ -26,12 +28,13 @@ export default function BottomSheet({ visible, onClose, children, height, dimmed
   const MID_Y = SHEET_H * 0.48;
   const OPEN_Y = 0;
 
-  const y = useSharedValue(visible ? OPEN_Y : CLOSED_Y);
+  const y = useSharedValue(CLOSED_Y);
   const kb = useSharedValue(0);
 
   useEffect(() => {
     if (visible) {
-      y.value = withTiming(OPEN_Y, { duration: 240 });
+      y.value = CLOSED_Y; // Reset to closed before animating
+      y.value = withSpring(OPEN_Y, { damping: 30, stiffness: 350, mass: 0.9 });
     } else {
       y.value = withTiming(CLOSED_Y, { duration: 200 });
     }

@@ -52,6 +52,8 @@ export default function PortfolioDetailSheet({
   onOpenManager,
   dimmed,
 }: Props) {
+  console.log('📋 [PortfolioDetailSheet] Rendering with:', { portfolioId, visible, dimmed });
+
   const { get, isDark } = useThemeTokens();
   const nav = useNavigation<any>();
   const { portfolios } = useInvestStore();
@@ -59,6 +61,8 @@ export default function PortfolioDetailSheet({
   const archivePortfolio = useInvestStore(s => (s as any).archivePortfolio);
 
   const p = portfolioId ? portfolios[portfolioId] : null;
+
+  console.log('📋 [PortfolioDetailSheet] Portfolio data:', p ? { id: p.id, name: p.name } : 'null');
   const [tab, setTab] = React.useState<(typeof TAB_ITEMS)[number]>('Holdings');
   const [showCashEditor, setShowCashEditor] = React.useState(false);
   const [menuVisible, setMenuVisible] = React.useState(false);

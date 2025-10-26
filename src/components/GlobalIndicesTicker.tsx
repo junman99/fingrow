@@ -133,16 +133,31 @@ const IndexItem: React.FC<{ index: IndexData; onPress: () => void }> = ({ index,
 
 export const GlobalIndicesTicker: React.FC = () => {
   const { get } = useThemeTokens();
-  const scrollViewRef = React.useRef<ScrollView>(null);
   const scrollX = React.useRef(new Animated.Value(0)).current;
   const [itemWidth, setItemWidth] = React.useState(0);
   const scrollIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
   const isUserScrollingRef = React.useRef(false);
-  const userScrollTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const initialScrollDoneRef = React.useRef(false);
   const [marketStatus, setMarketStatus] = React.useState(getUSMarketStatus());
   const [selectedIndex, setSelectedIndex] = React.useState<IndexData | null>(null);
   const [showModal, setShowModal] = React.useState(false);
+  const [renderModal, setRenderModal] = React.useState(false);
+
+  // Debug state changes
+  React.useEffect(() => {
+    console.log('📊 [IndexTicker] showModal changed to:', showModal);
+    if (showModal) {
+      setRenderModal(true);
+    }
+  }, [showModal]);
+
+  React.useEffect(() => {
+    console.log('📊 [IndexTicker] selectedIndex changed to:', selectedIndex?.symbol || null);
+  }, [selectedIndex]);
+
+  React.useEffect(() => {
+    console.log('📊 [IndexTicker] renderModal changed to:', renderModal);
+  }, [renderModal]);
 
   // Update market status every minute
   React.useEffect(() => {
@@ -192,9 +207,7 @@ export const GlobalIndicesTicker: React.FC = () => {
       const totalWidth = itemWidth * INDICES.length;
       const middlePosition = totalWidth * 2; // Start at copy 2 (out of 5 copies)
 
-      // Use setTimeout to ensure ScrollView is ready
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ x: middlePosition, animated: false });
         scrollX.setValue(middlePosition);
         initialScrollDoneRef.current = true;
       }, 50);
@@ -206,35 +219,29 @@ export const GlobalIndicesTicker: React.FC = () => {
     if (itemWidth === 0) return;
 
     const totalWidth = itemWidth * INDICES.length;
-    const scrollSpeed = 0.5; // pixels per frame (20% slower than 0.6)
+    const scrollSpeed = 0.5; // pixels per frame
 
     // Small delay to ensure initial scroll is complete
     const startDelay = setTimeout(() => {
       const interval = setInterval(() => {
         if (isUserScrollingRef.current) return;
 
-        // Get current scroll position directly from ref
-        scrollViewRef.current?.getScrollableNode?.()?.scrollLeft;
         const currentScroll = (scrollX as any)._value;
         let newScroll = currentScroll + scrollSpeed;
 
         // Wrap forward when reaching end of segment
         if (newScroll >= totalWidth * 3) {
           newScroll = newScroll - totalWidth;
-          scrollViewRef.current?.scrollTo({ x: newScroll, animated: false });
-          scrollX.setValue(newScroll);
         } else if (newScroll <= totalWidth) {
           // Wrap backward when scrolling too far left
           newScroll = newScroll + totalWidth;
-          scrollViewRef.current?.scrollTo({ x: newScroll, animated: false });
-          scrollX.setValue(newScroll);
-        } else {
-          scrollViewRef.current?.scrollTo({ x: newScroll, animated: false });
         }
+
+        scrollX.setValue(newScroll);
       }, 16); // 60fps
 
       scrollIntervalRef.current = interval;
-    }, 100); // Wait 100ms for initial scroll
+    }, 100);
 
     return () => {
       clearTimeout(startDelay);
@@ -242,62 +249,11 @@ export const GlobalIndicesTicker: React.FC = () => {
     };
   }, [itemWidth, scrollX]);
 
-  // Handle scroll events with bidirectional wrapping
-  const onScroll = Animated.event(
-    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-    {
-      useNativeDriver: false,
-      listener: (event: any) => {
-        if (itemWidth === 0) return;
-
-        const currentScroll = event.nativeEvent.contentOffset.x;
-        const totalWidth = itemWidth * INDICES.length;
-
-        // Wrap backward during manual scroll
-        if (currentScroll <= totalWidth * 0.5) {
-          const newScroll = currentScroll + totalWidth;
-          scrollViewRef.current?.scrollTo({ x: newScroll, animated: false });
-          scrollX.setValue(newScroll);
-        }
-        // Wrap forward during manual scroll
-        else if (currentScroll >= totalWidth * 3.5) {
-          const newScroll = currentScroll - totalWidth;
-          scrollViewRef.current?.scrollTo({ x: newScroll, animated: false });
-          scrollX.setValue(newScroll);
-        }
-      },
-    }
-  );
-
-  const onScrollBeginDrag = () => {
-    isUserScrollingRef.current = true;
-    if (userScrollTimeoutRef.current) {
-      clearTimeout(userScrollTimeoutRef.current);
-    }
-  };
-
-  const onScrollEndDrag = () => {
-    // Wait 2 seconds after user stops scrolling
-    userScrollTimeoutRef.current = setTimeout(() => {
-      isUserScrollingRef.current = false;
-    }, 2000);
-  };
-
-  const onMomentumScrollEnd = () => {
-    // Also handle momentum scroll end
-    if (userScrollTimeoutRef.current) {
-      clearTimeout(userScrollTimeoutRef.current);
-    }
-    userScrollTimeoutRef.current = setTimeout(() => {
-      isUserScrollingRef.current = false;
-    }, 2000);
-  };
 
   // Cleanup
   React.useEffect(() => {
     return () => {
       if (scrollIntervalRef.current) clearInterval(scrollIntervalRef.current);
-      if (userScrollTimeoutRef.current) clearTimeout(userScrollTimeoutRef.current);
     };
   }, []);
 
@@ -329,43 +285,46 @@ export const GlobalIndicesTicker: React.FC = () => {
 
       {/* Ticker ScrollView */}
       <View style={{ height: 90, overflow: 'hidden' }}>
-        <ScrollView
-          ref={scrollViewRef}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          scrollEventThrottle={16}
-          onScroll={onScroll}
-          onScrollBeginDrag={onScrollBeginDrag}
-          onScrollEndDrag={onScrollEndDrag}
-          onMomentumScrollEnd={onMomentumScrollEnd}
-          decelerationRate="normal"
-          contentContainerStyle={{ flexDirection: 'row' }}
+        <Animated.View
+          style={{
+            flexDirection: 'row',
+            transform: [{ translateX: scrollX.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, -1]
+            })}]
+          }}
         >
           {duplicatedIndices.map((index, i) => (
-            <View key={`${index.symbol}-${i}`} onLayout={i === 0 ? onItemLayout : undefined} pointerEvents="box-none">
+            <View key={`${index.symbol}-${i}`} onLayout={i === 0 ? onItemLayout : undefined}>
               <IndexItem
                 index={index}
                 onPress={() => {
-                  console.log('Index card pressed:', index.symbol);
+                  console.log('📊 [IndexTicker] Index card pressed:', index.symbol);
                   setSelectedIndex(index);
                   setShowModal(true);
                 }}
               />
             </View>
           ))}
-        </ScrollView>
+        </Animated.View>
       </View>
 
       {/* Index Detail Sheet */}
-      <IndexDetailSheet
-        index={selectedIndex}
-        visible={showModal}
-        onClose={() => {
-          console.log('onClose called in parent, closing modal');
-          setShowModal(false);
-          setSelectedIndex(null);
-        }}
-      />
+      {renderModal && selectedIndex && showModal && (
+        <IndexDetailSheet
+          index={selectedIndex}
+          visible={showModal}
+          onClose={() => {
+            console.log('📊 [IndexTicker] onClose called');
+            setShowModal(false);
+            // Delay unmounting to allow Modal animation to complete
+            setTimeout(() => {
+              setRenderModal(false);
+              setSelectedIndex(null);
+            }, 300);
+          }}
+        />
+      )}
     </View>
   );
 };

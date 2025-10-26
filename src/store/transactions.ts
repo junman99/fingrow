@@ -1,6 +1,7 @@
 
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAccountsStore } from './accounts';
 
 export type TxType = 'expense' | 'income';
 export type Transaction = {
@@ -61,9 +62,18 @@ export const useTxStore = create<State>((set, get) => ({
     await AsyncStorage.setItem(KEY, JSON.stringify(arr));
   },
   remove: async (id) => {
+    // Find the transaction before removing it
+    const tx = (get().transactions || []).find(t => t.id === id);
     const arr = (get().transactions || []).filter(t => t.id !== id);
     set({ transactions: arr });
     await AsyncStorage.setItem(KEY, JSON.stringify(arr));
+
+    // Reverse the account balance update
+    if (tx?.account && tx.amount) {
+      const { updateAccountBalance } = useAccountsStore.getState();
+      // Reverse the transaction by doing the opposite operation
+      await updateAccountBalance(tx.account, tx.amount, tx.type === 'income');
+    }
   },
   clearAll: async () => {
     set({ transactions: [] });
@@ -85,8 +95,17 @@ export const useTxStore = create<State>((set, get) => ({
     await AsyncStorage.setItem(KEY, JSON.stringify(arr));
   },
   deleteTransaction: async (id) => {
+    // Find the transaction before removing it
+    const tx = (get().transactions || []).find(t => t.id === id);
     const arr = (get().transactions || []).filter(t => t.id !== id);
     set({ transactions: arr });
     await AsyncStorage.setItem(KEY, JSON.stringify(arr));
+
+    // Reverse the account balance update
+    if (tx?.account && tx.amount) {
+      const { updateAccountBalance } = useAccountsStore.getState();
+      // Reverse the transaction by doing the opposite operation
+      await updateAccountBalance(tx.account, tx.amount, tx.type === 'income');
+    }
   }
 }));

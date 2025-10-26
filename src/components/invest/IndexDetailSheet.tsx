@@ -84,6 +84,8 @@ const INDEX_INFO: Record<string, { description: string; components: string; meth
 };
 
 export default function IndexDetailSheet({ index, visible, onClose }: Props) {
+  console.log('📊 [IndexDetailSheet] Rendering. visible:', visible, 'index:', index?.symbol || null);
+
   const { get, isDark } = useThemeTokens();
 
   // Always call hooks before any early returns
@@ -117,7 +119,12 @@ export default function IndexDetailSheet({ index, visible, onClose }: Props) {
     })
   ).current;
 
-  if (!index || !visible) return null;
+  if (!index || !visible) {
+    console.log('📊 [IndexDetailSheet] Not rendering - index:', index?.symbol, 'visible:', visible);
+    return null;
+  }
+
+  console.log('📊 [IndexDetailSheet] Rendering for index:', index.symbol);
 
   const dayColor = index.dayChangePct >= 0 ? successColor : dangerColor;
   const ytdColor = index.ytdChangePct >= 0 ? successColor : dangerColor;
@@ -136,16 +143,17 @@ export default function IndexDetailSheet({ index, visible, onClose }: Props) {
   const sheetBackground = isDark ? '#1A1A1A' : (surface0 || '#FFFFFF');
 
   return (
-    <Modal visible={true} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <Pressable
         onPress={() => {
-          console.log('Backdrop pressed');
+          console.log('📊 [IndexDetailSheet] Backdrop pressed, calling onClose');
           onClose();
         }}
         style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}
       >
         <Pressable
           onPress={(e) => {
+            // Prevent backdrop from closing when tapping inside the sheet
             e.stopPropagation();
           }}
           style={{
@@ -187,10 +195,10 @@ export default function IndexDetailSheet({ index, visible, onClose }: Props) {
               </View>
               <Pressable
                 onPress={() => {
-                  console.log('X button pressed');
+                  console.log('📊 [IndexDetailSheet] X button pressed, calling onClose');
                   onClose();
                 }}
-                style={{ padding: spacing.s8, zIndex: 1000 }}
+                style={{ padding: spacing.s8, zIndex: 10000, elevation: 10000 }}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Icon name="x" size={24} color={textMuted} />
