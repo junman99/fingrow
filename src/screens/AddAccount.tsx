@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenScroll } from '../components/ScreenScroll';
 import Input from '../components/Input';
 import Button from '../components/Button';
+import Icon from '../components/Icon';
 import { spacing, radius } from '../theme/tokens';
 import { useAccountsStore } from '../store/accounts';
 import { useNavigation } from '@react-navigation/native';
@@ -60,6 +61,7 @@ const AddAccount: React.FC = () => {
   const accentSecondary = get('accent.secondary') as string;
   const textPrimary = get('text.primary') as string;
   const muted = get('text.muted') as string;
+  const cardBg = get('surface.level1') as string;
   const heroColors: [string, string] = isDark
     ? [withAlpha(accentPrimary, 0.38), withAlpha(accentSecondary, 0.50)]
     : [accentPrimary, accentSecondary];
@@ -96,101 +98,155 @@ const AddAccount: React.FC = () => {
       contentStyle={{ padding: spacing.s16, gap: spacing.s16 }}
       allowBounce={false}
     >
-      <LinearGradient
-        colors={heroColors}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+      <View
         style={{
           borderRadius: radius.xl,
-          padding: spacing.s16,
-          paddingBottom: spacing.s24,
-          gap: spacing.s12,
+          backgroundColor: cardBg,
+          borderWidth: 2,
+          borderColor: withAlpha(accentPrimary, 0.2),
+          overflow: 'hidden',
         }}
       >
-        <Text style={{ color: heroMuted, fontWeight: '700', fontSize: 12, letterSpacing: 0.6 }}>
-          NEW ACCOUNT
-        </Text>
-        <Text style={{ color: heroText, fontSize: 26, fontWeight: '800' }}>
-          Bring your cash into Money HQ
-        </Text>
-        <Text style={{ color: heroMuted }}>
-          Track balances, runway, and net worth in one place. You can always edit or remove it later.
-        </Text>
-        <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
+        <LinearGradient
+          colors={heroColors}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            padding: spacing.s20,
+            paddingBottom: spacing.s16,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12, marginBottom: spacing.s12 }}>
+            <View
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: radius.lg,
+                backgroundColor: heroChipBg,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Icon name="plus-circle" size={28} color={heroText} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: heroMuted, fontWeight: '700', fontSize: 11, letterSpacing: 0.8 }}>
+                NEW ACCOUNT
+              </Text>
+              <Text style={{ color: heroText, fontSize: 22, fontWeight: '800', marginTop: 2 }}>
+                Add an account
+              </Text>
+            </View>
+          </View>
+          <Text style={{ color: heroMuted, fontSize: 14, lineHeight: 20 }}>
+            Track your cash, investments, and credit in one place. Build your complete financial picture.
+          </Text>
+        </LinearGradient>
+
+        <View
+          style={{
+            backgroundColor: withAlpha(textPrimary, isDark ? 0.08 : 0.04),
+            padding: spacing.s16,
+            flexDirection: 'row',
+            gap: spacing.s12,
+          }}
+        >
           <View
             style={{
-              paddingVertical: spacing.s6,
-              paddingHorizontal: spacing.s12,
-              borderRadius: radius.pill,
-              backgroundColor: heroChipBg,
+              paddingVertical: spacing.s8,
+              paddingHorizontal: spacing.s14,
+              borderRadius: radius.lg,
+              backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
+              flex: 1,
             }}
           >
-            <Text style={{ color: heroText, fontWeight: '700' }}>{kind.toUpperCase()}</Text>
+            <Text style={{ color: muted, fontSize: 11, fontWeight: '600', marginBottom: 2 }}>TYPE</Text>
+            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 14 }}>
+              {kinds.find(k => k.key === kind)?.title || 'Checking'}
+            </Text>
           </View>
           <View
             style={{
-              paddingVertical: spacing.s6,
-              paddingHorizontal: spacing.s12,
-              borderRadius: radius.pill,
-              backgroundColor: heroChipBg,
+              paddingVertical: spacing.s8,
+              paddingHorizontal: spacing.s14,
+              borderRadius: radius.lg,
+              backgroundColor: withAlpha(accentSecondary, isDark ? 0.25 : 0.15),
+              flex: 1,
             }}
           >
-            <Text style={{ color: heroText, fontWeight: '700' }}>
+            <Text style={{ color: muted, fontSize: 11, fontWeight: '600', marginBottom: 2 }}>BALANCE</Text>
+            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 14 }}>
               {balanceNumber >= 0 ? '+' : '-'}
               {formatCurrency(Math.abs(balanceNumber))}
             </Text>
           </View>
         </View>
-      </LinearGradient>
+      </View>
 
       <View style={{ gap: spacing.s12 }}>
         <Text style={{ color: textPrimary, fontSize: 18, fontWeight: '700' }}>Account basics</Text>
         <Input label="Account name" value={name} onChangeText={setName} placeholder="e.g. DBS Multiplier" />
-        <Input label="Institution" value={institution} onChangeText={setInstitution} placeholder="Who holds this account?" />
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
-          {quickInstitutions.map(inst => (
-            <Pressable
-              key={inst}
-              onPress={() => setInstitution(inst)}
-              style={({ pressed }) => ({
-                paddingVertical: spacing.s6,
-                paddingHorizontal: spacing.s12,
-                borderRadius: radius.pill,
-                backgroundColor: institution === inst ? withAlpha(accentPrimary, 0.20) : withAlpha(textPrimary, 0.06),
-                opacity: pressed ? 0.8 : 1,
-              })}
-            >
-              <Text style={{ color: textPrimary, fontWeight: '600' }}>{inst}</Text>
-            </Pressable>
-          ))}
+
+        {/* Institution Selector */}
+        <View style={{ gap: spacing.s8 }}>
+          <Text style={{ color: textPrimary, fontSize: 14, fontWeight: '600' }}>Institution</Text>
+          <Pressable
+            onPress={() => nav.navigate('SelectInstitution', {
+              currentInstitution: institution,
+              onSelect: (selected: string) => setInstitution(selected),
+            })}
+            style={({ pressed }) => ({
+              paddingVertical: spacing.s14,
+              paddingHorizontal: spacing.s16,
+              borderRadius: radius.lg,
+              borderWidth: 1.5,
+              borderColor: withAlpha(textPrimary, 0.12),
+              backgroundColor: withAlpha(textPrimary, 0.02),
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              opacity: pressed ? 0.8 : 1,
+            })}
+          >
+            <Text style={{ color: textPrimary, fontSize: 16, fontWeight: institution === 'Manual' ? '400' : '700' }}>
+              {institution || 'Select institution'}
+            </Text>
+            <Text style={{ color: muted, fontSize: 18 }}>&rsaquo;</Text>
+          </Pressable>
         </View>
       </View>
 
+      {/* Account Type Selector */}
       <View style={{ gap: spacing.s12 }}>
         <Text style={{ color: textPrimary, fontSize: 18, fontWeight: '700' }}>Account type</Text>
-        <View style={{ gap: spacing.s8 }}>
-          {kinds.map(option => {
-            const active = option.key === kind;
-            return (
-              <Pressable
-                key={option.key}
-                onPress={() => setKind(option.key)}
-                style={({ pressed }) => ({
-                  paddingVertical: spacing.s12,
-                  paddingHorizontal: spacing.s16,
-                  borderRadius: radius.lg,
-                  borderWidth: 1.5,
-                  borderColor: active ? accentPrimary : withAlpha(textPrimary, 0.12),
-                  backgroundColor: active ? withAlpha(accentPrimary, isDark ? 0.24 : 0.12) : withAlpha(textPrimary, 0.02),
-                  opacity: pressed ? 0.85 : 1,
-                })}
-              >
-                <Text style={{ color: textPrimary, fontWeight: '700' }}>{option.title}</Text>
-                <Text style={{ color: muted, marginTop: spacing.s4 }}>{option.caption}</Text>
-              </Pressable>
-            );
+        <Pressable
+          onPress={() => nav.navigate('SelectAccountType', {
+            currentType: kind,
+            onSelect: (selected: AccountKind) => setKind(selected),
           })}
-        </View>
+          style={({ pressed }) => ({
+            paddingVertical: spacing.s14,
+            paddingHorizontal: spacing.s16,
+            borderRadius: radius.lg,
+            borderWidth: 1.5,
+            borderColor: withAlpha(textPrimary, 0.12),
+            backgroundColor: withAlpha(textPrimary, 0.02),
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            opacity: pressed ? 0.8 : 1,
+          })}
+        >
+          <View>
+            <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>
+              {kinds.find(k => k.key === kind)?.title || 'Select type'}
+            </Text>
+            <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
+              {kinds.find(k => k.key === kind)?.caption || ''}
+            </Text>
+          </View>
+          <Text style={{ color: muted, fontSize: 18 }}>&rsaquo;</Text>
+        </Pressable>
       </View>
 
       <View style={{ gap: spacing.s12 }}>

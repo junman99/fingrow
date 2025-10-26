@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { ScreenScroll } from '../components/ScreenScroll';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
@@ -15,6 +16,7 @@ import { useRecurringStore, computeNextDue, Recurring } from '../store/recurring
 import { usePlansStore } from '../store/plans';
 import { useDebtsStore } from '../store/debts';
 import { useTxStore } from '../store/transactions';
+import { useIncomeSplittingStore } from '../store/incomeSplitting';
 
 function withAlpha(color: string, alpha: number) {
   if (!color) return color;
@@ -52,11 +54,39 @@ function sumUpcoming(recurring: Recurring[], now: Date, withinDays: number) {
   return { total, list };
 }
 
+const AnimatedPressable: React.FC<{
+  onPress: () => void;
+  children: React.ReactNode;
+  style?: any;
+}> = ({ onPress, children, style }) => {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => {
+        scale.value = withSpring(0.97, { damping: 15, stiffness: 300 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+      }}
+    >
+      <Animated.View style={[style, animatedStyle]}>
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
+};
+
 type MetricCardProps = {
   title: string;
   value: string;
   subtitle: string;
-  icon: 'wallet' | 'trending-up' | 'receipt' | 'target';
+  icon: 'wallet' | 'trending-up' | 'receipt' | 'target' | 'dollar-sign';
   bgColor: string;
   onPress: () => void;
   badge?: { text: string; variant: 'neutral' | 'warning' | 'success' };
@@ -66,19 +96,36 @@ const MetricCard: React.FC<MetricCardProps> = ({ title, value, subtitle, icon, b
   const { get, isDark } = useThemeTokens();
   const text = get('text.primary') as string;
   const muted = get('text.muted') as string;
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => ({
+      onPressIn={() => {
+        scale.value = withSpring(0.97, { damping: 15, stiffness: 300 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+      }}
+      style={{
         flex: 1,
         minWidth: '48%',
-        backgroundColor: bgColor,
-        borderRadius: radius.lg,
-        padding: spacing.s16,
-        opacity: pressed ? 0.88 : 1,
-      })}
+      }}
     >
+      <Animated.View
+        style={[
+          {
+            backgroundColor: bgColor,
+            borderRadius: radius.lg,
+            padding: spacing.s16,
+          },
+          animatedStyle,
+        ]}
+      >
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <Icon name={icon} size={24} colorToken="text.primary" />
         {badge && (
@@ -106,6 +153,7 @@ const MetricCard: React.FC<MetricCardProps> = ({ title, value, subtitle, icon, b
         {value}
       </Text>
       <Text style={{ color: muted, fontSize: 12, marginTop: spacing.s6 }}>{subtitle}</Text>
+      </Animated.View>
     </Pressable>
   );
 };
@@ -122,6 +170,7 @@ const Money: React.FC = () => {
   const { hydrate: hydratePlan } = usePlansStore();
   const { transactions, hydrate: hydrateTx } = useTxStore();
   const { items: debts, hydrate: hydrateDebts } = useDebtsStore();
+  const { config: paycheckConfig, splitHistory, hydrate: hydratePaycheck } = useIncomeSplittingStore();
   const sheetTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const sheetRafs = useRef<number[]>([]);
 
@@ -132,7 +181,8 @@ const Money: React.FC = () => {
     hydrateTx();
     hydratePlan();
     hydrateDebts();
-  }, [hydrateAcc, hydrateInvest, hydrateRecur, hydrateTx, hydratePlan, hydrateDebts]);
+    hydratePaycheck();
+  }, [hydrateAcc, hydrateInvest, hydrateRecur, hydrateTx, hydratePlan, hydrateDebts, hydratePaycheck]);
 
   useEffect(() => () => {
     sheetTimers.current.forEach(clearTimeout);
@@ -356,7 +406,7 @@ const Money: React.FC = () => {
             subtitle={`${cashAccounts.length} account${cashAccounts.length === 1 ? '' : 's'}`}
             icon="wallet"
             bgColor={withAlpha(accentPrimary, isDark ? 0.2 : 0.12)}
-            onPress={() => setShowAccountsSheet(true)}
+            onPress={() => nav.navigate('AccountsList')}
             badge={
               runwayDays > 0
                 ? { text: `${runwayDays}d runway`, variant: runwayStatus }
@@ -369,7 +419,7 @@ const Money: React.FC = () => {
             subtitle={portfolioChangeLabel}
             icon="trending-up"
             bgColor={withAlpha(accentSecondary, isDark ? 0.22 : 0.14)}
-            onPress={() => setShowPortfolioSheet(true)}
+            onPress={() => nav.navigate('PortfolioList')}
           />
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
@@ -379,7 +429,7 @@ const Money: React.FC = () => {
             subtitle={`${upcoming.list.length} in next 30 days`}
             icon="receipt"
             bgColor={withAlpha(successColor, isDark ? 0.2 : 0.14)}
-            onPress={() => nav.navigate('Bills')}
+            onPress={() => nav.navigate('BillsList')}
             badge={
               upcoming.total > totalCash
                 ? { text: 'Over cash', variant: 'warning' }
@@ -392,7 +442,32 @@ const Money: React.FC = () => {
             subtitle={`${debtsList.length + creditCards.length} debt${(debtsList.length + creditCards.length) === 1 ? '' : 's'}${creditCards.length > 0 ? ` • ${creditCards.length} card${creditCards.length === 1 ? '' : 's'}` : ''}`}
             icon="target"
             bgColor={withAlpha(warningColor, isDark ? 0.2 : 0.14)}
-            onPress={() => setShowDebtsSheet(true)}
+            onPress={() => nav.navigate('DebtsList')}
+          />
+        </View>
+        <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
+          <MetricCard
+            title="Paycheck"
+            value={
+              paycheckConfig.enabled && splitHistory.length > 0
+                ? formatCurrency(splitHistory[splitHistory.length - 1]?.netAmount || 0)
+                : '—'
+            }
+            subtitle={
+              paycheckConfig.enabled && splitHistory.length > 0
+                ? `Last: ${new Date(splitHistory[splitHistory.length - 1]?.date || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                : 'Split income automatically'
+            }
+            icon="dollar-sign"
+            bgColor={withAlpha(accentPrimary, isDark ? 0.18 : 0.1)}
+            onPress={() => nav.navigate('PaycheckBreakdown')}
+            badge={
+              paycheckConfig.enabled && paycheckConfig.cpf.enabled
+                ? { text: 'CPF Active', variant: 'success' }
+                : !paycheckConfig.enabled
+                ? { text: 'Setup', variant: 'neutral' }
+                : undefined
+            }
           />
         </View>
       </View>
@@ -552,20 +627,20 @@ const Money: React.FC = () => {
                 const excluded = account.includeInNetWorth === false;
 
                 return (
-                  <Pressable
+                  <AnimatedPressable
                     key={account.id}
                     onPress={() => {
                       closeSheetThen(setShowAccountsSheet, () => nav.navigate('AccountDetail', { id: account.id }));
                     }}
-                    style={({ pressed }) => ({
+                    style={{
                       backgroundColor: cardBg,
                       borderRadius: radius.md,
                       padding: spacing.s16,
-                      opacity: pressed ? 0.8 : excluded ? 0.7 : 1,
+                      opacity: excluded ? 0.7 : 1,
                       flexDirection: 'row',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                    })}
+                    }}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
                       <View
@@ -593,7 +668,7 @@ const Money: React.FC = () => {
                     <Text style={{ color: onSurface, fontWeight: '700', fontSize: 16 }}>
                       {formatCurrency(account.balance)}
                     </Text>
-                  </Pressable>
+                  </AnimatedPressable>
                 );
               })}
               <Button
@@ -768,17 +843,16 @@ const Money: React.FC = () => {
                 <View style={{ gap: spacing.s8 }}>
                   <Text style={{ color: muted, fontSize: 13, fontWeight: '700', letterSpacing: 0.4 }}>CREDIT CARDS</Text>
                   {creditCards.map(card => (
-                    <Pressable
+                    <AnimatedPressable
                       key={card.id}
                       onPress={() => {
                         closeSheetThen(setShowDebtsSheet, () => nav.navigate('AccountDetail', { id: card.id }));
                       }}
-                      style={({ pressed }) => ({
+                      style={{
                         backgroundColor: cardBg,
                         borderRadius: radius.md,
                         padding: spacing.s16,
-                        opacity: pressed ? 0.86 : 1,
-                      })}
+                      }}
                     >
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.s8, alignItems: 'center' }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
@@ -804,7 +878,7 @@ const Money: React.FC = () => {
                         {card.institution || 'Credit Card'}
                         {card.mask ? ` • ${card.mask}` : ''}
                       </Text>
-                    </Pressable>
+                    </AnimatedPressable>
                   ))}
                 </View>
               )}
@@ -819,17 +893,16 @@ const Money: React.FC = () => {
                         ? dueDate.toLocaleDateString()
                         : 'No due date';
                     return (
-                      <Pressable
+                      <AnimatedPressable
                         key={debt.id}
                         onPress={() => {
                           closeSheetThen(setShowDebtsSheet, () => nav.navigate('DebtDetail', { id: debt.id }));
                         }}
-                        style={({ pressed }) => ({
+                        style={{
                           backgroundColor: cardBg,
                           borderRadius: radius.md,
                           padding: spacing.s16,
-                          opacity: pressed ? 0.86 : 1,
-                        })}
+                        }}
                       >
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.s8 }}>
                           <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>{debt.name}</Text>
@@ -846,7 +919,7 @@ const Money: React.FC = () => {
                             {formatCurrency(debt.minDue)}
                           </Text>
                         </View>
-                      </Pressable>
+                      </AnimatedPressable>
                     );
                   })}
                 </View>

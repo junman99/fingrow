@@ -7,11 +7,11 @@ export type BankAccount = {
   institution?: string;
   mask?: string; // last 4
   balance: number; // in user's currency for now
-  kind?: 'checking' | 'savings' | 'cash' | 'credit' | 'investment';
+  kind?: 'checking' | 'savings' | 'cash' | 'credit' | 'investment' | 'retirement' | 'loan' | 'mortgage' | 'other';
   includeInNetWorth?: boolean;
   note?: string;
   isDefault?: boolean; // default account for transactions
-  apr?: number; // Annual Percentage Rate for credit cards
+  apr?: number; // Annual Percentage Rate for credit cards/loans
   creditLimit?: number; // Credit limit for credit cards
   minPaymentPercent?: number; // Minimum payment percentage (e.g., 2.5%)
 };

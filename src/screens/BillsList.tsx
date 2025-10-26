@@ -1,342 +1,488 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ScreenScroll } from '../components/ScreenScroll';
-import { spacing, radius } from '../theme/tokens';
-import { useThemeTokens } from '../theme/ThemeProvider';
-import Button from '../components/Button';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
-import { useRecurringStore, computeNextDue, Freq } from '../store/recurring';
-import { detectRecurring, forecastUpcoming } from '../lib/recurrence';
+import { ScreenScroll } from '../components/ScreenScroll';
+import { useThemeTokens } from '../theme/ThemeProvider';
+import { spacing, radius } from '../theme/tokens';
+import Icon from '../components/Icon';
+import { Card } from '../components/Card';
+import Button from '../components/Button';
+import { useRecurringStore, computeNextDue } from '../store/recurring';
 import { useTxStore } from '../store/transactions';
-import { LinearGradient } from 'expo-linear-gradient';
 import { formatCurrency } from '../lib/format';
-import { CYCLE_KEY } from './Budgets';
-
-
-function startOfDay(d: Date) { const n = new Date(d); n.setHours(0,0,0,0); return n; }
-function endOfDay(d: Date) { const n = new Date(d); n.setHours(23,59,59,999); return n; }
-function startOfMonth(d: Date) { const n = new Date(d.getFullYear(), d.getMonth(), 1); n.setHours(0,0,0,0); return n; }
-function endOfMonth(d: Date) { const n = new Date(d.getFullYear(), d.getMonth()+1, 0); n.setHours(23,59,59,999); return n; }
 
 function withAlpha(color: string, alpha: number) {
-  if (!color) return color;
+  if (!color) return `rgba(0,0,0,${alpha})`;
   if (color.startsWith('#')) {
-    const value = color.slice(1);
-    const bigint = parseInt(value.length === 6 ? value : value.padEnd(6, '0'), 16);
-    const r = (bigint >> 16) & 255;
-    const g = (bigint >> 8) & 255;
-    const b = bigint & 255;
+    const raw = color.replace('#', '');
+    const expanded = raw.length === 3 ? raw.split('').map(x => x + x).join('') : raw;
+    const int = parseInt(expanded, 16);
+    const r = (int >> 16) & 255;
+    const g = (int >> 8) & 255;
+    const b = int & 255;
     return `rgba(${r},${g},${b},${alpha})`;
   }
   return color;
 }
 
-function getBiweeklyPeriod(anchorISO: string | null, today = new Date()): { start: Date; end: Date; anchor: string } {
-  const anchor = anchorISO ? new Date(anchorISO) : startOfDay(today);
-  const a0 = startOfDay(anchor);
-  const ms14 = 14 * 24 * 60 * 60 * 1000;
-  const t = startOfDay(today).getTime();
-  const diff = t - a0.getTime();
-  const k = Math.floor(diff / ms14);
-  const pStart = new Date(a0.getTime() + k * ms14);
-  const pEnd = new Date(pStart.getTime() + ms14 - 1);
-  return { start: pStart, end: pEnd, anchor: a0.toISOString() };
-}
+const AnimatedPressable: React.FC<{
+  onPress: () => void;
+  children: React.ReactNode;
+  style?: any;
+}> = ({ onPress, children, style }) => {
+  const scale = useSharedValue(1);
 
-export default function BillsList() {
-  const { get, isDark } = useThemeTokens();
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => {
+        scale.value = withSpring(0.97, { damping: 15, stiffness: 300 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+      }}
+    >
+      <Animated.View style={[style, animatedStyle]}>
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
+};
+
+const BillsList: React.FC = () => {
   const nav = useNavigation<any>();
-  const { items, hydrate, ready, add, update, skipOnce, snooze, remove } = useRecurringStore();
+  const { get, isDark } = useThemeTokens();
+  const { items: recurring, hydrate, update, skipOnce, snooze, remove } = useRecurringStore();
   const addTx = useTxStore(s => s.add);
-  const transactions = useTxStore(state => state.transactions || []);
-
-  const [cycle, setCycle] = useState<'monthly' | 'biweekly'>('monthly');
-  const [anchorISO, setAnchorISO] = useState<string | null>(null);
-
-  useEffect(() => { if (!ready) hydrate(); }, [ready]);
-  useEffect(() => {
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem(CYCLE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed?.cycle) setCycle(parsed.cycle);
-          if (parsed?.anchor) setAnchorISO(parsed.anchor);
-        }
-      } catch { /* ignore */ }
-    })();
-  }, []);
-
-  const today = new Date();
-  const period = cycle === 'monthly'
-    ? { start: startOfMonth(today), end: endOfMonth(today) }
-    : getBiweeklyPeriod(anchorISO, today);
-
-  const textPrimary = get('text.primary') as string;
-  const textMuted = get('text.muted') as string;
-  const accentPrimary = get('accent.primary') as string;
-  const accentSecondary = get('accent.secondary') as string;
-  const warningColor = get('semantic.warning') as string;
-  const successColor = get('semantic.success') as string;
-  const surface1 = get('surface.level1') as string;
-  const borderSubtle = get('border.subtle') as string;
-
-  const now = new Date();
-  const enriched = useMemo(() => {
-    const stamp = new Date();
-    return (items || []).map(item => ({ item, next: computeNextDue(item, stamp) }));
-  }, [items]);
-
-  const activeEntries = enriched.filter(entry => entry.item.active !== false);
-  const totalActive = activeEntries.length;
-  const upcomingEntries = activeEntries.filter(entry => entry.next && entry.next <= period.end);
-  const upcomingAmount = upcomingEntries.reduce((sum, entry) => sum + (Number(entry.item.amount) || 0), 0);
-
-  const soonest = activeEntries
-    .filter(entry => entry.next)
-    .sort((a, b) => (a.next!.getTime() - b.next!.getTime()))[0];
-
-  const nextDueLabel = soonest?.next
-    ? (() => {
-        const diffMs = soonest.next!.getTime() - now.getTime();
-        const diffDays = Math.ceil(diffMs / 86400000);
-        if (diffDays < 0) return `Overdue by ${Math.abs(diffDays)}d`;
-        if (diffDays === 0) return 'Due today';
-        if (diffDays === 1) return 'Due tomorrow';
-        return `Due in ${diffDays}d`;
-      })()
-    : 'No upcoming due';
-
-  const detectedSeries = useMemo(() => detectRecurring(transactions, today), [transactions, today]);
-  const forecastedSuggestions = useMemo(() => forecastUpcoming(detectedSeries, today, period.end, today) || [], [detectedSeries, period.end, today]);
-  const managedLabels = useMemo(() => new Set((items || []).map(it => (it.label || it.category || '').toLowerCase())), [items]);
-  const suggestions = useMemo(() => forecastedSuggestions.filter(item => !managedLabels.has((item.label || item.category || '').toLowerCase())).slice(0, 5), [forecastedSuggestions, managedLabels]);
-
-  const heroGradient: [string, string] = isDark ? ['#10192c', '#1f2a45'] : [accentPrimary, accentSecondary];
-  const heroText = isDark ? '#eef3ff' : (get('text.onPrimary') as string);
-  const heroMuted = withAlpha(heroText, isDark ? 0.74 : 0.78);
-
-  const heroChips = useMemo(() => ([
-    { label: 'Due this cycle', value: formatCurrency(upcomingAmount) },
-    { label: 'Active bills', value: String(totalActive) },
-    { label: 'Next up', value: nextDueLabel }
-  ]), [nextDueLabel, totalActive, upcomingAmount]);
-
-  const cardPalette = useMemo<[string, string][]>(() => ([
-    [withAlpha(accentPrimary, isDark ? 0.18 : 0.14), withAlpha(accentSecondary, isDark ? 0.22 : 0.16)] as [string, string],
-    [withAlpha(successColor, isDark ? 0.2 : 0.12), withAlpha('#2f8ee6', isDark ? 0.2 : 0.14)] as [string, string],
-    [withAlpha('#f97316', isDark ? 0.25 : 0.16), withAlpha('#fb7185', isDark ? 0.22 : 0.14)] as [string, string]
-  ]), [accentPrimary, accentSecondary, isDark, successColor]);
-
-  const emptyCardStyle = useMemo(() => ({
-    backgroundColor: withAlpha(isDark ? '#141b2c' : '#ffffff', isDark ? 0.88 : 1),
-    borderRadius: radius.xl,
-    padding: spacing.s16,
-    borderWidth: 1,
-    borderColor: withAlpha(textMuted, isDark ? 0.38 : 0.18)
-  }), [isDark, textMuted]);
-
-  const handleCaptureSuggestion = useCallback(async (suggestion: any) => {
-    const payload = {
-      label: suggestion.label || suggestion.category || 'Bill',
-      category: suggestion.category || 'bills',
-      amount: Math.max(0, Math.round(Number(suggestion.amount) || 0)),
-      freq: 'monthly' as Freq,
-      anchorISO: suggestion.due ? new Date(suggestion.due).toISOString() : new Date().toISOString(),
-      autoPost: false,
-      remind: true,
-      active: true,
-      autoMatch: true
-    };
-    await add(payload as any);
-  }, [add]);
-
-  const fmtDiff = (next?: Date | null) => {
-    if (!next) return { label: 'No schedule', tone: textMuted };
-    const diffMs = next.getTime() - Date.now();
-    const diffDays = Math.ceil(diffMs / 86400000);
-    if (diffDays < 0) return { label: `Overdue by ${Math.abs(diffDays)}d`, tone: warningColor };
-    if (diffDays === 0) return { label: 'Due today', tone: successColor };
-    if (diffDays === 1) return { label: 'Due tomorrow', tone: successColor };
-    return { label: `Due in ${diffDays}d`, tone: heroMuted };
-  };
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
+
+  const text = get('text.primary') as string;
+  const muted = get('text.muted') as string;
+  const onSurface = get('text.onSurface') as string;
+  const cardBg = get('surface.level1') as string;
+  const border = get('border.subtle') as string;
+  const successColor = get('semantic.success') as string;
+  const warningColor = get('semantic.warning') as string;
+  const accentPrimary = get('accent.primary') as string;
+
+  const now = new Date();
+
+  // Enrich bills with next due date
+  const enriched = useMemo(() => {
+    return (recurring || []).map(item => ({ item, next: computeNextDue(item, now) }));
+  }, [recurring, now]);
+
+  const activeEntries = enriched.filter(entry => entry.item.active !== false);
+
+  // Calculate upcoming bills (next 30 days)
+  const cutoff30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const cutoff7 = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const upcoming30 = activeEntries.filter(entry => entry.next && entry.next <= cutoff30);
+  const upcoming7 = activeEntries.filter(entry => entry.next && entry.next <= cutoff7);
+
+  const total30 = upcoming30.reduce((sum, entry) => sum + (Number(entry.item.amount) || 0), 0);
+  const total7 = upcoming7.reduce((sum, entry) => sum + (Number(entry.item.amount) || 0), 0);
+
+  // Animations
+  const fadeAnim = useSharedValue(0);
+  const slideAnim = useSharedValue(50);
+
+  useEffect(() => {
+    fadeAnim.value = withTiming(1, { duration: 600 });
+    slideAnim.value = withSpring(0, { damping: 18, stiffness: 150 });
+  }, []);
+
+  const fadeStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ translateY: slideAnim.value }],
+  }));
+
+  const getDaysUntil = (date: Date) => {
+    const days = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Tomorrow';
+    if (days < 0) return `${Math.abs(days)}d overdue`;
+    return `${days}d`;
+  };
+
+  const handleMarkPaid = async (item: any, next: Date | null) => {
+    await addTx({
+      type: 'expense',
+      amount: item.amount,
+      category: item.category,
+      note: item.label,
+      date: new Date().toISOString()
+    });
+    const nextDue = computeNextDue(item, new Date(Date.now() + 1000));
+    if (nextDue) {
+      await update(item.id, { anchorISO: nextDue.toISOString() });
+    }
+  };
+
+  const handleDelete = (item: any) => {
+    Alert.alert(
+      'Delete bill',
+      `Are you sure you want to delete "${item.label || item.category}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => remove(item.id) }
+      ]
+    );
+  };
+
   return (
-    <ScreenScroll contentStyle={{ paddingBottom: spacing.s32 }}>
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s16 }}>
-        <LinearGradient
-          colors={heroGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ borderRadius: radius.xl, padding: spacing.s16, gap: spacing.s12 }}
-        >
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <View style={{ gap: spacing.s4 }}>
-              <Text style={{ color: heroText, fontSize: 24, fontWeight: '800' }}>Bill rhythm studio</Text>
-              <Text style={{ color: heroMuted }}>Keep recurring costs vibing with your plan.</Text>
-            </View>
-            <Pressable onPress={() => nav.goBack()} hitSlop={8}>
-              <Text style={{ color: heroMuted, fontWeight: '600' }}>Close</Text>
-            </Pressable>
+    <ScreenScroll
+      inTab
+      contentStyle={{ padding: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s32, gap: spacing.s20 }}
+    >
+      {/* Header */}
+      <Animated.View style={[{ gap: spacing.s8 }, fadeStyle]}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: muted, fontSize: 14, fontWeight: '600' }}>
+              Recurring Bills
+            </Text>
+            <Text style={{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.8, marginTop: spacing.s2 }}>
+              Bills Overview
+            </Text>
+            <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s4 }}>
+              Track and manage recurring expenses
+            </Text>
           </View>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
-            {heroChips.map((chip, idx) => (
+        </View>
+      </Animated.View>
+
+      {/* Summary Card */}
+      <Animated.View style={fadeStyle}>
+        <Card
+          style={{
+            backgroundColor: withAlpha(successColor, isDark ? 0.2 : 0.14),
+            padding: spacing.s20,
+            borderWidth: 2,
+            borderColor: withAlpha(successColor, 0.3),
+          }}
+        >
+          <View style={{ gap: spacing.s16 }}>
+            <View>
+              <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>Next 30 days</Text>
+              <Text style={{ color: text, fontSize: 32, fontWeight: '800', marginTop: spacing.s6, letterSpacing: -0.8 }}>
+                {formatCurrency(total30)}
+              </Text>
+              <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s6 }}>
+                {upcoming30.length} bill{upcoming30.length === 1 ? '' : 's'} due • {activeEntries.length} total active
+              </Text>
+            </View>
+
+            <View style={{ height: 1, backgroundColor: withAlpha(border, 0.3) }} />
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <View>
+                <Text style={{ color: muted, fontSize: 12 }}>Next 7 days</Text>
+                <Text style={{ color: onSurface, fontSize: 18, fontWeight: '700', marginTop: 4 }}>
+                  {formatCurrency(total7)}
+                </Text>
+                <Text style={{ color: muted, fontSize: 11, marginTop: 2 }}>
+                  {upcoming7.length} bill{upcoming7.length === 1 ? '' : 's'}
+                </Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ color: muted, fontSize: 12 }}>All bills</Text>
+                <Text style={{ color: onSurface, fontSize: 18, fontWeight: '700', marginTop: 4 }}>
+                  {enriched.length}
+                </Text>
+                <Text style={{ color: muted, fontSize: 11, marginTop: 2 }}>
+                  {enriched.length - activeEntries.length} paused
+                </Text>
+              </View>
+            </View>
+          </View>
+        </Card>
+      </Animated.View>
+
+      {/* Quick Actions */}
+      <Animated.View style={[{ gap: spacing.s12 }, fadeStyle]}>
+        <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
+          <Button
+            title="Add bill"
+            onPress={() => nav.navigate('BillEditor')}
+            style={{ flex: 1 }}
+            icon="plus"
+          />
+          <Button
+            title="Advanced"
+            onPress={() => nav.navigate('Bills')}
+            variant="secondary"
+            style={{ flex: 1 }}
+            icon="settings"
+          />
+        </View>
+      </Animated.View>
+
+      {/* Bills List */}
+      {activeEntries.length === 0 ? (
+        <Animated.View style={fadeStyle}>
+          <Card style={{ backgroundColor: cardBg, padding: spacing.s20 }}>
+            <View style={{ gap: spacing.s16, alignItems: 'center' }}>
               <View
-                key={idx}
                 style={{
-                  paddingHorizontal: spacing.s12,
-                  paddingVertical: spacing.s6,
-                  borderRadius: radius.pill,
-                  backgroundColor: withAlpha(heroText, isDark ? 0.14 : 0.25),
-                  borderWidth: 1,
-                  borderColor: withAlpha(heroText, isDark ? 0.38 : 0.3)
+                  width: 64,
+                  height: 64,
+                  borderRadius: radius.xl,
+                  backgroundColor: withAlpha(successColor, 0.15),
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
-                <Text style={{ color: heroText, fontWeight: '600' }}>{chip.label}: {chip.value}</Text>
+                <Icon name="receipt" size={32} color={successColor} />
               </View>
-            ))}
-          </View>
-          <Button title="Add bill" variant="primary" onPress={() => nav.navigate('BillEditor')} />
-        </LinearGradient>
-
-        {suggestions.length ? (
-          <View style={{
-            backgroundColor: surface1,
-            borderRadius: radius.xl,
-            padding: spacing.s16,
-            gap: spacing.s12,
-            borderWidth: 1,
-            borderColor: borderSubtle
-          }}>
-            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Smart suggestions</Text>
-            <Text style={{ color: textMuted }}>Based on your recent transactions, these look like bills worth capturing.</Text>
-            {suggestions.map((suggestion, idx) => (
-              <View key={idx} style={{
-                borderRadius: radius.lg,
-                padding: spacing.s12,
-                backgroundColor: withAlpha(accentSecondary, isDark ? 0.2 : 0.12),
-                borderWidth: 1,
-                borderColor: withAlpha(accentSecondary, isDark ? 0.35 : 0.18),
-                gap: spacing.s6
-              }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ color: textPrimary, fontWeight: '700' }}>{suggestion.label || suggestion.category || 'Bill suggestion'}</Text>
-                  <Text style={{ color: textPrimary, fontWeight: '700' }}>{formatCurrency(Number(suggestion.amount) || 0)}</Text>
-                </View>
-                <Text style={{ color: textMuted }}>Due around {suggestion.due ? new Date(suggestion.due).toDateString() : 'upcoming'} • {suggestion.category || 'Uncategorised'}</Text>
-                <Button
-                  title="Add to bills"
-                  size="sm"
-                  variant="secondary"
-                  onPress={() => handleCaptureSuggestion(suggestion)}
-                />
+              <View style={{ alignItems: 'center', gap: spacing.s8 }}>
+                <Text style={{ color: text, fontSize: 18, fontWeight: '700', textAlign: 'center' }}>
+                  No active bills
+                </Text>
+                <Text style={{ color: muted, textAlign: 'center', lineHeight: 20 }}>
+                  Add your first recurring bill to start tracking
+                </Text>
               </View>
-            ))}
-          </View>
-        ) : null}
-
-        {(!items || items.length === 0) ? (
-          <View style={emptyCardStyle}>
-            <Text style={{ color: textMuted }}>No bills yet. Tap “Add bill” to create your first recurring item.</Text>
-          </View>
-        ) : (
-          <View style={{ gap: spacing.s16 }}>
-            {enriched.map((entry, idx) => {
-              const { item, next } = entry;
-              const palette = cardPalette[idx % cardPalette.length];
-              const amount = Number(item.amount || 0);
-              const dueMeta = fmtDiff(next);
-              const inactive = item.active === false;
-
-              return (
-                <LinearGradient
-                  key={item.id}
-                  colors={palette}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={{ borderRadius: radius.xl, padding: spacing.s16, gap: spacing.s12, opacity: inactive ? 0.7 : 1 }}
+              <Button
+                title="Add bill"
+                onPress={() => nav.navigate('BillEditor')}
+                style={{ width: '100%' }}
+              />
+            </View>
+          </Card>
+        </Animated.View>
+      ) : (
+        <>
+          {/* Due This Week */}
+          {upcoming7.length > 0 && (
+            <Animated.View style={[{ gap: spacing.s12 }, fadeStyle]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>
+                  Due This Week
+                </Text>
+                <View
+                  style={{
+                    paddingHorizontal: spacing.s10,
+                    paddingVertical: spacing.s4,
+                    borderRadius: radius.pill,
+                    backgroundColor: withAlpha(warningColor, 0.15),
+                  }}
                 >
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <View style={{ flex: 1, gap: spacing.s4 }}>
-                      <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800' }}>{item.label || item.category}</Text>
-                      <Text style={{ color: textMuted }}>{item.freq} • {item.category}</Text>
-                    </View>
-                    <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 20 }}>{formatCurrency(amount)}</Text>
-                  </View>
+                  <Text style={{ color: warningColor, fontSize: 12, fontWeight: '700' }}>
+                    {upcoming7.length} urgent
+                  </Text>
+                </View>
+              </View>
+              <View style={{ gap: spacing.s10 }}>
+                {upcoming7.map(({ item, next }) => {
+                  const isExpanded = expandedId === item.id;
+                  const daysUntil = next ? getDaysUntil(next) : null;
+                  const isOverdue = next && next < now;
 
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ color: dueMeta.tone, fontWeight: '600' }}>{dueMeta.label}</Text>
-                    <Text style={{ color: textMuted }}>{next ? next.toDateString() : 'No anchor'}</Text>
-                  </View>
-
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s6 }}>
-                    <View style={{ paddingHorizontal: spacing.s8, paddingVertical: spacing.s4, borderRadius: radius.pill, backgroundColor: withAlpha(textMuted, isDark ? 0.25 : 0.18) }}>
-                      <Text style={{ color: textPrimary, fontWeight: '600' }}>{inactive ? 'Paused' : 'Active'}</Text>
-                    </View>
-                    <View style={{ paddingHorizontal: spacing.s8, paddingVertical: spacing.s4, borderRadius: radius.pill, backgroundColor: withAlpha(successColor, isDark ? 0.24 : 0.18) }}>
-                      <Text style={{ color: textPrimary, fontWeight: '600' }}>{item.autoMatch === false ? 'Auto-match off' : 'Auto-match on'}</Text>
-                    </View>
-                  </View>
-
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
-                    <Button title="Edit" size="sm" variant="secondary" onPress={() => nav.navigate('BillEditor', { id: item.id })} />
-                    <Button
-                      title="Mark paid"
-                      size="sm"
-                      variant="primary"
-                      onPress={async () => {
-                        await addTx({ type: 'expense', amount: item.amount, category: item.category, note: item.label });
-                        const nextDue = computeNextDue(item, new Date(Date.now() + 1000));
-                        if (nextDue) await update(item.id, { anchorISO: nextDue.toISOString() });
+                  return (
+                    <Card
+                      key={item.id}
+                      style={{
+                        backgroundColor: cardBg,
+                        padding: spacing.s16,
+                        borderWidth: 1,
+                        borderColor: isOverdue ? warningColor : border,
                       }}
-                    />
-                    <Button
-                      title={expandedId === item.id ? 'Hide actions' : 'More actions'}
-                      size="sm"
-                      variant="secondary"
-                      onPress={() => setExpandedId(prev => (prev === item.id ? null : item.id))}
-                    />
-                  </View>
+                    >
+                      <View style={{ gap: spacing.s12 }}>
+                        <AnimatedPressable
+                          onPress={() => setExpandedId(isExpanded ? null : item.id)}
+                          style={{}}
+                        >
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12, flex: 1 }}>
+                              <View
+                                style={{
+                                  width: 48,
+                                  height: 48,
+                                  borderRadius: radius.lg,
+                                  backgroundColor: withAlpha(isOverdue ? warningColor : accentPrimary, isDark ? 0.2 : 0.15),
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <Icon name={isOverdue ? "alert-circle" : "receipt"} size={24} color={isOverdue ? warningColor : accentPrimary} />
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>{item.label || item.category}</Text>
+                                <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
+                                  {item.freq} • {next ? next.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date'} {daysUntil && `• ${daysUntil}`}
+                                </Text>
+                              </View>
+                            </View>
+                            <Text style={{ color: text, fontWeight: '800', fontSize: 20 }}>
+                              {formatCurrency(item.amount)}
+                            </Text>
+                          </View>
+                        </AnimatedPressable>
 
-                  {expandedId === item.id ? (
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
-                      <Button
-                        title={inactive ? 'Enable' : 'Disable'}
-                        size="sm"
-                        variant="secondary"
-                        onPress={() => update(item.id, { active: inactive })}
-                      />
-                      <Button title="Skip once" size="sm" variant="secondary" onPress={() => skipOnce(item.id)} />
-                      <Button title="Snooze +3d" size="sm" variant="secondary" onPress={() => snooze(item.id, 3)} />
-                      <Button title="Snooze +7d" size="sm" variant="secondary" onPress={() => snooze(item.id, 7)} />
-                      <Button
-                        title={item.autoMatch === false ? 'Auto-match off' : 'Auto-match on'}
-                        size="sm"
-                        variant="secondary"
-                        onPress={() => update(item.id, { autoMatch: !(item.autoMatch !== false) })}
-                      />
-                      <Button
-                        title="Delete"
-                        size="sm"
-                        variant="secondary"
-                        onPress={() => {
-                          Alert.alert('Delete bill', 'Are you sure you want to delete this recurring item?', [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Delete', style: 'destructive', onPress: () => remove(item.id) }
-                          ]);
-                        }}
-                      />
+                        {isExpanded && (
+                          <View style={{ gap: spacing.s8, marginTop: spacing.s4 }}>
+                            <View style={{ flexDirection: 'row', gap: spacing.s8, flexWrap: 'wrap' }}>
+                              <Button
+                                title="Mark paid"
+                                size="sm"
+                                variant="primary"
+                                onPress={() => handleMarkPaid(item, next)}
+                              />
+                              <Button
+                                title="Edit"
+                                size="sm"
+                                variant="secondary"
+                                onPress={() => nav.navigate('BillEditor', { id: item.id })}
+                              />
+                              <Button
+                                title="Skip once"
+                                size="sm"
+                                variant="secondary"
+                                onPress={() => skipOnce(item.id)}
+                              />
+                              <Button
+                                title="Snooze 3d"
+                                size="sm"
+                                variant="secondary"
+                                onPress={() => snooze(item.id, 3)}
+                              />
+                              <Button
+                                title="Delete"
+                                size="sm"
+                                variant="secondary"
+                                onPress={() => handleDelete(item)}
+                              />
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                    </Card>
+                  );
+                })}
+              </View>
+            </Animated.View>
+          )}
+
+          {/* All Active Bills */}
+          <Animated.View style={[{ gap: spacing.s12 }, fadeStyle]}>
+            <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>
+              All Active Bills ({activeEntries.length})
+            </Text>
+            <View style={{ gap: spacing.s10 }}>
+              {activeEntries.map(({ item, next }) => {
+                const isExpanded = expandedId === item.id;
+                const daysUntil = next ? getDaysUntil(next) : null;
+                const isDueThisWeek = upcoming7.some(e => e.item.id === item.id);
+
+                // Skip if already shown in "Due This Week"
+                if (isDueThisWeek) return null;
+
+                return (
+                  <Card
+                    key={item.id}
+                    style={{
+                      backgroundColor: cardBg,
+                      padding: spacing.s16,
+                      borderWidth: 1,
+                      borderColor: border,
+                    }}
+                  >
+                    <View style={{ gap: spacing.s12 }}>
+                      <AnimatedPressable
+                        onPress={() => setExpandedId(isExpanded ? null : item.id)}
+                        style={{}}
+                      >
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12, flex: 1 }}>
+                            <View
+                              style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: radius.lg,
+                                backgroundColor: withAlpha(successColor, isDark ? 0.2 : 0.15),
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              <Icon name="receipt" size={24} color={successColor} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>{item.label || item.category}</Text>
+                              <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
+                                {item.freq} • {next ? next.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date'} {daysUntil && `• ${daysUntil}`}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={{ color: text, fontWeight: '800', fontSize: 20 }}>
+                            {formatCurrency(item.amount)}
+                          </Text>
+                        </View>
+                      </AnimatedPressable>
+
+                      {isExpanded && (
+                        <View style={{ gap: spacing.s8, marginTop: spacing.s4 }}>
+                          <View style={{ flexDirection: 'row', gap: spacing.s8, flexWrap: 'wrap' }}>
+                            <Button
+                              title="Mark paid"
+                              size="sm"
+                              variant="primary"
+                              onPress={() => handleMarkPaid(item, next)}
+                            />
+                            <Button
+                              title="Edit"
+                              size="sm"
+                              variant="secondary"
+                              onPress={() => nav.navigate('BillEditor', { id: item.id })}
+                            />
+                            <Button
+                              title="Skip once"
+                              size="sm"
+                              variant="secondary"
+                              onPress={() => skipOnce(item.id)}
+                            />
+                            <Button
+                              title="Snooze 3d"
+                              size="sm"
+                              variant="secondary"
+                              onPress={() => snooze(item.id, 3)}
+                            />
+                            <Button
+                              title="Delete"
+                              size="sm"
+                              variant="secondary"
+                              onPress={() => handleDelete(item)}
+                            />
+                          </View>
+                        </View>
+                      )}
                     </View>
-                  ) : null}
-                </LinearGradient>
-              );
-            })}
-          </View>
-        )}
-      </View>
+                  </Card>
+                );
+              })}
+            </View>
+          </Animated.View>
+        </>
+      )}
     </ScreenScroll>
   );
-}
+};
+
+export default BillsList;

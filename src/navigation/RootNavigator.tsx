@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home } from '../screens/Home';
 import { Transactions } from '../screens/Transactions';
 import { Budgets } from '../screens/Budgets';
-import BillsList from '../screens/BillsList';
+import BillsModal from '../screens/BillsModal';
 import BillEditor from '../screens/BillEditor';
 import EnvelopesEditor from '../screens/EnvelopesEditor';
 import { Insights } from '../screens/Insights';
@@ -127,7 +127,7 @@ export default function RootNavigator() {
         <Root.Screen name="AchievementsModal" component={Achievements} options={{ presentation: 'modal' }} />
         <Root.Screen name="ProfileModal" component={Profile} options={{ presentation: 'modal' }} />
         <Root.Screen name="ProfileEdit" component={ProfileEdit} options={{ presentation: 'modal' }} />
-        <Root.Screen name="Bills" component={BillsList} options={{ presentation: 'modal', headerShown: false }} />
+        <Root.Screen name="Bills" component={BillsModal} options={{ presentation: 'modal', headerShown: false }} />
         <Root.Screen name="BillEditor" component={BillEditor} options={{ presentation: 'modal', headerShown: false }} />
         <Root.Screen name="Envelopes" component={EnvelopesEditor} options={{ presentation: 'modal', headerShown: false }} />
       </Root.Navigator>
