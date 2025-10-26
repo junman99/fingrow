@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, withRepeat, Easing } from 'react-native-reanimated';
 import { ScreenScroll } from '../components/ScreenScroll';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
@@ -8,6 +8,11 @@ import { Card } from '../components/Card';
 import Button from '../components/Button';
 import Icon from '../components/Icon';
 import BottomSheet from '../components/BottomSheet';
+import LineChart from '../components/LineChart';
+import { StackedAreaChart } from '../components/StackedAreaChart';
+import { BarLineComboChart } from '../components/BarLineComboChart';
+import { SegmentedControl } from '../components/SegmentedControl';
+import { WealthJourneySheet } from '../components/WealthJourneySheet';
 import { useAccountsStore } from '../store/accounts';
 import { useInvestStore } from '../store/invest';
 import { formatCurrency } from '../lib/format';
@@ -52,6 +57,70 @@ function sumUpcoming(recurring: Recurring[], now: Date, withinDays: number) {
   }
   list.sort((a, b) => a.due.getTime() - b.due.getTime());
   return { total, list };
+}
+
+// Milestone definitions with icons and motivational messages
+type Milestone = {
+  threshold: number;
+  label: string;
+  icon: 'target' | 'star' | 'award' | 'trophy' | 'zap' | 'trending-up';
+  message: string;
+  color: string;
+};
+
+const MILESTONES: Milestone[] = [
+  { threshold: 1000, label: 'First 1K', icon: 'target', message: 'Great start! Every journey begins with a single step.', color: '#3B82F6' },
+  { threshold: 5000, label: 'Five Grand', icon: 'star', message: 'Building momentum! Keep it up!', color: '#8B5CF6' },
+  { threshold: 10000, label: 'Five Figures', icon: 'award', message: 'You\'re crushing it! 10K achieved!', color: '#F59E0B' },
+  { threshold: 25000, label: 'Quarter Million Path', icon: 'zap', message: 'On fire! 25% to 100K!', color: '#EC4899' },
+  { threshold: 50000, label: 'Halfway to 100K', icon: 'trending-up', message: 'Halfway there! The momentum is real!', color: '#10B981' },
+  { threshold: 100000, label: 'Six Figures', icon: 'trophy', message: 'LEGENDARY! 100K club member!', color: '#EF4444' },
+  { threshold: 250000, label: 'Quarter Million', icon: 'trophy', message: 'Elite status! Quarter million achieved!', color: '#DC2626' },
+  { threshold: 500000, label: 'Half Million', icon: 'trophy', message: 'Exceptional! You\'re in rare territory!', color: '#991B1B' },
+  { threshold: 1000000, label: 'Millionaire', icon: 'trophy', message: 'MILLIONAIRE! You made it to the top!', color: '#FFD700' },
+];
+
+function getMilestoneProgress(netWorth: number): {
+  current: Milestone | null;
+  next: Milestone | null;
+  progress: number;
+  recentlyAchieved: Milestone | null;
+} {
+  let current: Milestone | null = null;
+  let next: Milestone | null = null;
+
+  for (let i = 0; i < MILESTONES.length; i++) {
+    if (netWorth >= MILESTONES[i].threshold) {
+      current = MILESTONES[i];
+    } else {
+      next = MILESTONES[i];
+      break;
+    }
+  }
+
+  const prevThreshold = current?.threshold || 0;
+  const nextThreshold = next?.threshold || (current?.threshold || 0) * 2;
+  const progress = ((netWorth - prevThreshold) / (nextThreshold - prevThreshold)) * 100;
+
+  return { current, next, progress: Math.min(100, Math.max(0, progress)), recentlyAchieved: current };
+}
+
+function getMotivationalMessage(netWorth: number, change: number): { message: string; emoji: string } {
+  if (change > 1000) {
+    return { message: 'Crushing it! Big gains today!', emoji: '🚀' };
+  } else if (change > 100) {
+    return { message: 'Nice work! Keep building!', emoji: '💪' };
+  } else if (change > 0) {
+    return { message: 'Every step counts!', emoji: '⭐' };
+  } else if (change < -1000) {
+    return { message: 'Stay strong. Markets fluctuate.', emoji: '🛡️' };
+  } else if (change < -100) {
+    return { message: 'Keep the long-term view.', emoji: '🎯' };
+  } else if (change < 0) {
+    return { message: 'Small dips are normal.', emoji: '📊' };
+  } else {
+    return { message: 'Steady progress wins!', emoji: '🏆' };
+  }
 }
 
 const AnimatedPressable: React.FC<{
@@ -164,6 +233,7 @@ const Money: React.FC = () => {
   const [showAccountsSheet, setShowAccountsSheet] = useState(false);
   const [showPortfolioSheet, setShowPortfolioSheet] = useState(false);
   const [showDebtsSheet, setShowDebtsSheet] = useState(false);
+  const [showWealthJourney, setShowWealthJourney] = useState(false);
   const { accounts, hydrate: hydrateAcc } = useAccountsStore();
   const { holdings, quotes, hydrate: hydrateInvest } = useInvestStore();
   const { items: recurring, hydrate: hydrateRecur } = useRecurringStore();
@@ -318,6 +388,121 @@ const Money: React.FC = () => {
 
   const netWorth = totalCash + portfolioCalc.totalUSD - totalDebt;
 
+  // Generate historical net worth data for chart (mock data for now - you can later integrate with actual historical data)
+  const netWorthHistory = useMemo(() => {
+    const now = Date.now();
+    const day = 24 * 3600 * 1000;
+    const points: Array<{ t: number; v: number }> = [];
+
+    // Generate sample data showing growth over time (replace with real historical data later)
+    for (let i = 180; i >= 0; i--) {
+      const variance = Math.random() * 0.1 - 0.05; // +/- 5% variance
+      const trend = (180 - i) / 180; // upward trend
+      const value = netWorth * (0.7 + trend * 0.3) * (1 + variance);
+      points.push({ t: now - i * day, v: value });
+    }
+
+    return points;
+  }, [netWorth]);
+
+  // Generate stacked area chart data (cash/investments/debt breakdown over time)
+  const stackedChartData = useMemo(() => {
+    const now = Date.now();
+    const day = 24 * 3600 * 1000;
+    const points: Array<{ t: number; cash: number; investments: number; debt: number }> = [];
+
+    // Generate sample composition data
+    for (let i = 180; i >= 0; i--) {
+      const progress = (180 - i) / 180;
+
+      // Simulate changing composition over time
+      const cashVariance = Math.random() * 0.1 - 0.05;
+      const investVariance = Math.random() * 0.15 - 0.075;
+      const debtVariance = Math.random() * 0.08 - 0.04;
+
+      // Cash grows slowly
+      const cash = totalCash * (0.7 + progress * 0.3) * (1 + cashVariance);
+
+      // Investments grow faster
+      const investments = portfolioCalc.totalUSD * (0.5 + progress * 0.5) * (1 + investVariance);
+
+      // Debt decreases over time
+      const debt = totalDebt * (1 - progress * 0.3) * (1 + debtVariance);
+
+      points.push({
+        t: now - i * day,
+        cash: Math.max(0, cash),
+        investments: Math.max(0, investments),
+        debt: Math.max(0, debt)
+      });
+    }
+
+    return points;
+  }, [totalCash, portfolioCalc.totalUSD, totalDebt]);
+
+  const [netWorthTimeframe, setNetWorthTimeframe] = useState<'1W'|'1M'|'3M'|'6M'|'1Y'|'ALL'>('3M');
+
+  // Filter stacked chart data based on timeframe
+  const visibleStackedData = useMemo(() => {
+    if (!stackedChartData.length) return [];
+    const endTs = stackedChartData[stackedChartData.length - 1].t;
+    const end = new Date(endTs);
+    const msDay = 24 * 60 * 60 * 1000;
+
+    const since = (() => {
+      switch (netWorthTimeframe) {
+        case '1W': return endTs - 7 * msDay;
+        case '1M': { const d = new Date(end); d.setMonth(d.getMonth() - 1); return d.getTime(); }
+        case '3M': { const d = new Date(end); d.setMonth(d.getMonth() - 3); return d.getTime(); }
+        case '6M': { const d = new Date(end); d.setMonth(d.getMonth() - 6); return d.getTime(); }
+        case '1Y': { const d = new Date(end); d.setFullYear(d.getFullYear() - 1); return d.getTime(); }
+        default: return 0;
+      }
+    })();
+
+    return netWorthTimeframe === 'ALL' ? stackedChartData : stackedChartData.filter(p => p.t >= since);
+  }, [stackedChartData, netWorthTimeframe]);
+
+  // Calculate visible net worth series based on timeframe
+  const visibleNetWorthSeries = useMemo(() => {
+    if (!netWorthHistory.length) return [];
+    const endTs = netWorthHistory[netWorthHistory.length - 1].t;
+    const end = new Date(endTs);
+    const msDay = 24 * 3600 * 1000;
+
+    const since = (() => {
+      switch (netWorthTimeframe) {
+        case '1W': return endTs - 7 * msDay;
+        case '1M': { const d = new Date(end); d.setMonth(d.getMonth() - 1); return d.getTime(); }
+        case '3M': { const d = new Date(end); d.setMonth(d.getMonth() - 3); return d.getTime(); }
+        case '6M': { const d = new Date(end); d.setMonth(d.getMonth() - 6); return d.getTime(); }
+        case '1Y': { const d = new Date(end); d.setFullYear(d.getFullYear() - 1); return d.getTime(); }
+        default: return 0;
+      }
+    })();
+
+    return netWorthTimeframe === 'ALL' ? netWorthHistory : netWorthHistory.filter(p => p.t >= since);
+  }, [netWorthHistory, netWorthTimeframe]);
+
+  // Calculate net worth change
+  const netWorthChange = useMemo(() => {
+    if (visibleNetWorthSeries.length < 2) return 0;
+    const first = visibleNetWorthSeries[0].v;
+    const last = visibleNetWorthSeries[visibleNetWorthSeries.length - 1].v;
+    return last - first;
+  }, [visibleNetWorthSeries]);
+
+  const netWorthChangePercent = useMemo(() => {
+    if (visibleNetWorthSeries.length < 2) return 0;
+    const first = visibleNetWorthSeries[0].v;
+    const last = visibleNetWorthSeries[visibleNetWorthSeries.length - 1].v;
+    return first !== 0 ? ((last - first) / Math.abs(first)) * 100 : 0;
+  }, [visibleNetWorthSeries]);
+
+  // Milestone progress
+  const milestoneInfo = useMemo(() => getMilestoneProgress(netWorth), [netWorth]);
+  const motivationalMsg = useMemo(() => getMotivationalMessage(netWorth, netWorthChange), [netWorth, netWorthChange]);
+
   // Generate insights
   const insights: { message: string; action?: { label: string; onPress: () => void } }[] = [];
 
@@ -377,28 +562,113 @@ const Money: React.FC = () => {
       ? 'No change today'
       : `${portfolioCalc.changeUSD > 0 ? '+' : ''}${formatCurrency(portfolioCalc.changeUSD)} today`;
 
+  // Animation values for milestone achievement - subtle pulse effect
+  const milestoneScale = useSharedValue(1);
+
+  useEffect(() => {
+    if (milestoneInfo.current) {
+      milestoneScale.value = withRepeat(
+        withTiming(1.05, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true
+      );
+    }
+  }, [milestoneInfo.current]);
+
+  const milestoneAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: milestoneScale.value }],
+  }));
+
   return (
     <ScreenScroll
       inTab
       contentStyle={{
-        paddingHorizontal: spacing.s16,
+        paddingHorizontal: 0,
         paddingTop: spacing.s16,
         paddingBottom: spacing.s32,
-        gap: spacing.s24,
+        gap: spacing.s16,
       }}
     >
-      {/* Header */}
-      <View>
-        <Text style={{ color: muted, fontSize: 14, fontWeight: '600', marginBottom: spacing.s4 }}>
-          Net Worth
-        </Text>
-        <Text style={{ color: text, fontSize: 40, fontWeight: '800', letterSpacing: -0.5 }}>
-          {formatCurrency(netWorth)}
-        </Text>
+      {/* Header like Invest tab */}
+      <View style={{ paddingHorizontal: spacing.s16, gap: spacing.s16 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.5 }}>
+            Money
+          </Text>
+          {/* Milestone Badge - Tappable */}
+          {milestoneInfo.current && (
+            <AnimatedPressable onPress={() => setShowWealthJourney(true)}>
+              <Animated.View style={[milestoneAnimStyle, {
+                paddingHorizontal: spacing.s12,
+                paddingVertical: spacing.s8,
+                borderRadius: radius.pill,
+                backgroundColor: withAlpha(milestoneInfo.current.color, isDark ? 0.3 : 0.2),
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.s6,
+                borderWidth: 2,
+                borderColor: milestoneInfo.current.color,
+              }]}>
+                <Icon name={milestoneInfo.current.icon} size={16} color={milestoneInfo.current.color} />
+                <Text style={{ color: milestoneInfo.current.color, fontSize: 12, fontWeight: '800' }}>
+                  {milestoneInfo.current.label}
+                </Text>
+              </Animated.View>
+            </AnimatedPressable>
+          )}
+        </View>
+
+        {/* Net Worth Display with subtle label */}
+        <View>
+          <Text style={{ color: muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '600', marginBottom: spacing.s4 }}>
+            Net Worth
+          </Text>
+          <Text style={{ color: text, fontSize: 36, fontWeight: '800', letterSpacing: -1 }}>
+            {formatCurrency(netWorth)}
+          </Text>
+          {/* Change indicator */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6, marginTop: spacing.s6 }}>
+            <Text style={{
+              color: netWorthChange >= 0 ? successColor : warningColor,
+              fontSize: 13,
+              fontWeight: '600'
+            }}>
+              {netWorthChange >= 0 ? '+' : ''}{formatCurrency(Math.abs(netWorthChange))} ({netWorthChange >= 0 ? '+' : ''}{netWorthChangePercent.toFixed(1)}%)
+            </Text>
+            <Text style={{ color: muted, fontSize: 13 }}>•</Text>
+            <Text style={{ color: muted, fontSize: 13 }}>
+              {motivationalMsg.emoji} {motivationalMsg.message}
+            </Text>
+          </View>
+        </View>
+
+        {/* Stacked Area Chart with Segmented Control */}
+        <View style={{ gap: spacing.s12 }}>
+          <StackedAreaChart
+            data={visibleStackedData}
+            height={220}
+            showLabels={true}
+          />
+
+          {/* Segmented Control for Timeframe */}
+          <SegmentedControl
+            options={[
+              { value: '1W' as const, label: '1W' },
+              { value: '1M' as const, label: '1M' },
+              { value: '3M' as const, label: '3M' },
+              { value: '6M' as const, label: '6M' },
+              { value: '1Y' as const, label: '1Y' },
+              { value: 'ALL' as const, label: 'ALL' },
+            ]}
+            value={netWorthTimeframe}
+            onChange={setNetWorthTimeframe}
+          />
+        </View>
       </View>
 
       {/* Key Metrics Grid */}
-      <View style={{ gap: spacing.s12 }}>
+      <View style={{ gap: spacing.s12, paddingHorizontal: spacing.s16 }}>
+        <Text style={{ color: text, fontSize: 16, fontWeight: '700' }}>Overview</Text>
         <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
           <MetricCard
             title="Cash"
@@ -473,6 +743,7 @@ const Money: React.FC = () => {
       </View>
 
       {/* Spendable Cash Highlight */}
+      <View style={{ paddingHorizontal: spacing.s16 }}>
       <Card
         style={{
           backgroundColor: cardBg,
@@ -505,8 +776,10 @@ const Money: React.FC = () => {
           </View>
         </View>
       </Card>
+      </View>
 
       {/* Insights */}
+      <View style={{ paddingHorizontal: spacing.s16 }}>
       {insights.length > 0 && (
         <View style={{ gap: spacing.s12 }}>
           <Text style={{ color: text, fontSize: 16, fontWeight: '700' }}>Insights</Text>
@@ -538,9 +811,10 @@ const Money: React.FC = () => {
           ))}
         </View>
       )}
+      </View>
 
       {/* Quick Actions */}
-      <View style={{ gap: spacing.s12 }}>
+      <View style={{ gap: spacing.s12, paddingHorizontal: spacing.s16 }}>
         <Text style={{ color: text, fontSize: 16, fontWeight: '700' }}>Quick actions</Text>
         <View style={{ gap: spacing.s8 }}>
           <Button
@@ -928,6 +1202,17 @@ const Money: React.FC = () => {
           )}
         </ScrollView>
       </BottomSheet>
+
+      {/* Wealth Journey Sheet */}
+      <WealthJourneySheet
+        visible={showWealthJourney}
+        onClose={() => setShowWealthJourney(false)}
+        netWorth={netWorth}
+        totalCash={totalCash}
+        totalInvestments={portfolioCalc.totalUSD}
+        totalDebt={totalDebt}
+        netWorthHistory={netWorthHistory}
+      />
     </ScreenScroll>
   );
 };
