@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, Pressable, TextInput, Alert, Switch, ScrollView } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { ScreenScroll } from '../../components/ScreenScroll';
@@ -10,6 +11,7 @@ import { spacing, radius } from '../../theme/tokens';
 import { useGoalsStore } from '../../store/goals';
 import { formatCurrency } from '../../lib/format';
 import Icon from '../../components/Icon';
+import Confetti from '../../components/Confetti';
 
 const quickIncrements = [10, 25, 50, 100];
 const cadenceOrder: Array<'weekly' | 'biweekly' | 'monthly'> = ['weekly', 'biweekly', 'monthly'];
@@ -49,6 +51,23 @@ const GoalDetail: React.FC = () => {
   const [amountInput, setAmountInput] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [autoAmountInput, setAutoAmountInput] = useState(String(goal?.autoSave?.amount ?? 20));
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [previousProgress, setPreviousProgress] = useState(0);
+
+  // Check if goal just became complete
+  useEffect(() => {
+    if (!goal) return;
+    const newProgress = goal.targetAmount > 0 ? Math.min(100, Math.round(((goal.currentAmount || 0) / goal.targetAmount) * 100)) : 0;
+
+    // If we just hit 100%, show confetti!
+    if (newProgress === 100 && previousProgress < 100 && previousProgress > 0) {
+      setShowConfetti(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setTimeout(() => setShowConfetti(false), 3000);
+    }
+
+    setPreviousProgress(newProgress);
+  }, [goal?.currentAmount, goal?.targetAmount]);
 
   if (!goal) {
     return (
@@ -78,9 +97,24 @@ const GoalDetail: React.FC = () => {
     }
     const target = goal.targetAmount || 0;
     const current = goal.currentAmount || 0;
+    const oldProgress = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
     const projectedProgress = target > 0 ? Math.min(100, Math.round(((current + value) / target) * 100)) : 0;
+
+    // Haptic feedback for milestones
+    if (projectedProgress >= 100 && oldProgress < 100) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } else if (
+      (projectedProgress >= 75 && oldProgress < 75) ||
+      (projectedProgress >= 50 && oldProgress < 50) ||
+      (projectedProgress >= 25 && oldProgress < 25)
+    ) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
     await contribute(goal.id, value, note);
-    setFeedback(`Saved ${formatCurrency(value)}! ${projectedProgress >= 100 ? 'Goal complete—time to celebrate!' : 'Keep stacking, you’re on a roll.'}`);
+    setFeedback(`Saved ${formatCurrency(value)}! ${projectedProgress >= 100 ? 'Goal complete - time to celebrate!' : "Keep stacking, you're on a roll."}`);
     setAmountInput('');
   };
 
@@ -128,9 +162,11 @@ const GoalDetail: React.FC = () => {
   };
 
   return (
-    <ScreenScroll contentStyle={{ paddingBottom: spacing.s32 }}>
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s24 }}>
-        {/* Header */}
+    <>
+      {showConfetti && <Confetti count={60} duration={3000} />}
+      <ScreenScroll contentStyle={{ paddingBottom: spacing.s32 }}>
+        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s24 }}>
+          {/* Header */}
         <View>
           <Text style={{ color: textMuted, fontSize: 14, fontWeight: '600', marginBottom: spacing.s4 }}>
             {goal.icon ? `${goal.icon} ` : ''}{goal.title}
@@ -326,6 +362,7 @@ const GoalDetail: React.FC = () => {
         </Pressable>
       </View>
     </ScreenScroll>
+    </>
   );
 };
 

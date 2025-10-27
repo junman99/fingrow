@@ -379,16 +379,28 @@ export const useInvestStore = create<State>((set, get) => ({
   
   addHolding: async (symbol, meta, opts) => {
     const pid = opts?.portfolioId || get().activePortfolioId;
-    if (!pid) return;
+    console.log('📝 [invest.ts] addHolding called:', { symbol, meta, pid, hasOpts: !!opts });
+    if (!pid) {
+      console.log('❌ [invest.ts] addHolding failed: No portfolio ID');
+      return;
+    }
     const portfolios = { ...get().portfolios } as any;
     const p = portfolios[pid];
+    if (!p) {
+      console.log('❌ [invest.ts] addHolding failed: Portfolio not found:', pid);
+      return;
+    }
     const holdings = { ...(p?.holdings || {}) };
+    console.log('🔍 [invest.ts] Current holdings:', Object.keys(holdings));
     if (!holdings[symbol]) {
       holdings[symbol] = { symbol, name: meta.name, type: meta.type, currency: meta.currency, lots: [] };
       portfolios[pid] = { ...p, holdings, updatedAt: new Date().toISOString() };
       set({ portfolios });
       (get() as any)._syncMirrors();
       await (get() as any).persist();
+      console.log('✅ [invest.ts] addHolding success:', symbol);
+    } else {
+      console.log('⚠️ [invest.ts] addHolding skipped: Holding already exists:', symbol);
     }
   },
   removeHolding: async (symbol, opts) => {

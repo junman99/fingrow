@@ -241,18 +241,18 @@ export const Home: React.FC = () => {
       accent: accentSecondary
     },
     {
-      key: 'goal',
-      icon: 'target' as const,
-      label: 'Goals',
-      onPress: () => navigateWhenIdle(() => nav.navigate('Goals', { screen: 'GoalsRoot' })),
-      accent: accentPrimary
-    },
-    {
       key: 'budget',
       icon: 'wallet' as const,
       label: 'Budgets',
       onPress: () => navigateWhenIdle(() => nav.navigate('BudgetModal')),
       accent: warningAccent
+    },
+    {
+      key: 'insights',
+      icon: 'bar-chart-3' as const,
+      label: 'Insights',
+      onPress: () => navigateWhenIdle(() => nav.navigate('InsightsModal')),
+      accent: accentPrimary
     },
     {
       key: 'history',
@@ -324,10 +324,7 @@ export const Home: React.FC = () => {
 
         {/* Streak Counter */}
         {currentStreak > 0 && (
-          <AnimatedPressable
-            onPress={() => navigateWhenIdle(() => nav.navigate('AchievementsModal'))}
-            style={{ marginBottom: spacing.s16 }}
-          >
+          <View style={{ marginBottom: spacing.s16 }}>
             <View
               style={{
                 backgroundColor: surface1,
@@ -381,9 +378,8 @@ export const Home: React.FC = () => {
                   </View>
                 )}
               </View>
-              <Icon name="chevron-right" size={20} color={muted} />
             </View>
-          </AnimatedPressable>
+          </View>
         )}
 
         {/* Quick Actions */}

@@ -6,7 +6,7 @@ import GoalDetail from '../screens/goals/GoalDetail';
 
 export type GoalsStackParamList = {
   GoalsRoot: undefined;
-  GoalCreate: undefined;
+  GoalCreate: { type?: 'milestone' | 'networth' };
   GoalDetail: { goalId: string; mode?: 'journey' | 'add' };
 };
 

@@ -65,7 +65,7 @@ function BottomTabs() {
         tabBarIcon: ({ focused }) => (
           <View style={{ marginBottom: -2 }}>
             <Icon
-              name={route.name === 'Home' ? 'receipt' : route.name === 'Money' ? 'wallet' : route.name === 'Invest' ? 'trending-up' : 'settings'}
+              name={route.name === 'Home' ? 'receipt' : route.name === 'Money' ? 'wallet' : route.name === 'Goals' ? 'target' : route.name === 'Invest' ? 'trending-up' : 'settings'}
               size={22}
               colorToken={focused ? 'accent.primary' : 'icon.default'}
             />
@@ -75,6 +75,7 @@ function BottomTabs() {
     >
       <Tab.Screen name="Home" component={Home} options={{ tabBarLabel: 'Spending' }} />
       <Tab.Screen name="Money" component={MoneyNavigator} options={{ tabBarLabel: 'Money' }} />
+      <Tab.Screen name="Goals" component={GoalsNavigator} options={{ tabBarLabel: 'Goals' }} />
       <Tab.Screen name="Invest" component={InvestNavigator} />
       <Tab.Screen name="Settings" component={Settings} />
     </Tab.Navigator>
@@ -95,7 +96,6 @@ const styles = StyleSheet.create({
 type RootParamList = {
   Tabs: undefined;
   Groups: undefined;
-  Goals: undefined;
   TransactionsModal: undefined;
   Add: undefined;
   EditTransaction: { id: string };
@@ -118,7 +118,6 @@ export default function RootNavigator() {
       <Root.Navigator screenOptions={{ headerShown: false }}>
         <Root.Screen name="Tabs" component={BottomTabs} />
         <Root.Screen name="Groups" component={GroupsNavigator} options={{ presentation: 'modal' }} />
-        <Root.Screen name="Goals" component={GoalsNavigator} options={{ presentation: 'modal' }} />
         <Root.Screen name="TransactionsModal" component={Transactions} options={{ presentation: 'modal' }} />
         <Root.Screen name="Add" component={Add} options={{ presentation: 'modal' }} />
         <Root.Screen name="EditTransaction" component={EditTransaction} options={{ presentation: 'modal' }} />

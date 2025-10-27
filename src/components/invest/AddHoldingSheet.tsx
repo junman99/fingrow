@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TextInput, FlatList, Pressable, Dimensions, Platform, Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import BottomSheet from '../BottomSheet';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
@@ -27,6 +28,7 @@ type Props = {
  */
 export default function AddHoldingSheet({ visible, onClose, portfolioId, mode='holdings' }: Props) {
   const { get } = useThemeTokens();
+  const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const windowH = Dimensions.get('window').height;
   // Show at about half screen height (min 360)
@@ -143,23 +145,52 @@ export default function AddHoldingSheet({ visible, onClose, portfolioId, mode='h
       const ids = Object.keys(portfolios);
       if (ids.length) pid = ids[0];
     }
-    if (!pid || !keys.length) { onClose(); return; }
+    console.log('🔵 [AddHoldingSheet] onDone called:', { pid, keysCount: keys.length, mode, portfolioId });
+    if (!pid || !keys.length) {
+      console.log('⚠️ [AddHoldingSheet] Missing pid or no keys selected. Closing.');
+      onClose();
+      return;
+    }
     if (mode === 'watchlist') {
       const addWatch = (useInvestStore.getState() as any).addWatch;
       for (const k of keys) {
         const sym = k.split(':').slice(1).join(':');
-        try { await addWatch(sym, { portfolioId: pid }); } catch {}
+        try {
+          console.log('➕ [AddHoldingSheet] Adding watch:', sym, 'to portfolio:', pid);
+          await addWatch(sym, { portfolioId: pid });
+        } catch (err) {
+          console.error('❌ [AddHoldingSheet] Failed to add watch:', sym, err);
+        }
       }
     } else {
       const cur = ((profile?.currency) || 'USD').toUpperCase();
       const addHolding = (useInvestStore.getState() as any).addHolding;
+      const addedSymbols: string[] = [];
       for (const k of keys) {
         const providerCode = k.split(':')[0];
         const sym = k.split(':').slice(1).join(':');
         const type = providerCode === 'C' ? 'crypto' : 'stock';
-        try { await addHolding(sym, { name: sym, type, currency: cur }, { portfolioId: pid }); } catch {}
+        try {
+          console.log('➕ [AddHoldingSheet] Adding holding:', sym, 'type:', type, 'currency:', cur, 'to portfolio:', pid);
+          await addHolding(sym, { name: sym, type, currency: cur }, { portfolioId: pid });
+          console.log('✅ [AddHoldingSheet] Successfully added holding:', sym);
+          addedSymbols.push(sym);
+        } catch (err) {
+          console.error('❌ [AddHoldingSheet] Failed to add holding:', sym, err);
+        }
+      }
+      // If only one holding was added, navigate to AddLot screen to add a transaction
+      if (addedSymbols.length === 1) {
+        console.log('🔄 [AddHoldingSheet] Navigating to AddLot for:', addedSymbols[0]);
+        onClose();
+        // Small delay to ensure sheet closes smoothly before navigation
+        setTimeout(() => {
+          nav.navigate('AddLot' as never, { symbol: addedSymbols[0], portfolioId: pid } as never);
+        }, 100);
+        return;
       }
     }
+    console.log('✅ [AddHoldingSheet] Finished adding holdings. Closing sheet.');
     onClose();
   };
 
