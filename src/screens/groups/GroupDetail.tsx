@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet, Modal, Animated, Alert } from 'react-native';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Swipeable } from 'react-native-gesture-handler';
 import { ScreenScroll } from '../../components/ScreenScroll';
 import Button from '../../components/Button';
 import Icon from '../../components/Icon';
@@ -8,8 +10,11 @@ import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
 import { useGroupsStore } from '../../store/groups';
 import { useProfileStore } from '../../store/profile';
+import { useTxStore } from '../../store/transactions';
 import { formatCurrency } from '../../lib/format';
 import BottomSheet from '../../components/BottomSheet';
+import type { ID } from '../../types/groups';
+import type { GroupsStackParamList } from '../../navigation/GroupsNavigator';
 
 const fmtTime = (d: Date) => {
   const h = d.getHours();
@@ -84,11 +89,196 @@ const AnimatedPressable: React.FC<{
   );
 };
 
+// Settlement Transfer Row with Animation
+const SettlementTransferRow: React.FC<{
+  fromInitials: string;
+  toInitials: string;
+  amount: number;
+  warningColor: string;
+  successColor: string;
+  accentPrimary: string;
+  textPrimary: string;
+  textMuted: string;
+  surface2: string;
+  isDark: boolean;
+  formatCurrency: (n: number) => string;
+}> = ({ fromInitials, toInitials, amount, warningColor, successColor, accentPrimary, textPrimary, textMuted, surface2, isDark, formatCurrency }) => {
+  const flowAnim = useRef(new Animated.Value(0)).current;
+  const dotAnim1 = useRef(new Animated.Value(0)).current;
+  const dotAnim2 = useRef(new Animated.Value(0)).current;
+  const dotAnim3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Start flow animation
+    Animated.loop(
+      Animated.timing(flowAnim, {
+        toValue: 1,
+        duration: 2000,
+        useNativeDriver: false
+      })
+    ).start();
+
+    // Start dot animations with delays
+    Animated.loop(
+      Animated.timing(dotAnim1, {
+        toValue: 1,
+        duration: 1500,
+        useNativeDriver: true
+      })
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.delay(500),
+        Animated.timing(dotAnim2, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true
+        })
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.delay(1000),
+        Animated.timing(dotAnim3, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true
+        })
+      ])
+    ).start();
+  }, []);
+
+  const withAlpha = (hex: string, alpha: number) => {
+    if (!hex || typeof hex !== 'string') return hex;
+    if (hex.startsWith('#')) {
+      const clean = hex.slice(1, 7);
+      const padded = clean.length === 6 ? clean : clean.padEnd(6, '0');
+      const a = Math.round(Math.min(Math.max(alpha, 0), 1) * 255).toString(16).padStart(2, '0');
+      return `#${padded}${a}`;
+    }
+    return hex;
+  };
+
+  const dotAnims = [dotAnim1, dotAnim2, dotAnim3];
+
+  return (
+    <View style={{
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: spacing.s14,
+      paddingHorizontal: spacing.s16,
+      backgroundColor: surface2,
+      borderRadius: radius.lg,
+      marginBottom: spacing.s8,
+      overflow: 'hidden'
+    }}>
+      {/* Animated gradient background */}
+      <Animated.View style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: '100%',
+        opacity: flowAnim.interpolate({
+          inputRange: [0, 0.5, 1],
+          outputRange: [0, 0.3, 0]
+        }),
+        transform: [{
+          translateX: flowAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [-300, 300]
+          })
+        }]
+      }}>
+        <View style={{
+          flex: 1,
+          backgroundColor: isDark
+            ? 'rgba(255, 153, 51, 0.15)'
+            : 'rgba(251, 146, 60, 0.15)'
+        }} />
+      </Animated.View>
+
+      {/* From member */}
+      <View style={{
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: withAlpha(warningColor, isDark ? 0.25 : 0.2),
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: warningColor,
+        zIndex: 2
+      }}>
+        <Text style={{ color: warningColor, fontSize: 13, fontWeight: '800' }}>
+          {fromInitials}
+        </Text>
+      </View>
+
+      {/* Amount and flow line with animated dots */}
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', marginHorizontal: spacing.s12, zIndex: 1 }}>
+        <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700', marginBottom: spacing.s6 }}>
+          {formatCurrency(amount)}
+        </Text>
+        <View style={{ width: '100%', height: 2, backgroundColor: withAlpha(textMuted, 0.2), position: 'relative' }}>
+          {/* Animated flowing dots */}
+          {dotAnims.map((dotAnim, i) => (
+            <Animated.View
+              key={i}
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: -2,
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: accentPrimary,
+                transform: [
+                  {
+                    translateX: dotAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, 200]
+                    })
+                  }
+                ],
+                opacity: dotAnim.interpolate({
+                  inputRange: [0, 0.2, 0.8, 1],
+                  outputRange: [0, 1, 1, 0]
+                })
+              }}
+            />
+          ))}
+        </View>
+      </View>
+
+      {/* To member */}
+      <View style={{
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: withAlpha(successColor, isDark ? 0.25 : 0.2),
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: successColor,
+        zIndex: 2
+      }}>
+        <Text style={{ color: successColor, fontSize: 13, fontWeight: '800' }}>
+          {toInitials}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
 export default function GroupDetail() {
-  const nav = useNavigation<any>();
+  const nav = useNavigation<NativeStackNavigationProp<GroupsStackParamList>>();
   const route = useRoute<any>();
   const { groupId } = (route?.params ?? {}) as { groupId: string };
-  const { groups, hydrate, balances, deleteGroup } = useGroupsStore();
+  const { groups, hydrate, balances, deleteGroup, deleteBill, addSettlement } = useGroupsStore();
+  const { add: addTransaction } = useTxStore();
   const { get, isDark } = useThemeTokens();
   const [selectedMember, setSelectedMember] = useState<any>(null);
   const [showMembersList, setShowMembersList] = useState(false);
@@ -199,6 +389,88 @@ export default function GroupDetail() {
     else updatedLabel = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
+  // Calculate settlement plan (who pays who)
+  const calculateSettlementPlan = () => {
+    type Edge = { fromId: ID; toId: ID; amount: number };
+    const creditors: { id: ID; amt: number }[] = [];
+    const debtors: { id: ID; amt: number }[] = [];
+
+    Object.entries(groupBal).forEach(([id, v]) => {
+      const val = Math.round((v as number) * 100) / 100;
+      if (val > 0.009) creditors.push({ id: id as ID, amt: val });
+      else if (val < -0.009) debtors.push({ id: id as ID, amt: -val });
+    });
+
+    creditors.sort((a, b) => b.amt - a.amt);
+    debtors.sort((a, b) => b.amt - a.amt);
+
+    const edges: Edge[] = [];
+    let i = 0, j = 0;
+
+    while (i < debtors.length && j < creditors.length) {
+      const d = debtors[i];
+      const c = creditors[j];
+      const x = Math.min(d.amt, c.amt);
+      edges.push({ fromId: d.id, toId: c.id, amount: Math.round(x * 100) / 100 });
+      d.amt = Math.round((d.amt - x) * 100) / 100;
+      c.amt = Math.round((c.amt - x) * 100) / 100;
+      if (d.amt === 0) i++;
+      if (c.amt === 0) j++;
+    }
+
+    return edges;
+  };
+
+  const settlementPlan = calculateSettlementPlan();
+  const myName = (useProfileStore.getState().profile.name || '').trim().toLowerCase();
+  const myMember = group.members.find((m: any) => (m.name || '').trim().toLowerCase() === myName);
+
+  const recordTransfers = async () => {
+    if (settlementPlan.length === 0) {
+      Alert.alert('All settled', 'No transfers needed.');
+      return;
+    }
+
+    try {
+      // Record each settlement
+      for (const edge of settlementPlan) {
+        await addSettlement(group.id, edge.fromId, edge.toId, edge.amount);
+
+        // If I'm involved in this transfer, create a transaction in spending ledger
+        if (myMember && (edge.fromId === myMember.id || edge.toId === myMember.id)) {
+          const fromMember = group.members.find((m: any) => m.id === edge.fromId);
+          const toMember = group.members.find((m: any) => m.id === edge.toId);
+
+          if (edge.fromId === myMember.id) {
+            // I'm paying someone - create expense transaction
+            await addTransaction({
+              type: 'expense',
+              amount: edge.amount,
+              category: 'Shared Bill',
+              date: new Date().toISOString(),
+              note: `Payment to ${toMember?.name || 'member'} - ${group.name}`
+            });
+          } else if (edge.toId === myMember.id) {
+            // Someone is paying me - create income transaction
+            await addTransaction({
+              type: 'income',
+              amount: edge.amount,
+              category: 'Shared Bill',
+              date: new Date().toISOString(),
+              note: `Payment from ${fromMember?.name || 'member'} - ${group.name}`
+            });
+          }
+        }
+      }
+
+      setShowSettleUpCard(false);
+      await hydrate(); // Refresh group data
+      Alert.alert('Success', 'Transfers recorded successfully!');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || String(e));
+    }
+  };
+
   const accentPrimary = get('accent.primary') as string;
   const textPrimary = get('text.primary') as string;
   const textMuted = get('text.muted') as string;
@@ -290,52 +562,125 @@ export default function GroupDetail() {
         ? dangerColor
         : textMuted;
 
-    return (
-      <Pressable
-        key={item.id}
-        onPress={() => nav.navigate('BillDetails', { groupId: group.id, billId: item.id })}
-      >
-        <View style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingVertical: spacing.s12,
-          borderBottomWidth: isLastInCard ? 0 : StyleSheet.hairlineWidth,
-          borderBottomColor: borderSubtle
-        }}>
+    const renderRightActions = () => (
+      <View style={{ flexDirection: 'row' }}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => nav.navigate('EditBill', { groupId: group.id, billId: item.id })}
+        >
           <View style={{
-            width: 40,
-            height: 40,
-            borderRadius: radius.md,
-            backgroundColor: amountPositive
-              ? withAlpha(successColor, isDark ? 0.2 : 0.12)
-              : amountNegative
-                ? withAlpha(dangerColor, isDark ? 0.2 : 0.12)
-                : withAlpha(textMuted, isDark ? 0.15 : 0.08),
-            marginRight: spacing.s12,
+            width: 80,
+            height: '100%',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            backgroundColor: accentPrimary
           }}>
-            <Icon
-              name="receipt"
-              size={20}
-              color={amountPositive ? successColor : amountNegative ? dangerColor : textMuted}
-            />
+            <Icon name="edit" size={20} colorToken="text.onPrimary" />
+            <Text style={{
+              color: textOnPrimary,
+              fontWeight: '700',
+              fontSize: 13,
+              marginTop: spacing.s4
+            }}>Edit</Text>
           </View>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            Alert.alert(
+              'Delete Bill',
+              `Are you sure you want to delete "${item.title || 'this bill'}"?`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      // Delete the bill from the group
+                      await deleteBill(group.id, item.id);
+                      await hydrate();
+                    } catch (e: any) {
+                      Alert.alert('Error', e?.message || String(e));
+                    }
+                  }
+                }
+              ]
+            );
+          }}
+        >
+          <View style={{
+            width: 80,
+            height: '100%',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: dangerColor
+          }}>
+            <Icon name="trash" size={20} colorToken="text.onPrimary" />
+            <Text style={{
+              color: textOnPrimary,
+              fontWeight: '700',
+              fontSize: 13,
+              marginTop: spacing.s4
+            }}>Delete</Text>
+          </View>
+        </Pressable>
+      </View>
+    );
 
-          <View style={{ flex: 1 }}>
-            <Text numberOfLines={1} style={{ color: textPrimary, fontWeight: '700' }}>
-              {item.title || 'Untitled bill'}
-            </Text>
-            <Text numberOfLines={1} style={{ color: textMuted, marginTop: 2 }}>
-              {time} • {item.payerName}
+    return (
+      <Swipeable
+        key={item.id}
+        renderRightActions={renderRightActions}
+        overshootRight={false}
+      >
+        <Pressable
+          onPress={() => nav.navigate('BillDetails', { groupId: group.id, billId: item.id })}
+        >
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: spacing.s12,
+            paddingHorizontal: spacing.s16,
+            borderBottomWidth: isLastInCard ? 0 : StyleSheet.hairlineWidth,
+            borderBottomColor: borderSubtle,
+            backgroundColor: surface1
+          }}>
+            <View style={{
+              width: 40,
+              height: 40,
+              borderRadius: radius.md,
+              backgroundColor: amountPositive
+                ? withAlpha(successColor, isDark ? 0.2 : 0.12)
+                : amountNegative
+                  ? withAlpha(dangerColor, isDark ? 0.2 : 0.12)
+                  : withAlpha(textMuted, isDark ? 0.15 : 0.08),
+              marginRight: spacing.s12,
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Icon
+                name="receipt"
+                size={20}
+                color={amountPositive ? successColor : amountNegative ? dangerColor : textMuted}
+              />
+            </View>
+
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} style={{ color: textPrimary, fontWeight: '700' }}>
+                {item.title || 'Untitled bill'}
+              </Text>
+              <Text numberOfLines={1} style={{ color: textMuted, marginTop: 2 }}>
+                {time} • {item.payerName}
+              </Text>
+            </View>
+
+            <Text style={{ color: amountColor, fontWeight: '700', marginLeft: spacing.s8 }}>
+              {amountLabel}
             </Text>
           </View>
-
-          <Text style={{ color: amountColor, fontWeight: '700' }}>
-            {amountLabel}
-          </Text>
-        </View>
-      </Pressable>
+        </Pressable>
+      </Swipeable>
     );
   };
 
@@ -368,7 +713,6 @@ export default function GroupDetail() {
             </Pressable>
             <View style={{ flex: 1 }}>
               <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.8, marginTop: spacing.s2 }}>{group.name}</Text>
-              {updatedLabel ? <Text style={{ color: textMuted, fontSize: 13, marginTop: spacing.s4 }}>{updatedLabel}</Text> : null}
             </View>
             <Pressable
               onPress={() => setShowSettingsMenu(true)}
@@ -627,55 +971,36 @@ export default function GroupDetail() {
               </Text>
             </View>
 
-            {/* Who owes who */}
+            {/* Settlement plan - who pays who */}
             <View style={{ marginBottom: spacing.s24 }}>
-              {group.members.filter((m: any) => !m.archived).map((member: any) => {
-                const balance = groupBal[member.id] || 0;
-                if (Math.abs(balance) < 0.01) return null;
-                const isOwed = balance > 0;
+              {settlementPlan.map((edge, idx) => {
+                const fromMember = group.members.find((m: any) => m.id === edge.fromId);
+                const toMember = group.members.find((m: any) => m.id === edge.toId);
+                const fromInitials = fromMember?.name.trim().split(/\s+/).slice(0, 2).map((p: string) => p[0]?.toUpperCase() || '').join('') || '?';
+                const toInitials = toMember?.name.trim().split(/\s+/).slice(0, 2).map((p: string) => p[0]?.toUpperCase() || '').join('') || '?';
+
                 return (
-                  <View key={member.id} style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    paddingVertical: spacing.s12,
-                    paddingHorizontal: spacing.s16,
-                    backgroundColor: surface2,
-                    borderRadius: radius.lg,
-                    marginBottom: spacing.s8
-                  }}>
-                    <View style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
-                      backgroundColor: withAlpha(isOwed ? successColor : warningColor, 0.15),
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginRight: spacing.s12
-                    }}>
-                      <Text style={{ color: isOwed ? successColor : warningColor, fontSize: 14, fontWeight: '800' }}>
-                        {member.name.trim().split(/\s+/).slice(0, 2).map((p: string) => p[0]?.toUpperCase() || '').join('') || '?'}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
-                        {member.name}
-                      </Text>
-                      <Text style={{ color: textMuted, fontSize: 13 }}>
-                        {isOwed ? 'is owed' : 'owes'} {formatCurrency(Math.abs(balance))}
-                      </Text>
-                    </View>
-                    <Icon name={isOwed ? 'arrow-down' : 'arrow-up'} size={20} color={isOwed ? successColor : warningColor} />
-                  </View>
+                  <SettlementTransferRow
+                    key={idx}
+                    fromInitials={fromInitials}
+                    toInitials={toInitials}
+                    amount={edge.amount}
+                    warningColor={warningColor}
+                    successColor={successColor}
+                    accentPrimary={accentPrimary}
+                    textPrimary={textPrimary}
+                    textMuted={textMuted}
+                    surface2={surface2}
+                    isDark={isDark}
+                    formatCurrency={formatCurrency}
+                  />
                 );
               })}
             </View>
 
             {/* Action button */}
             <Pressable
-              onPress={() => {
-                setShowSettleUpCard(false);
-                nav.navigate('SettleUp', { groupId: group.id });
-              }}
+              onPress={recordTransfers}
               style={({ pressed }) => ({
                 backgroundColor: accentPrimary,
                 paddingVertical: spacing.s16,
@@ -690,7 +1015,7 @@ export default function GroupDetail() {
               })}
             >
               <Text style={{ color: textOnPrimary, fontSize: 17, fontWeight: '800' }}>
-                Continue to Settle Up
+                Record Transfer
               </Text>
             </Pressable>
           </View>

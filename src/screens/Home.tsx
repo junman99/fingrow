@@ -238,7 +238,7 @@ export const Home: React.FC = () => {
       key: 'budget',
       icon: 'wallet' as const,
       label: 'Budgets',
-      onPress: () => navigateWhenIdle(() => nav.navigate('BudgetModal')),
+      onPress: () => navigateWhenIdle(() => nav.navigate('BudgetsRoot')),
       accent: warningAccent
     },
     {

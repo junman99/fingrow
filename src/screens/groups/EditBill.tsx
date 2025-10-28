@@ -25,35 +25,47 @@ function withAlpha(hex: string, alpha: number) {
   return hex;
 }
 
-export default function AddBill() {
+export default function EditBill() {
   const { get, isDark } = useThemeTokens();
   const route = useRoute<any>();
   const nav = useNavigation<any>();
-  const { groupId } = (route?.params ?? {}) as { groupId: string };
-  const { groups, addBill } = useGroupsStore();
+  const { groupId, billId } = (route?.params ?? {}) as { groupId: string; billId: string };
+  const { groups, updateBill, findBill } = useGroupsStore();
   const group = groups.find(g => g.id === groupId);
-
-  const [title, setTitle] = useState('');
-  const [amount, setAmount] = useState('');
-  const [paidBy, setPaidBy] = useState<string | null>(null);
+  const bill = findBill(groupId, billId);
 
   const activeMembers = useMemo(() => group?.members.filter(m => !m.archived) ?? [], [group]);
-  const [participants, setParticipants] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(activeMembers.map(m => [m.id, true]))
-  );
+
+  // Initialize state from existing bill
+  const [title, setTitle] = useState(bill?.title || '');
+  const [amount, setAmount] = useState(bill?.amount.toString() || '');
+  const [paidBy, setPaidBy] = useState<string | null>(bill?.contributions[0]?.memberId || null);
+
+  const [participants, setParticipants] = useState<Record<string, boolean>>(() => {
+    if (bill) {
+      const participantIds = bill.splits.map(s => s.memberId);
+      return Object.fromEntries(activeMembers.map(m => [m.id, participantIds.includes(m.id)]));
+    }
+    return Object.fromEntries(activeMembers.map(m => [m.id, true]));
+  });
   const participantIds = Object.entries(participants).filter(([_, v]) => v).map(([k]) => k);
 
   const [mode, setMode] = useState<'equal' | 'exact'>('equal');
-  const [exacts, setExacts] = useState<Record<string, string>>({});
+  const [exacts, setExacts] = useState<Record<string, string>>(() => {
+    if (bill && bill.splits) {
+      return Object.fromEntries(bill.splits.map(s => [s.memberId, s.share.toString()]));
+    }
+    return {};
+  });
 
-  // Tax & Fees
-  const [showTaxFees, setShowTaxFees] = useState(false);
-  const [tax, setTax] = useState('');
+  // Tax & Fees - extract from bill's tax
+  const [showTaxFees, setShowTaxFees] = useState((bill?.tax || 0) > 0);
+  const [tax, setTax] = useState(bill?.tax.toString() || '');
   const [serviceCharge, setServiceCharge] = useState('');
   const [vat, setVat] = useState('');
 
   // Date & Time
-  const [billDate, setBillDate] = useState(new Date());
+  const [billDate, setBillDate] = useState(bill?.createdAt ? new Date(bill.createdAt) : new Date());
   const [dtOpen, setDtOpen] = useState(false);
 
   const amountNum = useMemo(() => Number(amount) || 0, [amount]);
@@ -108,8 +120,9 @@ export default function AddBill() {
     }
 
     try {
-      await addBill({
+      await updateBill({
         groupId: group.id,
+        billId,
         title: title.trim() || 'Untitled bill',
         amount: baseAmount,
         taxMode: 'pct',
@@ -129,12 +142,12 @@ export default function AddBill() {
     }
   };
 
-  if (!group) {
+  if (!group || !bill) {
     return (
       <ScreenScroll>
         <View style={{ padding: spacing.s16 }}>
-          <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800' }}>Add Bill</Text>
-          <Text style={{ color: get('text.muted') as string }}>Group not found.</Text>
+          <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800' }}>Edit Bill</Text>
+          <Text style={{ color: get('text.muted') as string }}>Bill not found.</Text>
         </View>
       </ScreenScroll>
     );
@@ -212,7 +225,7 @@ export default function AddBill() {
             <Icon name="x" size={28} color={textMuted} />
           </Pressable>
           <Text style={{ color: textPrimary, fontSize: 18, fontWeight: '700', flex: 1, textAlign: 'center' }}>
-            Add Bill
+            Edit Bill
           </Text>
           <Pressable
             onPress={onSave}

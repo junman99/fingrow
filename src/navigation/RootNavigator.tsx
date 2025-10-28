@@ -6,7 +6,6 @@ import { enableScreens } from 'react-native-screens';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Transactions } from '../screens/Transactions';
-import { Budgets } from '../screens/Budgets';
 import BillsModal from '../screens/BillsModal';
 import BillEditor from '../screens/BillEditor';
 import EnvelopesEditor from '../screens/EnvelopesEditor';
@@ -97,7 +96,6 @@ type RootParamList = {
   TransactionsModal: undefined;
   Add: undefined;
   EditTransaction: { id: string };
-  BudgetModal: undefined;
   InsightsModal: undefined;
   AchievementsModal: undefined;
   ProfileModal: undefined;
@@ -118,7 +116,6 @@ export default function RootNavigator() {
         <Root.Screen name="TransactionsModal" component={Transactions} options={{ presentation: 'modal' }} />
         <Root.Screen name="Add" component={Add} options={{ presentation: 'modal' }} />
         <Root.Screen name="EditTransaction" component={EditTransaction} options={{ presentation: 'modal' }} />
-        <Root.Screen name="BudgetModal" component={Budgets} options={{ presentation: 'modal' }} />
         <Root.Screen name="InsightsModal" component={Insights} options={{ presentation: 'modal' }} />
         <Root.Screen name="AchievementsModal" component={Achievements} options={{ presentation: 'modal' }} />
         <Root.Screen name="ProfileModal" component={Profile} options={{ presentation: 'modal' }} />

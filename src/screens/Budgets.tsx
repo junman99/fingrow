@@ -11,6 +11,7 @@ import { useRecurringStore, computeNextDue } from '../store/recurring';
 import { ensureWeeklyDigest, maybeFirePaceAlert, maybeFireThresholdAlerts, toggleWeeklyDigest } from '../lib/budgetAlerts';
 import Button from '../components/Button';
 import Input from '../components/Input';
+import Icon from '../components/Icon';
 import { useNavigation } from '@react-navigation/native';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
@@ -261,13 +262,36 @@ export const Budgets: React.FC = () => {
   return (
     <ScreenScroll contentStyle={{ paddingBottom: spacing.s24 }}>
       <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s16 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s8 }}>
-          <Pressable onPress={() => nav.goBack()} hitSlop={8}>
-            <Text style={{ color: textMuted, fontWeight: '600' }}>Close</Text>
+        {/* Header with back button */}
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12, marginBottom: spacing.s8 }}>
+          <Pressable
+            onPress={() => nav.goBack()}
+            style={({ pressed }) => ({
+              padding: spacing.s8,
+              marginLeft: -spacing.s8,
+              marginTop: -spacing.s4,
+              borderRadius: radius.md,
+              backgroundColor: pressed ? surface1 : 'transparent',
+            })}
+            hitSlop={8}
+          >
+            <Icon name="chevron-left" size={28} color={textPrimary} />
           </Pressable>
-          <Text style={{ color: textPrimary, fontSize: 22, fontWeight: '800' }}>Budget studio</Text>
-          <Pressable onPress={onSave} hitSlop={8}>
-            <Text style={{ color: accentPrimary, fontWeight: '700' }}>Save</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 }}>Budget</Text>
+          </View>
+          <Pressable
+            onPress={onSave}
+            style={({ pressed }) => ({
+              padding: spacing.s8,
+              marginRight: -spacing.s8,
+              marginTop: -spacing.s4,
+              borderRadius: radius.md,
+              backgroundColor: pressed ? surface1 : 'transparent',
+            })}
+            hitSlop={8}
+          >
+            <Text style={{ color: accentPrimary, fontWeight: '700', fontSize: 17 }}>Save</Text>
           </Pressable>
         </View>
 

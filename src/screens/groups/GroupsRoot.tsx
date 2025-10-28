@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, View, Text, Pressable } from 'react-native';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import { FlatList, View, Text, Pressable, Animated } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import Button from '../../components/Button';
@@ -14,6 +14,15 @@ export default function GroupsRoot() {
   const { get, isDark } = useThemeTokens();
   const nav = useNavigation<any>();
   const { groups, hydrate, balances } = useGroupsStore();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   useFocusEffect(useCallback(() => { hydrate(); }, [hydrate]));
 
@@ -257,14 +266,15 @@ export default function GroupsRoot() {
 
   return (
     <Screen inTab>
-      <FlatList
-        data={filteredData}
-        keyExtractor={(item: any) => item.id}
-        renderItem={({ item }) => <Row item={item} />}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: spacing.s16, paddingBottom: spacing.s32 }}
-        ListHeaderComponentStyle={{ marginBottom: spacing.s16 }}
-        ListHeaderComponent={(
+      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+        <FlatList
+          data={filteredData}
+          keyExtractor={(item: any) => item.id}
+          renderItem={({ item }) => <Row item={item} />}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: spacing.s16, paddingBottom: spacing.s32 }}
+          ListHeaderComponentStyle={{ marginBottom: spacing.s16 }}
+          ListHeaderComponent={(
           <View>
             <View style={{ marginTop: spacing.s12 }}>
               <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8, marginBottom: spacing.s16 }}>
@@ -403,7 +413,8 @@ export default function GroupsRoot() {
             </View>
           </View>
         )}
-      />
+        />
+      </Animated.View>
     </Screen>
   );
 }

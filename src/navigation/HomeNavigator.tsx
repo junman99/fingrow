@@ -1,6 +1,7 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Home } from '../screens/Home';
+import { Budgets } from '../screens/Budgets';
 import GroupsRoot from '../screens/groups/GroupsRoot';
 import GroupDetail from '../screens/groups/GroupDetail';
 import AddMember from '../screens/groups/AddMember';
@@ -14,6 +15,7 @@ import EditGroup from '../screens/groups/EditGroup';
 
 export type HomeStackParamList = {
   HomeRoot: undefined;
+  BudgetsRoot: undefined;
   GroupsRoot: undefined;
   GroupDetail: { groupId: string };
   AddMember: { groupId: string; memberId?: string; archiveToggle?: boolean };
@@ -36,8 +38,27 @@ export default function HomeNavigator() {
       }}
     >
       <Stack.Screen name="HomeRoot" component={Home} />
-      <Stack.Screen name="GroupsRoot" component={GroupsRoot} />
-      <Stack.Screen name="GroupDetail" component={GroupDetail} />
+      <Stack.Screen
+        name="BudgetsRoot"
+        component={Budgets}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="GroupsRoot"
+        component={GroupsRoot}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="GroupDetail"
+        component={GroupDetail}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
       <Stack.Screen name="AddMember" component={AddMember} options={{ presentation: 'modal' }} />
       <Stack.Screen name="AddBill" component={AddBill} options={{ presentation: 'modal' }} />
       <Stack.Screen name="CreateGroup" component={CreateGroup} options={{ presentation: 'modal' }} />

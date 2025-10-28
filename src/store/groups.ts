@@ -37,6 +37,26 @@ type State = {
   addSettlement: (groupId: ID, fromId: ID, toId: ID, amount: number, billId?: ID, memo?: string) => Promise<ID>;
   markSplitPaid: (groupId: ID, billId: ID, memberId: ID) => Promise<void>;
   findBill: (groupId: ID, billId: ID) => Bill | undefined;
+  deleteBill: (groupId: ID, billId: ID) => Promise<void>;
+  updateBill: (input: {
+    groupId: ID;
+    billId: ID;
+    title: string;
+    amount: number;
+    taxMode: 'abs'|'pct';
+    tax: number;
+    discountMode: 'abs'|'pct';
+    discount: number;
+    participants: ID[];
+    splitMode: SplitMode;
+    shares?: Record<ID, number>;
+    exacts?: Record<ID, number>;
+    proportionalTax?: boolean;
+    payerMode: PayerMode;
+    paidBy?: ID;
+    payersEven?: ID[];
+    contributions?: Record<ID, number>;
+  }) => Promise<void>;
   updateGroup: (groupId: ID, patch: { name?: string; note?: string }) => Promise<void>;
   deleteGroup: (groupId: ID) => Promise<void>;
 };
@@ -277,6 +297,126 @@ export const useGroupsStore = create<State>((set, get) => ({
   findBill: (groupId, billId) => {
     const g = get().groups.find(x => x.id === groupId);
     return g?.bills.find(b => b.id === billId);
+  },
+  deleteBill: async (groupId: ID, billId: ID) => {
+    const arr = [...get().groups];
+    const gi = arr.findIndex(g => g.id === groupId);
+    if (gi < 0) throw new Error('Group not found');
+    const group = arr[gi];
+
+    // Remove the bill from the group
+    const updatedBills = group.bills.filter(b => b.id !== billId);
+
+    // Remove all settlements associated with this bill
+    const updatedSettlements = (group.settlements || []).filter(s => s.billId !== billId);
+
+    arr[gi] = { ...group, bills: updatedBills, settlements: updatedSettlements };
+    set({ groups: arr });
+    await save(arr);
+  },
+  updateBill: async (input) => {
+    const arr = [...get().groups];
+    const gi = arr.findIndex(g => g.id === input.groupId);
+    if (gi < 0) throw new Error('Group not found');
+    const group = arr[gi];
+
+    const billIndex = group.bills.findIndex(b => b.id === input.billId);
+    if (billIndex < 0) throw new Error('Bill not found');
+
+    const activeIds = new Set(group.members.filter(m => !m.archived).map(m => m.id));
+    const participants = input.participants.filter(id => activeIds.has(id));
+    if (participants.length === 0) throw new Error('Select at least one active participant');
+
+    const taxVal = input.taxMode === 'pct' ? (input.amount * input.tax / 100) : input.tax;
+    const discVal = input.discountMode === 'pct' ? (input.amount * input.discount / 100) : input.discount;
+    const base = input.amount;
+    const finalAmount = round2(base + (taxVal || 0) - (discVal || 0));
+    if (finalAmount <= 0) throw new Error('Final amount must be greater than 0');
+
+    let baseSplits: { memberId: ID; share: number }[] = [];
+    if (input.splitMode === 'equal') {
+      const each = Math.floor((base / participants.length) * 100) / 100;
+      let assigned = round2(each * participants.length);
+      let remainder = round2(base - assigned);
+      baseSplits = participants.map((id, idx) => ({ memberId: id, share: idx === participants.length - 1 ? round2(each + remainder) : each }));
+    } else if (input.splitMode === 'shares') {
+      const weights = participants.map(id => input.shares?.[id] ?? 1);
+      const weightSum = sum(weights) || 1;
+      let assigned = 0;
+      baseSplits = participants.map((id, idx) => {
+        let share = round2(base * (weights[idx] / weightSum));
+        if (idx === participants.length - 1) share = round2(base - assigned);
+        assigned = round2(assigned + share);
+        return { memberId: id, share };
+      });
+    } else {
+      const totals = participants.map(id => input.exacts?.[id] ?? 0);
+      const sumEx = round2(sum(totals));
+      if (input.proportionalTax) {
+        baseSplits = participants.map(id => ({ memberId: id, share: round2(input.exacts?.[id] ?? 0) }));
+      } else {
+        baseSplits = [];
+      }
+    }
+
+    let finalSplits: { memberId: ID; share: number; settled: boolean }[] = [];
+    if (input.splitMode === 'exact' && !input.proportionalTax) {
+      const totals = participants.map(id => input.exacts?.[id] ?? 0);
+      const s = round2(sum(totals));
+      if (Math.abs(s - finalAmount) > 0.01) throw new Error('Exact amounts must sum to final amount');
+      finalSplits = participants.map(id => ({ memberId: id, share: round2(input.exacts?.[id] ?? 0), settled: false }));
+    } else {
+      const baseSum = round2(sum(baseSplits.map(s => s.share))) || 1;
+      let assigned = 0;
+      finalSplits = participants.map((id, idx) => {
+        const baseShare = baseSplits.find(s => s.memberId === id)?.share ?? 0;
+        let finalShare = input.proportionalTax ? round2(baseShare + (baseShare / (baseSum||1)) * ((taxVal||0) - (discVal||0))) : baseShare;
+        if (idx === participants.length - 1) finalShare = round2(finalAmount - assigned);
+        assigned = round2(assigned + finalShare);
+        return { memberId: id, share: finalShare, settled: false };
+      });
+    }
+
+    let contributions: Contribution[] = [];
+    if (input.payerMode === 'single') {
+      if (!input.paidBy) throw new Error('Select a payer');
+      contributions = [{ memberId: input.paidBy, amount: finalAmount }];
+    } else if (input.payerMode === 'multi-even') {
+      const payers = (input.payersEven || []).filter(id => activeIds.has(id));
+      if (payers.length === 0) throw new Error('Select at least one payer');
+      const each = Math.floor((finalAmount / payers.length) * 100) / 100;
+      let assigned = round2(each * payers.length);
+      let remainder = round2(finalAmount - assigned);
+      contributions = payers.map((id, idx) => ({
+        memberId: id,
+        amount: idx === payers.length - 1 ? round2(each + remainder) : each
+      }));
+    } else {
+      const entries = Object.entries(input.contributions || {}).filter(([id,v]) => activeIds.has(id as ID) && (Number(v)||0) > 0);
+      const total = round2(sum(entries.map(([_,v]) => Number(v)||0)));
+      if (Math.abs(total - finalAmount) > 0.01) throw new Error('Contributions must sum to final amount');
+      contributions = entries.map(([id,v]) => ({ memberId: id as ID, amount: round2(Number(v)||0) }));
+    }
+
+    const updatedBill: Bill = {
+      ...group.bills[billIndex],
+      title: input.title.trim() || 'Untitled bill',
+      amount: base,
+      tax: input.tax,
+      taxMode: input.taxMode,
+      discount: input.discount,
+      discountMode: input.discountMode,
+      finalAmount,
+      contributions,
+      splits: finalSplits,
+    };
+
+    const updatedBills = [...group.bills];
+    updatedBills[billIndex] = updatedBill;
+
+    arr[gi] = { ...group, bills: updatedBills };
+    set({ groups: arr });
+    await save(arr);
   },
   updateGroup: async (groupId: ID, patch: { name?: string; note?: string }) => {
     const arr = [...get().groups];
