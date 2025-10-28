@@ -25,6 +25,7 @@ type Props = {
   onAddWatchlist?: () => void;
   onOpenManager?: () => void;
   dimmed?: boolean;
+  defaultTab?: 'Holdings' | 'Watchlist';
 };
 
 type Summary = {
@@ -51,6 +52,7 @@ export default function PortfolioDetailSheet({
   onAddWatchlist,
   onOpenManager,
   dimmed,
+  defaultTab = 'Holdings',
 }: Props) {
   console.log('📋 [PortfolioDetailSheet] Rendering with:', { portfolioId, visible, dimmed });
 
@@ -70,13 +72,19 @@ export default function PortfolioDetailSheet({
   const menuBtnRef = React.useRef<View>(null);
 
   React.useEffect(() => {
+    console.log('🎯 [PortfolioDetailSheet] menuVisible changed:', menuVisible);
+    console.log('🎯 [PortfolioDetailSheet] menuAnchor:', menuAnchor);
+    console.log('🎯 [PortfolioDetailSheet] menuItems count:', menuItems.length);
+  }, [menuVisible, menuAnchor, menuItems]);
+
+  React.useEffect(() => {
     if (!visible) {
       setMenuVisible(false);
       setShowCashEditor(false);
       return;
     }
-    setTab('Holdings');
-  }, [visible]);
+    setTab(defaultTab);
+  }, [visible, defaultTab]);
 
   const summary = React.useMemo<Summary | null>(() => {
     if (!p) return null;
@@ -143,19 +151,28 @@ export default function PortfolioDetailSheet({
     : '';
 
   const openMenu = React.useCallback(() => {
-    if (!menuBtnRef.current) return;
+    console.log('🔘 [PortfolioDetailSheet] openMenu called');
+
+    if (!menuBtnRef.current) {
+      console.log('⚠️ [PortfolioDetailSheet] menuBtnRef.current is null');
+      // Use fallback position
+      setMenuAnchor({ x: 260, y: 160, w: 1, h: 1 });
+      setMenuVisible(true);
+      return;
+    }
     const ref: any = menuBtnRef.current;
     if (ref && typeof ref.measureInWindow === 'function') {
       ref.measureInWindow((x: number, y: number, w: number, h: number) => {
+        console.log('📍 [PortfolioDetailSheet] Button position:', { x, y, w, h });
         setMenuAnchor({ x, y, w, h });
         setMenuVisible(true);
       });
     } else {
+      console.log('⚠️ [PortfolioDetailSheet] measureInWindow not available, using fallback');
       setMenuAnchor({ x: 260, y: 160, w: 1, h: 1 });
       setMenuVisible(true);
     }
   }, []);
-
 
   const handleArchive = React.useCallback(() => {
     if (!p) return;
@@ -279,12 +296,18 @@ export default function PortfolioDetailSheet({
                 </View>
                 <Pressable
                   ref={menuBtnRef as any}
-                  onPress={openMenu}
+                  onPress={() => {
+                    console.log('🔘 [PortfolioDetailSheet] Button PRESSED!');
+                    openMenu();
+                  }}
+                  onPressIn={() => console.log('👇 [PortfolioDetailSheet] Button press IN')}
+                  onPressOut={() => console.log('👆 [PortfolioDetailSheet] Button press OUT')}
                   style={({ pressed }) => ({
                     padding: spacing.s8,
                     borderRadius: radius.md,
                     backgroundColor: pressed ? get('surface.level2') as string : 'transparent',
                   })}
+                  hitSlop={8}
                 >
                   <Icon name="more-horizontal" size={24} color={textPrimary} />
                 </Pressable>
@@ -371,7 +394,7 @@ export default function PortfolioDetailSheet({
                 >
                   <Icon name="plus" size={18} colorToken="text.onPrimary" />
                   <Text style={{ color: get('text.onPrimary') as string, fontWeight: '700', fontSize: 14 }}>
-                    Add Holding
+                    Add Ticker
                   </Text>
                 </Pressable>
               )}
@@ -408,41 +431,49 @@ export default function PortfolioDetailSheet({
 
             {/* Content */}
             {tab === 'Holdings' ? (
-              <View style={{ gap: spacing.s8 }}>
+              <View>
                 {holdingsSyms.length ? (
-                  holdingsSyms.map(sym => (
-                    <HoldingRow
-                      key={sym}
-                      sym={sym}
-                      portfolioId={p.id}
-                      variant="card"
-                      onPress={() => {
-                        // Close the sheet before navigating
-                        onClose();
-                      }}
-                    />
+                  holdingsSyms.map((sym, index) => (
+                    <React.Fragment key={sym}>
+                      <HoldingRow
+                        sym={sym}
+                        portfolioId={p.id}
+                        variant="list"
+                        onPress={() => {
+                          // Close the sheet before navigating
+                          onClose();
+                        }}
+                      />
+                      {index < holdingsSyms.length - 1 && (
+                        <View style={{ height: 1, backgroundColor: get('border.subtle') as string }} />
+                      )}
+                    </React.Fragment>
                   ))
                 ) : (
                   <EmptyState
                     title="No holdings yet"
                     body="Add your first position to track performance."
-                    actionLabel={onAddHolding ? 'Add holding' : undefined}
+                    actionLabel={onAddHolding ? 'Add ticker' : undefined}
                     onPressAction={onAddHolding}
                   />
                 )}
               </View>
             ) : (
-              <View style={{ gap: spacing.s8 }}>
+              <View>
                 {watchlistSyms.length ? (
-                  watchlistSyms.map(sym => (
-                    <WatchRow
-                      key={sym}
-                      sym={sym}
-                      onPress={() => {
-                        // Close the sheet before navigating
-                        onClose();
-                      }}
-                    />
+                  watchlistSyms.map((sym, index) => (
+                    <React.Fragment key={sym}>
+                      <WatchRow
+                        sym={sym}
+                        onPress={() => {
+                          // Close the sheet before navigating
+                          onClose();
+                        }}
+                      />
+                      {index < watchlistSyms.length - 1 && (
+                        <View style={{ height: 1, backgroundColor: get('border.subtle') as string }} />
+                      )}
+                    </React.Fragment>
                   ))
                 ) : (
                   <EmptyState
@@ -456,6 +487,69 @@ export default function PortfolioDetailSheet({
             )}
           </ScrollView>
         )}
+
+        {/* Render PopoverMenu INSIDE BottomSheet */}
+        {menuVisible && menuAnchor && (
+          <View style={{
+            position: 'absolute',
+            top: menuAnchor.y + menuAnchor.h + 6,
+            right: 16,
+            zIndex: 9999,
+            width: 240,
+            backgroundColor: get('surface.level1') as string,
+            borderRadius: radius.lg,
+            borderWidth: 1,
+            borderColor: get('border.subtle') as string,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 8,
+          }}>
+            {menuItems.map((item) => (
+              <Pressable
+                key={item.key}
+                onPress={() => {
+                  setMenuVisible(false);
+                  item.onPress();
+                }}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: spacing.s12,
+                  paddingHorizontal: spacing.s16,
+                  paddingVertical: spacing.s12,
+                  backgroundColor: pressed ? get('surface.level2') as string : 'transparent',
+                })}
+              >
+                {item.icon && (
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: radius.md,
+                      backgroundColor: withAlpha(get(item.destructive ? 'semantic.danger' : 'accent.primary') as string, 0.12),
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Icon name={item.icon} size={18} colorToken={item.destructive ? 'semantic.danger' : 'accent.primary'} />
+                  </View>
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: item.destructive ? get('semantic.danger') as string : textPrimary, fontWeight: '700', fontSize: 15 }}>
+                    {item.label}
+                  </Text>
+                  {item.description && (
+                    <Text style={{ color: item.destructive ? withAlpha(get('semantic.danger') as string, 0.8) : textMuted, fontSize: 12, marginTop: 2 }}>
+                      {item.description}
+                    </Text>
+                  )}
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
       </BottomSheet>
 
       {p ? (
@@ -466,13 +560,6 @@ export default function PortfolioDetailSheet({
           currency={(p.baseCurrency || 'USD').toUpperCase()}
         />
       ) : null}
-
-      <PopoverMenu
-        visible={menuVisible}
-        onClose={() => setMenuVisible(false)}
-        anchor={menuAnchor}
-        items={menuItems}
-      />
     </>
   );
 }

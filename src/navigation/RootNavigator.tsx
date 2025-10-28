@@ -5,7 +5,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { enableScreens } from 'react-native-screens';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home } from '../screens/Home';
 import { Transactions } from '../screens/Transactions';
 import { Budgets } from '../screens/Budgets';
 import BillsModal from '../screens/BillsModal';
@@ -16,7 +15,7 @@ import Settings from '../screens/Settings';
 import Profile from '../screens/Profile';
 import ProfileEdit from '../screens/ProfileEdit';
 import Achievements from '../screens/Achievements';
-import GroupsNavigator from './GroupsNavigator';
+import HomeNavigator from './HomeNavigator';
 import MoneyNavigator from './MoneyNavigator';
 import GoalsNavigator from './GoalsNavigator';
 import InvestNavigator from './InvestNavigator';
@@ -73,7 +72,7 @@ function BottomTabs() {
         ),
       })}
     >
-      <Tab.Screen name="Home" component={Home} options={{ tabBarLabel: 'Spending' }} />
+      <Tab.Screen name="Home" component={HomeNavigator} options={{ tabBarLabel: 'Spending' }} />
       <Tab.Screen name="Money" component={MoneyNavigator} options={{ tabBarLabel: 'Money' }} />
       <Tab.Screen name="Goals" component={GoalsNavigator} options={{ tabBarLabel: 'Goals' }} />
       <Tab.Screen name="Invest" component={InvestNavigator} />
@@ -95,7 +94,6 @@ const styles = StyleSheet.create({
 
 type RootParamList = {
   Tabs: undefined;
-  Groups: undefined;
   TransactionsModal: undefined;
   Add: undefined;
   EditTransaction: { id: string };
@@ -117,7 +115,6 @@ export default function RootNavigator() {
     <NavigationContainer theme={navTheme}>
       <Root.Navigator screenOptions={{ headerShown: false }}>
         <Root.Screen name="Tabs" component={BottomTabs} />
-        <Root.Screen name="Groups" component={GroupsNavigator} options={{ presentation: 'modal' }} />
         <Root.Screen name="TransactionsModal" component={Transactions} options={{ presentation: 'modal' }} />
         <Root.Screen name="Add" component={Add} options={{ presentation: 'modal' }} />
         <Root.Screen name="EditTransaction" component={EditTransaction} options={{ presentation: 'modal' }} />

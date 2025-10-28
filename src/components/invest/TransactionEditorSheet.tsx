@@ -50,25 +50,39 @@ export default function TransactionEditorSheet({ visible, onClose, symbol, portf
     const qty = Number(qtyInput || '0');
     const price = Number(priceInput || '0');
     const fees = feesInput ? Number(feesInput) : 0;
-    if (!symbol || !portfolioId || !qty || !price) { onClose(); return; }
+
+    // Use active portfolio if no portfolioId is provided
+    const pid = portfolioId || store.activePortfolioId;
+
+    if (!symbol || !qty || !price) {
+      console.warn('[TransactionEditorSheet] Missing required fields:', { symbol, qty, price });
+      onClose();
+      return;
+    }
+
+    if (!pid) {
+      console.error('[TransactionEditorSheet] No portfolio ID available');
+      onClose();
+      return;
+    }
 
     const cur = ((profile?.currency) || 'USD').toUpperCase();
     if (mode === 'edit' && lotId) {
-      await store.updateLot(symbol, lotId, { side, qty, price, date: date.toISOString(), fees }, { portfolioId });
+      await store.updateLot(symbol, lotId, { side, qty, price, date: date.toISOString(), fees }, { portfolioId: pid });
       if (affectCash) {
         try {
           const gross = qty * price;
           const cf = side === 'buy' ? -(gross + fees) : (gross - fees);
-          await store.addCash(cf, { portfolioId });
+          await store.addCash(cf, { portfolioId: pid });
         } catch {}
       }
     } else {
-      await store.addLot(symbol, { side, qty, price, date: date.toISOString(), fees }, { name: symbol, type: 'stock', currency: cur }, { portfolioId });
+      await store.addLot(symbol, { side, qty, price, date: date.toISOString(), fees }, { name: symbol, type: 'stock', currency: cur }, { portfolioId: pid });
       if (affectCash) {
         try {
           const gross = qty * price;
           const cf = side === 'buy' ? -(gross + fees) : (gross - fees);
-          await store.addCash(cf, { portfolioId });
+          await store.addCash(cf, { portfolioId: pid });
         } catch {}
       }
     }

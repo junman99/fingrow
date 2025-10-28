@@ -81,8 +81,22 @@ export default function CashManagement() {
         keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingBottom: spacing.s24 }}
       >
-        {/* Header */}
+        {/* Header with Back Button */}
         <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.s8 }}>
+            <Pressable
+              onPress={() => nav.goBack()}
+              style={({ pressed }) => ({
+                padding: spacing.s8,
+                marginLeft: -spacing.s8,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? get('surface.level2') as string : 'transparent',
+              })}
+              hitSlop={8}
+            >
+              <Icon name="chevron-left" size={24} color={text} />
+            </Pressable>
+          </View>
           <Text style={{ color: text, fontWeight: '800', fontSize: 28, letterSpacing: -0.5 }}>
             Cash Management
           </Text>

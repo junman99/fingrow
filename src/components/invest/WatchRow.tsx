@@ -45,14 +45,12 @@ export default function WatchRow({ sym, onPress }: { sym: string; onPress?: () =
   return (
     <Pressable accessibilityRole="button"
       onPress={handlePress}
-      style={{
-        backgroundColor: withAlpha(accent, 0.08),
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        borderColor: withAlpha(accent, 0.3),
-        padding: spacing.s16,
-        marginBottom: spacing.s8,
-      }}
+      style={({ pressed }) => ({
+        backgroundColor: 'transparent',
+        padding: spacing.s12,
+        paddingVertical: spacing.s16,
+        opacity: pressed ? 0.7 : 1,
+      })}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         {/* Left: symbol/name */}

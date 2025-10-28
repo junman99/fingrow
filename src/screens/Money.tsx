@@ -10,6 +10,7 @@ import Icon from '../components/Icon';
 import BottomSheet from '../components/BottomSheet';
 import LineChart from '../components/LineChart';
 import { StackedAreaChart } from '../components/StackedAreaChart';
+import { CompoundBarChart } from '../components/CompoundBarChart';
 import { BarLineComboChart } from '../components/BarLineComboChart';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { WealthJourneySheet } from '../components/WealthJourneySheet';
@@ -22,6 +23,7 @@ import { usePlansStore } from '../store/plans';
 import { useDebtsStore } from '../store/debts';
 import { useTxStore } from '../store/transactions';
 import { useIncomeSplittingStore } from '../store/incomeSplitting';
+import { calculateHistoricalNetWorth, aggregateNetWorthData } from '../lib/netWorthHistory';
 
 function withAlpha(color: string, alpha: number) {
   if (!color) return color;
@@ -388,116 +390,41 @@ const Money: React.FC = () => {
 
   const netWorth = totalCash + portfolioCalc.totalUSD - totalDebt;
 
-  // Generate historical net worth data for chart (mock data for now - you can later integrate with actual historical data)
-  const netWorthHistory = useMemo(() => {
-    const now = Date.now();
-    const day = 24 * 3600 * 1000;
-    const points: Array<{ t: number; v: number }> = [];
-
-    // Generate sample data showing growth over time (replace with real historical data later)
-    for (let i = 180; i >= 0; i--) {
-      const variance = Math.random() * 0.1 - 0.05; // +/- 5% variance
-      const trend = (180 - i) / 180; // upward trend
-      const value = netWorth * (0.7 + trend * 0.3) * (1 + variance);
-      points.push({ t: now - i * day, v: value });
-    }
-
-    return points;
-  }, [netWorth]);
-
-  // Generate stacked area chart data (cash/investments/debt breakdown over time)
-  const stackedChartData = useMemo(() => {
-    const now = Date.now();
-    const day = 24 * 3600 * 1000;
-    const points: Array<{ t: number; cash: number; investments: number; debt: number }> = [];
-
-    // Generate sample composition data
-    for (let i = 180; i >= 0; i--) {
-      const progress = (180 - i) / 180;
-
-      // Simulate changing composition over time
-      const cashVariance = Math.random() * 0.1 - 0.05;
-      const investVariance = Math.random() * 0.15 - 0.075;
-      const debtVariance = Math.random() * 0.08 - 0.04;
-
-      // Cash grows slowly
-      const cash = totalCash * (0.7 + progress * 0.3) * (1 + cashVariance);
-
-      // Investments grow faster
-      const investments = portfolioCalc.totalUSD * (0.5 + progress * 0.5) * (1 + investVariance);
-
-      // Debt decreases over time
-      const debt = totalDebt * (1 - progress * 0.3) * (1 + debtVariance);
-
-      points.push({
-        t: now - i * day,
-        cash: Math.max(0, cash),
-        investments: Math.max(0, investments),
-        debt: Math.max(0, debt)
-      });
-    }
-
-    return points;
-  }, [totalCash, portfolioCalc.totalUSD, totalDebt]);
+  // Calculate real historical net worth data from transactions
+  const netWorthHistoryData = useMemo(() => {
+    return calculateHistoricalNetWorth(
+      accountsList,
+      transactions || [],
+      portfolioCalc.totalUSD,
+      180 // Last 180 days
+    );
+  }, [accountsList, transactions, portfolioCalc.totalUSD]);
 
   const [netWorthTimeframe, setNetWorthTimeframe] = useState<'1W'|'1M'|'3M'|'6M'|'1Y'|'ALL'>('3M');
 
-  // Filter stacked chart data based on timeframe
-  const visibleStackedData = useMemo(() => {
-    if (!stackedChartData.length) return [];
-    const endTs = stackedChartData[stackedChartData.length - 1].t;
-    const end = new Date(endTs);
-    const msDay = 24 * 60 * 60 * 1000;
-
-    const since = (() => {
-      switch (netWorthTimeframe) {
-        case '1W': return endTs - 7 * msDay;
-        case '1M': { const d = new Date(end); d.setMonth(d.getMonth() - 1); return d.getTime(); }
-        case '3M': { const d = new Date(end); d.setMonth(d.getMonth() - 3); return d.getTime(); }
-        case '6M': { const d = new Date(end); d.setMonth(d.getMonth() - 6); return d.getTime(); }
-        case '1Y': { const d = new Date(end); d.setFullYear(d.getFullYear() - 1); return d.getTime(); }
-        default: return 0;
-      }
-    })();
-
-    return netWorthTimeframe === 'ALL' ? stackedChartData : stackedChartData.filter(p => p.t >= since);
-  }, [stackedChartData, netWorthTimeframe]);
-
-  // Calculate visible net worth series based on timeframe
-  const visibleNetWorthSeries = useMemo(() => {
-    if (!netWorthHistory.length) return [];
-    const endTs = netWorthHistory[netWorthHistory.length - 1].t;
-    const end = new Date(endTs);
-    const msDay = 24 * 3600 * 1000;
-
-    const since = (() => {
-      switch (netWorthTimeframe) {
-        case '1W': return endTs - 7 * msDay;
-        case '1M': { const d = new Date(end); d.setMonth(d.getMonth() - 1); return d.getTime(); }
-        case '3M': { const d = new Date(end); d.setMonth(d.getMonth() - 3); return d.getTime(); }
-        case '6M': { const d = new Date(end); d.setMonth(d.getMonth() - 6); return d.getTime(); }
-        case '1Y': { const d = new Date(end); d.setFullYear(d.getFullYear() - 1); return d.getTime(); }
-        default: return 0;
-      }
-    })();
-
-    return netWorthTimeframe === 'ALL' ? netWorthHistory : netWorthHistory.filter(p => p.t >= since);
-  }, [netWorthHistory, netWorthTimeframe]);
+  // Aggregate chart data based on timeframe
+  const aggregatedChartData = useMemo(() => {
+    return aggregateNetWorthData(netWorthHistoryData, netWorthTimeframe);
+  }, [netWorthHistoryData, netWorthTimeframe]);
 
   // Calculate net worth change
   const netWorthChange = useMemo(() => {
-    if (visibleNetWorthSeries.length < 2) return 0;
-    const first = visibleNetWorthSeries[0].v;
-    const last = visibleNetWorthSeries[visibleNetWorthSeries.length - 1].v;
-    return last - first;
-  }, [visibleNetWorthSeries]);
+    if (aggregatedChartData.length < 2) return 0;
+    const first = aggregatedChartData[0];
+    const last = aggregatedChartData[aggregatedChartData.length - 1];
+    const firstNW = first.cash + first.investments - first.debt;
+    const lastNW = last.cash + last.investments - last.debt;
+    return lastNW - firstNW;
+  }, [aggregatedChartData]);
 
   const netWorthChangePercent = useMemo(() => {
-    if (visibleNetWorthSeries.length < 2) return 0;
-    const first = visibleNetWorthSeries[0].v;
-    const last = visibleNetWorthSeries[visibleNetWorthSeries.length - 1].v;
-    return first !== 0 ? ((last - first) / Math.abs(first)) * 100 : 0;
-  }, [visibleNetWorthSeries]);
+    if (aggregatedChartData.length < 2) return 0;
+    const first = aggregatedChartData[0];
+    const last = aggregatedChartData[aggregatedChartData.length - 1];
+    const firstNW = first.cash + first.investments - first.debt;
+    const lastNW = last.cash + last.investments - last.debt;
+    return firstNW !== 0 ? ((lastNW - firstNW) / Math.abs(firstNW)) * 100 : 0;
+  }, [aggregatedChartData]);
 
   // Milestone progress
   const milestoneInfo = useMemo(() => getMilestoneProgress(netWorth), [netWorth]);
@@ -642,10 +569,10 @@ const Money: React.FC = () => {
           </View>
         </View>
 
-        {/* Stacked Area Chart with Segmented Control */}
+        {/* Compound Bar Chart with Segmented Control */}
         <View style={{ gap: spacing.s12 }}>
-          <StackedAreaChart
-            data={visibleStackedData}
+          <CompoundBarChart
+            data={aggregatedChartData}
             height={220}
             showLabels={true}
           />
@@ -661,7 +588,7 @@ const Money: React.FC = () => {
               { value: 'ALL' as const, label: 'ALL' },
             ]}
             value={netWorthTimeframe}
-            onChange={setNetWorthTimeframe}
+            onChange={(val) => setNetWorthTimeframe(val as '1W'|'1M'|'3M'|'6M'|'1Y'|'ALL')}
           />
         </View>
       </View>
@@ -1211,7 +1138,7 @@ const Money: React.FC = () => {
         totalCash={totalCash}
         totalInvestments={portfolioCalc.totalUSD}
         totalDebt={totalDebt}
-        netWorthHistory={netWorthHistory}
+        netWorthHistory={netWorthHistoryData.map(d => ({ t: d.t, v: d.cash + d.investments - d.debt }))}
       />
     </ScreenScroll>
   );

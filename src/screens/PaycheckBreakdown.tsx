@@ -234,7 +234,19 @@ const PaycheckBreakdown: React.FC = () => {
       >
         {/* Header */}
         <View style={{ gap: spacing.s12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+            <Pressable
+              onPress={() => nav.goBack()}
+              style={({ pressed }) => ({
+                padding: spacing.s8,
+                marginLeft: -spacing.s8,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? cardBg : 'transparent',
+              })}
+              hitSlop={8}
+            >
+              <Icon name="chevron-left" size={28} color={text} />
+            </Pressable>
             <View
               style={{
                 width: 56,

@@ -153,7 +153,20 @@ const BillsList: React.FC = () => {
     >
       {/* Header */}
       <Animated.View style={[{ gap: spacing.s8 }, fadeStyle]}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8 }}>
+          <Pressable
+            onPress={() => nav.goBack()}
+            style={({ pressed }) => ({
+              padding: spacing.s8,
+              marginLeft: -spacing.s8,
+              marginTop: -spacing.s4,
+              borderRadius: radius.md,
+              backgroundColor: pressed ? cardBg : 'transparent',
+            })}
+            hitSlop={8}
+          >
+            <Icon name="chevron-left" size={28} color={text} />
+          </Pressable>
           <View style={{ flex: 1 }}>
             <Text style={{ color: muted, fontSize: 14, fontWeight: '600' }}>
               Recurring Bills

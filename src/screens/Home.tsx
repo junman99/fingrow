@@ -12,7 +12,6 @@ import Icon from '../components/Icon';
 import { useTxStore } from '../store/transactions';
 import { useProfileStore } from '../store/profile';
 import { useGroupsStore } from '../store/groups';
-import { useStreaksStore, getStreakMessage, getNextMilestone } from '../store/streaks';
 
 const AnimatedText = Animated.createAnimatedComponent(Text);
 
@@ -137,14 +136,11 @@ export const Home: React.FC = () => {
   const { hydrate: hydrateTx } = useTxStore();
   const { profile, hydrate: hydrateProfile } = useProfileStore();
   const { hydrate: hydrateGroups } = useGroupsStore();
-  const { currentStreak, longestStreak, recordVisit, hydrate: hydrateStreaks } = useStreaksStore();
 
   useEffect(() => {
     hydrateProfile();
     hydrateTx();
     hydrateGroups();
-    hydrateStreaks();
-    recordVisit(); // Track this visit
   }, []);
 
   const accentPrimary = get('accent.primary') as string;
@@ -152,7 +148,6 @@ export const Home: React.FC = () => {
   const textPrimary = get('text.primary') as string;
   const muted = get('text.muted') as string;
   const surface1 = get('surface.level1') as string;
-  const surface2 = get('surface.level2') as string;
   const borderSubtle = get('border.subtle') as string;
   const textOnPrimary = get('text.onPrimary') as string;
 
@@ -230,14 +225,13 @@ export const Home: React.FC = () => {
   }, [nav, navigateWhenIdle]);
 
   const warningAccent = get('semantic.warning') as string;
-  const successAccent = get('semantic.success') as string;
 
   const quickActions = useMemo(() => ([
     {
       key: 'groups',
       icon: 'users-2' as const,
       label: 'Shared bills',
-      onPress: () => navigateWhenIdle(() => nav.navigate('Groups', { screen: 'GroupsRoot' })),
+      onPress: () => navigateWhenIdle(() => nav.navigate('GroupsRoot')),
       accent: accentSecondary
     },
     {
@@ -259,9 +253,9 @@ export const Home: React.FC = () => {
       icon: 'history' as const,
       label: 'History',
       onPress: () => navigateWhenIdle(() => nav.navigate('TransactionsModal')),
-      accent: successAccent
+      accent: get('semantic.success') as string
     }
-  ]), [accentSecondary, accentPrimary, warningAccent, successAccent, nav, navigateWhenIdle]);
+  ]), [accentSecondary, accentPrimary, warningAccent, nav, navigateWhenIdle, get]);
 
   const avatarInitials = (() => {
     const n = profile?.name?.trim();
@@ -282,14 +276,9 @@ export const Home: React.FC = () => {
       >
         {/* Header with profile */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s16 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 32, fontWeight: '800', color: textPrimary, letterSpacing: -0.5 }}>
-              Spending
-            </Text>
-            <Text style={{ color: muted, fontSize: 14, marginTop: spacing.s2 }}>
-              Track your daily flow
-            </Text>
-          </View>
+          <Text style={{ fontSize: 32, fontWeight: '800', color: textPrimary, letterSpacing: -0.5 }}>
+            Spending
+          </Text>
           <AnimatedPressable
             onPress={() => nav.navigate('ProfileModal')}
           >
@@ -321,66 +310,6 @@ export const Home: React.FC = () => {
         <View style={{ marginBottom: spacing.s16 }}>
           <MonthCompareChart />
         </View>
-
-        {/* Streak Counter */}
-        {currentStreak > 0 && (
-          <View style={{ marginBottom: spacing.s16 }}>
-            <View
-              style={{
-                backgroundColor: surface1,
-                borderRadius: radius.lg,
-                borderWidth: 1,
-                borderColor: borderSubtle,
-                padding: spacing.s16,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: spacing.s12,
-              }}
-            >
-              <View
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: radius.md,
-                  backgroundColor: successAccent,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Icon name="zap" size={28} colorToken="text.onPrimary" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s4 }}>
-                  <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
-                    {currentStreak}
-                  </Text>
-                  <Text style={{ color: muted, fontSize: 14, fontWeight: '600' }}>
-                    day streak
-                  </Text>
-                </View>
-                <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s2 }}>
-                  {getStreakMessage(currentStreak)}
-                </Text>
-                {getNextMilestone(currentStreak) && (
-                  <View
-                    style={{
-                      marginTop: spacing.s8,
-                      paddingHorizontal: spacing.s10,
-                      paddingVertical: spacing.s4,
-                      borderRadius: radius.pill,
-                      backgroundColor: surface2,
-                      alignSelf: 'flex-start',
-                    }}
-                  >
-                    <Text style={{ color: muted, fontSize: 11, fontWeight: '600' }}>
-                      {getNextMilestone(currentStreak)!.days - currentStreak} days to {getNextMilestone(currentStreak)!.label}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          </View>
-        )}
 
         {/* Quick Actions */}
         <View style={{ marginBottom: spacing.s16 }}>

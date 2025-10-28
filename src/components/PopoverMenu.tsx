@@ -24,6 +24,7 @@ type Props = {
 };
 
 export default function PopoverMenu({ visible, onClose, anchor, items, maxWidth = 240 }: Props) {
+  console.log('🎨 [PopoverMenu] Rendering:', { visible, anchor, itemsCount: items.length });
   const { get } = useThemeTokens();
   const insets = useSafeAreaInsets();
   const scrW = Dimensions.get('window').width;
@@ -58,11 +59,11 @@ export default function PopoverMenu({ visible, onClose, anchor, items, maxWidth 
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
-      <View style={StyleSheet.absoluteFill} pointerEvents='box-none'>
+      <View style={[StyleSheet.absoluteFill, { zIndex: 9999 }]} pointerEvents='box-none'>
         <Pressable accessibilityRole="button" style={StyleSheet.absoluteFill} onPress={onClose}>
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.25)' }]} />
         </Pressable>
-        <Animated.View style={[styles.panel, { left, top, backgroundColor: bg, borderColor: border, transform: [{ scale }], opacity }]}>
+        <Animated.View style={[styles.panel, { left, top, backgroundColor: bg, borderColor: border, transform: [{ scale }], opacity, zIndex: 10000 }]}>
           {items.map((it) => (
             <Pressable
               key={it.key}

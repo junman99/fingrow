@@ -261,7 +261,7 @@ export const Budgets: React.FC = () => {
   return (
     <ScreenScroll contentStyle={{ paddingBottom: spacing.s24 }}>
       <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s16 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s8 }}>
           <Pressable onPress={() => nav.goBack()} hitSlop={8}>
             <Text style={{ color: textMuted, fontWeight: '600' }}>Close</Text>
           </Pressable>
@@ -271,73 +271,116 @@ export const Budgets: React.FC = () => {
           </Pressable>
         </View>
 
-        <LinearGradient
-          colors={heroGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
-            borderRadius: radius.xl,
-            padding: spacing.s16,
-            paddingBottom: spacing.s16 + spacing.s8,
-            gap: spacing.s12
-          }}
-        >
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <View style={{ flex: 1, paddingRight: spacing.s12, gap: spacing.s6 }}>
-              <Text style={{ color: heroMuted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 }}>Budget pulse</Text>
-              <Text style={{ color: heroText, fontSize: 32, fontWeight: '800' }}>{safePerDayLabel} / day</Text>
-              <Text style={{ color: heroMuted }}>{daysLeftLabel} • {cadenceLabel}</Text>
-              <Text style={{ color: heroMuted }}>{periodRangeLabel}</Text>
-            </View>
-            <View style={{ alignItems: 'flex-end', gap: spacing.s8 }}>
-              <View style={{
-                paddingHorizontal: spacing.s12,
-                paddingVertical: spacing.s6,
-                borderRadius: radius.pill,
-                backgroundColor: riskBg,
-                borderWidth: 1,
-                borderColor: withAlpha(riskColor, 0.3)
-              }}>
-                <Text style={{ color: riskColor, fontWeight: '700' }}>{riskLabel}</Text>
-              </View>
-              <View style={{
-                paddingHorizontal: spacing.s12,
-                paddingVertical: spacing.s6,
-                borderRadius: radius.pill,
-                backgroundColor: paceChipBg,
-                borderWidth: 1,
-                borderColor: withAlpha(paceChipColor, 0.3)
-              }}>
-                <Text style={{ color: paceChipColor, fontWeight: '600' }}>{paceChipLabel}</Text>
-              </View>
-            </View>
+        {/* Budget Pulse - Direct on Background */}
+        <View style={{ gap: spacing.s16 }}>
+          <View style={{ gap: spacing.s4 }}>
+            <Text style={{ color: textMuted, fontSize: 13, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>Budget pulse</Text>
+            <Text style={{ color: textPrimary, fontSize: 36, fontWeight: '800', letterSpacing: -1 }}>{safePerDayLabel}</Text>
+            <Text style={{ color: textMuted, fontSize: 15 }}>safe to spend per day</Text>
           </View>
 
-          <View style={{ height: 12, borderRadius: 6, backgroundColor: withAlpha(heroText, isDark ? 0.16 : 0.22), overflow: 'hidden' }}>
+          {/* Status Badges */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, flexWrap: 'wrap' }}>
             <View style={{
-              width: `${Math.min(100, Math.max(0, usedRatio * 100))}%`,
-              height: '100%',
-              backgroundColor: progressColor,
-              borderRadius: 6
-            }} />
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ color: heroText, fontWeight: '700' }}>{fmtMoney(spent)} / {fmtMoney(budget)}</Text>
-            <Text style={{ color: heroMuted }}>{remainingAfterHoldsLabel} safe after holds</Text>
+              paddingHorizontal: spacing.s12,
+              paddingVertical: spacing.s6,
+              borderRadius: radius.pill,
+              backgroundColor: riskBg,
+              borderWidth: 1,
+              borderColor: withAlpha(riskColor, 0.3)
+            }}>
+              <Text style={{ color: riskColor, fontWeight: '700', fontSize: 13 }}>{riskLabel}</Text>
+            </View>
+            <View style={{
+              paddingHorizontal: spacing.s12,
+              paddingVertical: spacing.s6,
+              borderRadius: radius.pill,
+              backgroundColor: withAlpha(textMuted, 0.1),
+              borderWidth: 1,
+              borderColor: withAlpha(textMuted, 0.2)
+            }}>
+              <Text style={{ color: textMuted, fontWeight: '600', fontSize: 13 }}>{daysLeftLabel}</Text>
+            </View>
+            <View style={{
+              paddingHorizontal: spacing.s12,
+              paddingVertical: spacing.s6,
+              borderRadius: radius.pill,
+              backgroundColor: withAlpha(textMuted, 0.1),
+              borderWidth: 1,
+              borderColor: withAlpha(textMuted, 0.2)
+            }}>
+              <Text style={{ color: textMuted, fontWeight: '600', fontSize: 13 }}>{cadenceLabel}</Text>
+            </View>
           </View>
 
+          {/* Progress Bar */}
+          <View style={{ gap: spacing.s8 }}>
+            <View style={{ height: 12, borderRadius: 6, backgroundColor: withAlpha(textMuted, 0.12), overflow: 'hidden' }}>
+              <View style={{
+                width: `${Math.min(100, Math.max(0, usedRatio * 100))}%`,
+                height: '100%',
+                backgroundColor: progressColor,
+                borderRadius: 6
+              }} />
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>{fmtMoney(spent)} / {fmtMoney(budget)}</Text>
+              <Text style={{ color: textMuted, fontSize: 13 }}>{usedPct}% used</Text>
+            </View>
+          </View>
+
+          {/* Pace Info */}
+          {budget > 0 && (
+            <View style={{
+              padding: spacing.s12,
+              borderRadius: radius.lg,
+              backgroundColor: paceChipBg,
+              borderWidth: 1,
+              borderColor: withAlpha(paceChipColor, 0.3)
+            }}>
+              <Text style={{ color: paceChipColor, fontWeight: '600', fontSize: 14 }}>{paceChipLabel}</Text>
+            </View>
+          )}
+
+          {/* Coach Note */}
           <View style={{
             borderRadius: radius.lg,
             borderWidth: 1,
-            borderColor: heroBorder,
-            padding: spacing.s12,
-            backgroundColor: withAlpha('#000000', isDark ? 0.18 : 0.08),
+            borderColor: borderSubtle,
+            padding: spacing.s14,
+            backgroundColor: surface1,
             gap: spacing.s6
           }}>
-            <Text style={{ color: heroText, fontWeight: '700' }}>Coach note</Text>
-            <Text style={{ color: heroMuted }}>{heroInsight}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+              <View style={{
+                width: 32,
+                height: 32,
+                borderRadius: radius.md,
+                backgroundColor: withAlpha(accentPrimary, 0.12),
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Text style={{ fontSize: 16 }}>💡</Text>
+              </View>
+              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>Coach note</Text>
+            </View>
+            <Text style={{ color: textMuted, fontSize: 14, lineHeight: 20 }}>{heroInsight}</Text>
           </View>
-        </LinearGradient>
+
+          {/* Additional Info */}
+          <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
+            <View style={{ flex: 1, padding: spacing.s12, borderRadius: radius.lg, backgroundColor: surface1, borderWidth: 1, borderColor: borderSubtle }}>
+              <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>Held for bills</Text>
+              <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 18 }}>{fmtMoney(holdAmount)}</Text>
+              <Text style={{ color: textMuted, fontSize: 11, marginTop: spacing.s2 }}>{holdSummaryLabel}</Text>
+            </View>
+            <View style={{ flex: 1, padding: spacing.s12, borderRadius: radius.lg, backgroundColor: surface1, borderWidth: 1, borderColor: borderSubtle }}>
+              <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>Safe after holds</Text>
+              <Text style={{ color: successColor, fontWeight: '800', fontSize: 18 }}>{remainingAfterHoldsLabel}</Text>
+              <Text style={{ color: textMuted, fontSize: 11, marginTop: spacing.s2 }}>{periodRangeLabel}</Text>
+            </View>
+          </View>
+        </View>
 
         <View style={{ gap: spacing.s12 }}>
           <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Cycle highlights</Text>

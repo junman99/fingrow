@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, Alert, TextInput, Switch, Pressable } from 'react-native';
+import { View, Text, Alert, TextInput, Pressable, StyleSheet, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { ScreenScroll } from '../../components/ScreenScroll';
 import Button from '../../components/Button';
 import Icon from '../../components/Icon';
+import DateTimeSheet from '../../components/DateTimeSheet';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
 import { useGroupsStore } from '../../store/groups';
@@ -13,7 +14,16 @@ import type { ID } from '../../types/groups';
 
 const KEY_ADVANCED_OPEN = 'fingrow/ui/addbill/advancedOpen';
 
-type SplitRow = { memberId: string; name: string; base: number; adj: number; final: number };
+function withAlpha(hex: string, alpha: number) {
+  if (!hex || typeof hex !== 'string') return hex;
+  if (hex.startsWith('#')) {
+    const clean = hex.slice(1, 7);
+    const padded = clean.length === 6 ? clean : clean.padEnd(6, '0');
+    const a = Math.round(Math.min(Math.max(alpha, 0), 1) * 255).toString(16).padStart(2, '0');
+    return `#${padded}${a}`;
+  }
+  return hex;
+}
 
 export default function AddBill() {
   const { get, isDark } = useThemeTokens();
@@ -25,194 +35,93 @@ export default function AddBill() {
 
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
-  const [amountMode, setAmountMode] = useState<'subtotal' | 'final'>('subtotal');
-  const [tax, setTax] = useState('0');
-  const [taxPct, setTaxPct] = useState(false);
-  const [discount, setDiscount] = useState('0');
-  const [discountPct, setDiscountPct] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(true);
-  const [proportionalTax, setProportionalTax] = useState(true);
-
-  useEffect(() => {
-    AsyncStorage.getItem(KEY_ADVANCED_OPEN).then(v => {
-      if (v === 'false') setAdvancedOpen(false);
-    });
-  }, []);
+  const [paidBy, setPaidBy] = useState<string | null>(null);
 
   const activeMembers = useMemo(() => group?.members.filter(m => !m.archived) ?? [], [group]);
-  const [participants, setParticipants] = useState<Record<string, boolean>>(() => Object.fromEntries(activeMembers.map(m => [m.id, true])));
+  const [participants, setParticipants] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(activeMembers.map(m => [m.id, true]))
+  );
   const participantIds = Object.entries(participants).filter(([_, v]) => v).map(([k]) => k);
 
-  const [mode, setMode] = useState<'equal' | 'shares' | 'exact'>('equal');
-  const [shares, setShares] = useState<Record<string, string>>({});
+  const [mode, setMode] = useState<'equal' | 'exact'>('equal');
   const [exacts, setExacts] = useState<Record<string, string>>({});
 
-  const [payerMode, setPayerMode] = useState<'single' | 'multi-even' | 'multi-custom'>('single');
-  const [paidBy, setPaidBy] = useState<string | null>(null);
-  const [payersEven, setPayersEven] = useState<Record<string, boolean>>({});
-  const [payersCustom, setPayersCustom] = useState<Record<string, boolean>>({});
-  const [contribs, setContribs] = useState<Record<string, string>>({});
+  // Tax & Fees
+  const [showTaxFees, setShowTaxFees] = useState(false);
+  const [tax, setTax] = useState('');
+  const [serviceCharge, setServiceCharge] = useState('');
+  const [vat, setVat] = useState('');
+
+  // Date & Time
+  const [billDate, setBillDate] = useState(new Date());
+  const [dtOpen, setDtOpen] = useState(false);
 
   const amountNum = useMemo(() => Number(amount) || 0, [amount]);
-  const baseSubtotal = useMemo(() => {
-    if (amountMode === 'final' && mode === 'exact' && proportionalTax) {
-      const base = participantIds.reduce((a, id) => a + (Number(exacts[id] || 0) || 0), 0);
-      return Math.round(base * 100) / 100;
-    }
-    return amountNum;
-  }, [amountMode, amountNum, mode, proportionalTax, exacts, participantIds]);
-
-  const taxVal = useMemo(() => (taxPct ? baseSubtotal * (Number(tax) || 0) / 100 : (Number(tax) || 0)), [taxPct, tax, baseSubtotal]);
-  const discVal = useMemo(() => (discountPct ? baseSubtotal * (Number(discount) || 0) / 100 : (Number(discount) || 0)), [discountPct, discount, baseSubtotal]);
-  const finalAmount = useMemo(() => {
-    if (amountMode === 'final' && mode === 'exact' && proportionalTax) return amountNum;
-    const f = baseSubtotal + (taxVal || 0) - (discVal || 0);
-    return Math.round(f * 100) / 100;
-  }, [amountMode, amountNum, baseSubtotal, taxVal, discVal, mode, proportionalTax]);
-
   const sumExacts = useMemo(() => participantIds.reduce((acc, id) => acc + (Number(exacts[id] || 0) || 0), 0), [exacts, participantIds]);
-  const sumContribs = useMemo(() => Object.values(contribs).reduce((a, b) => a + (Number(b) || 0), 0), [contribs]);
-  const remaining = useMemo(() => Math.round((finalAmount - sumContribs) * 100) / 100, [finalAmount, sumContribs]);
+
+  // Calculate total tax/fees
+  const taxNum = Number(tax) || 0;
+  const serviceChargeNum = Number(serviceCharge) || 0;
+  const vatNum = Number(vat) || 0;
+  const totalFees = useMemo(() => {
+    const base = amountNum;
+    const taxAmt = base * (taxNum / 100);
+    const serviceAmt = base * (serviceChargeNum / 100);
+    const vatAmt = base * (vatNum / 100);
+    return taxAmt + serviceAmt + vatAmt;
+  }, [amountNum, taxNum, serviceChargeNum, vatNum]);
+
+  const finalTotal = amountNum + totalFees;
 
   const toggleParticipant = (id: string) => setParticipants(p => ({ ...p, [id]: !p[id] }));
-
-  const previewRows: SplitRow[] = useMemo(() => {
-    const ids = participantIds;
-    const base = baseSubtotal;
-    const tax = taxVal || 0; const disc = discVal || 0;
-    let baseSplits: { id: string; val: number }[] = [];
-    if (mode === 'equal') {
-      const each = Math.floor((base / (ids.length || 1)) * 100) / 100;
-      let assigned = Math.round(each * (ids.length || 1) * 100) / 100;
-      let remainder = Math.round((base - assigned) * 100) / 100;
-      baseSplits = ids.map((id, idx) => ({ id, val: idx === ids.length - 1 ? Math.round((each + remainder) * 100) / 100 : each }));
-    } else if (mode === 'shares') {
-      const weights = ids.map(id => Number(shares[id] || 1));
-      const weightSum = weights.reduce((a, b) => a + b, 0) || 1;
-      let assigned = 0;
-      baseSplits = ids.map((id, idx) => {
-        let share = Math.round((base * (weights[idx] / weightSum)) * 100) / 100;
-        if (idx === ids.length - 1) share = Math.round((base - assigned) * 100) / 100;
-        assigned = Math.round((assigned + share) * 100) / 100;
-        return { id, val: share };
-      });
-    } else {
-      if (mode === 'exact' && proportionalTax) {
-        const totals = ids.map(id => Number(exacts[id] || 0));
-        const sumEx = Math.round((totals.reduce((a, b) => a + b, 0)) * 100) / 100;
-        if (Math.abs(sumEx - base) > 0.01) return [];
-        baseSplits = ids.map(id => ({ id, val: Math.round((Number(exacts[id] || 0)) * 100) / 100 }));
-      } else if (mode === 'exact' && !proportionalTax) {
-        const totals = ids.map(id => Number(exacts[id] || 0));
-        const s = Math.round(totals.reduce((a, b) => a + b, 0) * 100) / 100;
-        if (Math.abs(s - (finalAmount || 0)) > 0.01) return [];
-        return ids.map(id => ({
-          memberId: id,
-          name: activeMembers.find(m => m.id === id)?.name || '—',
-          base: 0,
-          adj: 0,
-          final: Math.round((Number(exacts[id] || 0)) * 100) / 100
-        }));
-      }
-    }
-    const baseSum = Math.round(baseSplits.reduce((a, b) => a + b.val, 0) * 100) / 100 || 1;
-    return ids.map((id, idx) => {
-      const baseShare = baseSplits.find(s => s.id === id)?.val ?? 0;
-      let finalShare = proportionalTax ? Math.round((baseShare + (baseShare / baseSum) * (tax - disc)) * 100) / 100 : baseShare;
-      if (idx === ids.length - 1) finalShare = Math.round((finalAmount - (baseSplits.slice(0, idx).reduce((a, b) => a + (proportionalTax ? (b.val + (b.val / baseSum) * (tax - disc)) : b.val), 0))) * 100) / 100;
-      const adj = Math.round((finalShare - baseShare) * 100) / 100;
-      return { memberId: id, name: activeMembers.find(m => m.id === id)?.name || '—', base: baseShare, adj, final: finalShare };
-    });
-  }, [participantIds, baseSubtotal, taxVal, discVal, mode, proportionalTax, shares, exacts, finalAmount, activeMembers]);
 
   const onSave = async () => {
     if (!group) return;
     const amt = parseFloat(amount || '0');
     if (isNaN(amt) || amt <= 0) { Alert.alert('Enter a valid amount'); return; }
     if (participantIds.length === 0) { Alert.alert('Select at least one participant'); return; }
+    if (!paidBy) { Alert.alert('Select who paid'); return; }
 
-    const canInferFinal = (mode === 'exact' && proportionalTax && (Number(tax || 0) === 0) && (Number(discount || 0) === 0) && Math.abs(sumExacts - amt) > 0.01);
-    const treatAsFinal = (amountMode === 'final' && mode === 'exact' && proportionalTax) || canInferFinal;
-
-    let payloadAmount = amt;
-    let payloadTaxMode: 'abs' | 'pct' = taxPct ? 'pct' : 'abs';
-    let payloadTax = Number(tax || 0) || 0;
-    let payloadDiscMode: 'abs' | 'pct' = discountPct ? 'pct' : 'abs';
-    let payloadDisc = Number(discount || 0) || 0;
     let exactsMap: Record<string, number> | undefined = undefined;
-    let sharesMap: Record<string, number> | undefined = undefined;
-    let propTax = proportionalTax;
 
-    if (mode === 'shares') {
-      sharesMap = Object.fromEntries(Object.entries(shares).map(([k, v]) => [k as ID, Number(v) || 0]));
-    }
+    // Calculate combined tax percentage
+    let combinedTaxPct = taxNum + serviceChargeNum + vatNum;
+    let baseAmount = amt;
+
     if (mode === 'exact') {
+      // In custom mode: if custom amounts don't sum to base amount, that's OK
+      // The difference will be treated as additional fees/tax split proportionally
       exactsMap = Object.fromEntries(Object.entries(exacts).map(([k, v]) => [k as ID, Number(v) || 0]));
-    }
 
-    if (treatAsFinal) {
-      const baseSum = Math.round((sumExacts) * 100) / 100;
-      if (baseSum <= 0) { Alert.alert('Enter base amounts for at least one participant'); return; }
-      const adj = Math.round((amt - baseSum) * 100) / 100;
-      payloadAmount = baseSum;
-      payloadTaxMode = 'abs'; payloadDiscMode = 'abs';
-      if (adj >= 0) { payloadTax = adj; payloadDisc = 0; } else { payloadTax = 0; payloadDisc = Math.abs(adj); }
-      propTax = true;
-    } else {
-      if (mode === 'exact' && !proportionalTax) {
-        const f = baseSubtotal + (taxVal || 0) - (discVal || 0);
-        const sumF = Math.round(sumExacts * 100) / 100;
-        const fin = Math.round(f * 100) / 100;
-        if (Math.abs(sumF - fin) > 0.01) {
-          Alert.alert(`Exact amounts must sum to ${fin.toFixed(2)}`);
-          return;
-        }
-      } else if (mode === 'exact' && proportionalTax) {
-        const sumBase = Math.round(sumExacts * 100) / 100;
-        if (Math.abs(sumBase - baseSubtotal) > 0.01) {
-          Alert.alert(`Exact base amounts must sum to ${baseSubtotal.toFixed(2)}`);
-          return;
-        }
+      // Calculate the sum of custom amounts
+      const customSum = participantIds.reduce((acc, id) => acc + (Number(exacts[id] || 0) || 0), 0);
+
+      // If custom amounts don't sum to total amount, add the difference to the tax
+      if (Math.abs(customSum - amt) > 0.01) {
+        const difference = amt - customSum;
+        // Convert the absolute difference to a percentage of the custom sum
+        const additionalTaxPct = (difference / customSum) * 100;
+        combinedTaxPct += additionalTaxPct;
+        // Use custom sum as the base amount
+        baseAmount = customSum;
       }
-    }
-
-    let payerModeValue = payerMode;
-    let paidByVal: ID | undefined = undefined;
-    let payersEvenIds: ID[] | undefined = undefined;
-    let contributions: Record<ID, number> | undefined = undefined;
-
-    if (payerMode === 'single') {
-      if (!paidBy) { Alert.alert('Select who paid'); return; }
-      paidByVal = paidBy as ID;
-    } else if (payerMode === 'multi-even') {
-      const ids = Object.entries(payersEven).filter(([_, v]) => v).map(([k]) => k);
-      if (ids.length === 0) { Alert.alert('Select at least one payer'); return; }
-      payersEvenIds = ids as ID[];
-    } else {
-      const entries = Object.entries(contribs).filter(([_, v]) => (Number(v) || 0) > 0);
-      const total = Math.round(entries.reduce((a, [, v]) => a + (Number(v) || 0), 0) * 100) / 100;
-      if (Math.abs(total - finalAmount) > 0.01) { Alert.alert(`Contributions must sum to ${finalAmount.toFixed(2)}`); return; }
-      contributions = Object.fromEntries(entries.map(([k, v]) => [k as ID, Number(v) || 0]));
     }
 
     try {
       await addBill({
         groupId: group.id,
         title: title.trim() || 'Untitled bill',
-        amount: payloadAmount,
-        taxMode: payloadTaxMode,
-        tax: payloadTax,
-        discountMode: payloadDiscMode,
-        discount: payloadDisc,
+        amount: baseAmount,
+        taxMode: 'pct',
+        tax: combinedTaxPct,
+        discountMode: 'abs',
+        discount: 0,
         participants: participantIds as ID[],
         splitMode: mode,
-        shares: sharesMap,
         exacts: exactsMap,
-        proportionalTax: propTax,
-        payerMode: payerModeValue,
-        paidBy: paidByVal,
-        payersEven: payersEvenIds,
-        contributions
+        proportionalTax: true,
+        payerMode: 'single',
+        paidBy: paidBy as ID
       });
       nav.goBack();
     } catch (e: any) {
@@ -224,248 +133,445 @@ export default function AddBill() {
     return (
       <ScreenScroll>
         <View style={{ padding: spacing.s16 }}>
-          <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Add bill</Text>
+          <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800' }}>Add Bill</Text>
           <Text style={{ color: get('text.muted') as string }}>Group not found.</Text>
         </View>
       </ScreenScroll>
     );
   }
 
-  const showAdvanced = advancedOpen && !(amountMode === 'final' && mode === 'exact' && proportionalTax);
-  const derivedAdj = (amountMode === 'final' && mode === 'exact' && proportionalTax) ? Math.round((amountNum - sumExacts) * 100) / 100 : 0;
-
   const accentPrimary = get('accent.primary') as string;
-  const accentSecondary = get('accent.secondary') as string;
   const surface1 = get('surface.level1') as string;
   const surface2 = get('surface.level2') as string;
   const textPrimary = get('text.primary') as string;
   const textMuted = get('text.muted') as string;
   const textOnPrimary = get('text.onPrimary') as string;
-  const textOnSurface = get('text.onSurface') as string;
   const borderSubtle = get('border.subtle') as string;
-  const backgroundDefault = get('background.default') as string;
+  const successColor = get('semantic.success') as string;
 
-  const sectionCardStyle = useMemo(() => ({
-    backgroundColor: surface1,
-    borderRadius: radius.xl,
-    padding: spacing.s16,
-    gap: spacing.s12,
+  const inputStyle = {
     borderWidth: 1,
-    borderColor: withAlpha(borderSubtle, isDark ? 0.6 : 1)
-  }), [surface1, borderSubtle, isDark]);
-
-  const amountPlaceholder = (amountMode === 'final' && mode === 'exact' && proportionalTax)
-    ? 'Final receipt total'
-    : (taxPct || discountPct) ? 'Subtotal amount' : 'Total amount';
-
-  const splitLabel = mode === 'equal' ? 'Split equally'
-    : mode === 'shares' ? 'Weighted shares'
-    : proportionalTax ? 'Exact before tax' : 'Exact final amounts';
-
-  const payerLabel = payerMode === 'single' ? 'One person paid'
-    : payerMode === 'multi-even' ? 'Split payer evenly'
-    : 'Custom contributions';
-
-  const toggleAdvanced = () => {
-    const next = !advancedOpen;
-    setAdvancedOpen(next);
-    AsyncStorage.setItem(KEY_ADVANCED_OPEN, next ? 'true' : 'false');
+    borderColor: borderSubtle,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.s14,
+    paddingHorizontal: spacing.s16,
+    color: textPrimary,
+    backgroundColor: surface1,
+    fontSize: 16
   };
 
-  const chipStyle = (active: boolean) => ({
-    paddingHorizontal: spacing.s12,
-    paddingVertical: spacing.s8,
-    borderRadius: radius.pill,
-    backgroundColor: active ? withAlpha(accentPrimary, isDark ? 0.20 : 0.12) : surface2,
-    borderWidth: 1,
-    borderColor: active ? accentPrimary : withAlpha(borderSubtle, 0.7)
-  });
+  // Color palette for avatars
+  const avatarColors = [
+    { bg: '#EEF2FF', border: '#818CF8', text: '#4F46E5' }, // Indigo
+    { bg: '#FCE7F3', border: '#F472B6', text: '#DB2777' }, // Pink
+    { bg: '#DBEAFE', border: '#60A5FA', text: '#2563EB' }, // Blue
+    { bg: '#D1FAE5', border: '#34D399', text: '#059669' }, // Green
+    { bg: '#FEF3C7', border: '#FBBF24', text: '#D97706' }, // Amber
+    { bg: '#E0E7FF', border: '#A78BFA', text: '#7C3AED' }, // Purple
+  ];
+
+  // Soft sage green for selected state
+  const selectedColor = {
+    bg: '#D1FAE5',
+    border: '#6EE7B7',
+    text: '#047857'
+  };
+
+  const getAvatarColor = (index: number, active: boolean) => {
+    if (active) {
+      return {
+        bg: selectedColor.bg,
+        border: selectedColor.border,
+        text: selectedColor.text
+      };
+    }
+    const colorSet = avatarColors[index % avatarColors.length];
+    // Dim unselected avatars significantly
+    return {
+      bg: isDark ? withAlpha(colorSet.border, 0.08) : withAlpha(colorSet.bg, 0.3),
+      border: isDark ? withAlpha(colorSet.border, 0.25) : withAlpha(colorSet.border, 0.3),
+      text: isDark ? withAlpha(colorSet.border, 0.4) : withAlpha(colorSet.text, 0.4)
+    };
+  };
 
   return (
-    <ScreenScroll contentStyle={{ paddingBottom: spacing.s32 }}>
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s16 }}>
-        <View style={{ gap: spacing.s8 }}>
-          <Text style={{ color: textMuted, fontSize: 12, letterSpacing: 0.8, fontWeight: '700', textTransform: 'uppercase' }}>
-            New shared bill
-          </Text>
-          <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', lineHeight: 36, letterSpacing: -0.5 }}>
-            {finalAmount > 0 ? formatCurrency(finalAmount) : 'Set the total'}
-          </Text>
-          <Text style={{ color: textMuted, fontSize: 14 }}>
-            {splitLabel} • {participantIds.length} participant{participantIds.length === 1 ? '' : 's'} • {payerLabel}
-          </Text>
-        </View>
-
-        <View style={sectionCardStyle}>
-          <View style={{ gap: spacing.s4 }}>
-            <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>Bill details</Text>
-            <Text style={{ color: textMuted, fontSize: 12 }}>Give it a name and add the receipt amount.</Text>
-          </View>
-
-          <TextInput
-            value={title}
-            onChangeText={setTitle}
-            placeholder="Bill title (optional)"
-            placeholderTextColor={textMuted}
-            style={{
-              borderWidth: 1,
-              borderColor: withAlpha(borderSubtle, 0.7),
-              borderRadius: radius.lg,
-              paddingVertical: spacing.s10,
-              paddingHorizontal: spacing.s12,
-              color: textPrimary,
-              backgroundColor: surface2
-            }}
-          />
-
-          <View style={{
-            flexDirection: 'row',
-            backgroundColor: withAlpha(surface2, 0.6),
-            borderRadius: radius.pill,
-            padding: 4,
-            gap: 4
-          }}>
-            {[
-              { value: 'subtotal', label: 'Subtotal amount' },
-              { value: 'final', label: 'Final total' }
-            ].map(opt => {
-              const active = amountMode === opt.value;
-              return (
-                <Pressable
-                  key={opt.value}
-                  onPress={() => {
-                    if (opt.value === 'final') {
-                      setAmountMode('final');
-                      setProportionalTax(true);
-                    } else {
-                      setAmountMode('subtotal');
-                    }
-                  }}
-                  style={({ pressed }) => ({
-                    flex: 1,
-                    borderRadius: radius.pill,
-                    backgroundColor: active ? accentPrimary : 'transparent',
-                    paddingVertical: spacing.s8,
-                    paddingHorizontal: spacing.s12,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    opacity: pressed ? 0.85 : 1
-                  })}
-                >
-                  <Text style={{ color: active ? textOnPrimary : textPrimary, fontWeight: '600' }}>{opt.label}</Text>
-                </Pressable>
-              );
+    <>
+    <ScreenScroll inTab contentStyle={{ paddingBottom: spacing.s24 }}>
+      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16 }}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s20 }}>
+          <Pressable
+            onPress={() => nav.goBack()}
+            style={({ pressed }) => ({
+              padding: spacing.s8,
+              marginLeft: -spacing.s8,
+              opacity: pressed ? 0.6 : 1,
             })}
-          </View>
-
-          <TextInput
-            value={amount}
-            onChangeText={setAmount}
-            placeholder={amountPlaceholder}
-            keyboardType="decimal-pad"
-            placeholderTextColor={textMuted}
-            style={{
-              borderWidth: 1,
-              borderColor: withAlpha(borderSubtle, 0.7),
-              borderRadius: radius.lg,
-              paddingVertical: spacing.s12,
-              paddingHorizontal: spacing.s12,
-              color: textPrimary,
-              backgroundColor: surface2,
-              fontSize: 18,
-              fontWeight: '700'
-            }}
-          />
+            hitSlop={8}
+          >
+            <Icon name="x" size={28} color={textMuted} />
+          </Pressable>
+          <Text style={{ color: textPrimary, fontSize: 18, fontWeight: '700', flex: 1, textAlign: 'center' }}>
+            Add Bill
+          </Text>
+          <Pressable
+            onPress={onSave}
+            style={({ pressed }) => ({
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: successColor,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: pressed ? 0.8 : 1,
+            })}
+            hitSlop={8}
+          >
+            <Icon name="check" size={22} color="#FFFFFF" />
+          </Pressable>
         </View>
 
-        <View style={sectionCardStyle}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <View>
-              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Participants</Text>
-              <Text style={{ color: textMuted, fontSize: 12, marginTop: spacing.s4 }}>Tap to include everyone sharing this bill.</Text>
-            </View>
-            <View style={{ flexDirection: 'row', gap: spacing.s4 }}>
-              <Pressable onPress={() => setParticipants(Object.fromEntries(activeMembers.map(m => [m.id, true])))} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
-                <Text style={{ color: accentPrimary, fontWeight: '600', fontSize: 12 }}>Select all</Text>
-              </Pressable>
-              <Pressable onPress={() => setParticipants(Object.fromEntries(activeMembers.map(m => [m.id, false])))} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
-                <Text style={{ color: textMuted, fontWeight: '600', fontSize: 12 }}>Clear</Text>
-              </Pressable>
+        {/* Combined Amount, Date & Bill Name - Direct on Background */}
+        <View style={{
+          marginBottom: spacing.s24,
+          gap: spacing.s16
+        }}>
+          {/* Top row: Calendar button + Amount */}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s16 }}>
+            {/* Calendar button on left */}
+            <Pressable
+              onPress={() => setDtOpen(true)}
+              style={({ pressed }) => ({
+                alignItems: 'center',
+                gap: spacing.s4,
+                opacity: pressed ? 0.7 : 1,
+                justifyContent: 'center'
+              })}
+            >
+              <View style={{
+                width: 44,
+                height: 44,
+                borderRadius: radius.md,
+                backgroundColor: withAlpha(accentPrimary, 0.12),
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Icon name="calendar" size={22} color={accentPrimary} />
+              </View>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ color: textPrimary, fontSize: 11, fontWeight: '700' }}>
+                  {billDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </Text>
+                <Text style={{ color: textMuted, fontSize: 10 }}>
+                  {billDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </View>
+            </Pressable>
+
+            {/* Amount input on right */}
+            <View style={{ flex: 1, alignItems: 'flex-end' }}>
+              <TextInput
+                value={amount}
+                onChangeText={setAmount}
+                placeholder="$0"
+                keyboardType="decimal-pad"
+                placeholderTextColor={withAlpha(textMuted, 0.3)}
+                autoFocus
+                style={{
+                  color: textPrimary,
+                  fontSize: 56,
+                  fontWeight: '800',
+                  letterSpacing: -2,
+                  textAlign: 'right',
+                  width: '100%'
+                }}
+              />
+              {participantIds.length > 0 && finalTotal > 0 && (
+                <View style={{ marginTop: spacing.s4, alignItems: 'flex-end' }}>
+                  <Text style={{ color: textMuted, fontSize: 13, fontWeight: '500' }}>
+                    {formatCurrency(finalTotal / participantIds.length)} per person
+                  </Text>
+                  {totalFees > 0 && (
+                    <Text style={{ color: textMuted, fontSize: 11, marginTop: spacing.s2 }}>
+                      (includes {formatCurrency(totalFees)} in fees)
+                    </Text>
+                  )}
+                </View>
+              )}
             </View>
           </View>
 
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
-            {activeMembers.map(member => {
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: borderSubtle }} />
+
+          {/* Bill description at bottom */}
+          <View>
+            <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600', marginBottom: spacing.s8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              For what?
+            </Text>
+            <TextInput
+              value={title}
+              onChangeText={setTitle}
+              placeholder="Dinner, groceries, rent..."
+              placeholderTextColor={textMuted}
+              style={{
+                color: textPrimary,
+                fontSize: 16,
+                fontWeight: '500',
+                padding: 0
+              }}
+            />
+          </View>
+        </View>
+
+        {/* Who's In */}
+        <View style={{ marginBottom: spacing.s24 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s14 }}>
+            <Text style={{ color: textPrimary, fontSize: 17, fontWeight: '600' }}>
+              Split with
+            </Text>
+            <Pressable onPress={() => setParticipants(Object.fromEntries(activeMembers.map(m => [m.id, true])))}>
+              <Text style={{ color: accentPrimary, fontWeight: '600', fontSize: 13 }}>Select all</Text>
+            </Pressable>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ flexDirection: 'row', gap: spacing.s12, paddingRight: spacing.s16 }}
+          >
+            {activeMembers.map((member, index) => {
               const active = !!participants[member.id];
+              const initials = member.name.trim().split(/\s+/).slice(0, 2).map((part: string) => part[0]?.toUpperCase() || '').join('') || '?';
+              const colors = getAvatarColor(index, active);
+
               return (
                 <Pressable
                   key={member.id}
                   onPress={() => toggleParticipant(member.id)}
                   style={({ pressed }) => ({
-                    ...chipStyle(active),
-                    opacity: pressed ? 0.8 : 1
+                    alignItems: 'center',
+                    gap: spacing.s8,
+                    opacity: pressed ? 0.7 : 1,
+                    transform: [{ scale: pressed ? 0.95 : 1 }]
                   })}
                 >
-                  <Text style={{ color: active ? accentPrimary : textPrimary, fontWeight: '600' }}>{member.name}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <Text style={{ color: textMuted, fontSize: 12 }}>
-            {participantIds.length === 0 ? 'No one selected yet.' : `${participantIds.length} participant${participantIds.length === 1 ? '' : 's'} selected.`}
-          </Text>
-        </View>
-
-        <View style={sectionCardStyle}>
-          <View style={{ gap: spacing.s4 }}>
-            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Split it up</Text>
-            <Text style={{ color: textMuted, fontSize: 12 }}>Choose how everyone shares the bill.</Text>
-          </View>
-
-          <View style={{
-            flexDirection: 'row',
-            backgroundColor: withAlpha(surface2, 0.6),
-            borderRadius: radius.pill,
-            padding: 4,
-            gap: 4
-          }}>
-            {[
-              { value: 'equal', label: 'Equal' },
-              { value: 'shares', label: 'Shares' },
-              { value: 'exact', label: 'Exact' }
-            ].map(opt => {
-              const active = mode === opt.value;
-              return (
-                <Pressable
-                  key={opt.value}
-                  onPress={() => setMode(opt.value as typeof mode)}
-                  style={({ pressed }) => ({
-                    flex: 1,
-                    borderRadius: radius.pill,
-                    backgroundColor: active ? accentPrimary : 'transparent',
-                    paddingVertical: spacing.s8,
-                    paddingHorizontal: spacing.s12,
+                  <View style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: 32,
+                    backgroundColor: colors.bg,
+                    borderWidth: 3,
+                    borderColor: colors.border,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    opacity: pressed ? 0.85 : 1
-                  })}
-                >
-                  <Text style={{ color: active ? textOnPrimary : textPrimary, fontWeight: '600' }}>{opt.label}</Text>
+                    shadowColor: colors.border,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: active ? 0.3 : 0.1,
+                    shadowRadius: 8,
+                    elevation: active ? 4 : 2
+                  }}>
+                    {active && (
+                      <View style={{
+                        position: 'absolute',
+                        top: -4,
+                        right: -4,
+                        width: 24,
+                        height: 24,
+                        borderRadius: 12,
+                        backgroundColor: successColor,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderWidth: 2,
+                        borderColor: get('background.default') as string
+                      }}>
+                        <Icon name="check" size={12} color="#FFFFFF" />
+                      </View>
+                    )}
+                    <Text style={{
+                      color: colors.text,
+                      fontSize: 20,
+                      fontWeight: '700'
+                    }}>
+                      {initials}
+                    </Text>
+                  </View>
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      color: active ? textPrimary : textMuted,
+                      fontSize: 13,
+                      fontWeight: active ? '600' : '500',
+                      maxWidth: 80,
+                      textAlign: 'center'
+                    }}
+                  >
+                    {member.name}
+                  </Text>
                 </Pressable>
               );
             })}
+          </ScrollView>
+        </View>
+
+        {/* Who Paid */}
+        <View style={{ marginBottom: spacing.s24 }}>
+          <Text style={{ color: textPrimary, fontSize: 17, fontWeight: '600', marginBottom: spacing.s16 }}>
+            Who paid?
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ flexDirection: 'row', gap: spacing.s12, paddingRight: spacing.s16 }}
+          >
+            {activeMembers.map((member, index) => {
+              const active = paidBy === member.id;
+              const initials = member.name.trim().split(/\s+/).slice(0, 2).map((part: string) => part[0]?.toUpperCase() || '').join('') || '?';
+              const colors = getAvatarColor(index, active);
+
+              return (
+                <Pressable
+                  key={member.id}
+                  onPress={() => setPaidBy(member.id)}
+                  style={({ pressed }) => ({
+                    alignItems: 'center',
+                    gap: spacing.s8,
+                    opacity: pressed ? 0.7 : 1,
+                    transform: [{ scale: pressed ? 0.95 : 1 }]
+                  })}
+                >
+                  <View style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: 32,
+                    backgroundColor: colors.bg,
+                    borderWidth: 3,
+                    borderColor: colors.border,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    shadowColor: colors.border,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: active ? 0.3 : 0.1,
+                    shadowRadius: 8,
+                    elevation: active ? 4 : 2
+                  }}>
+                    {active && (
+                      <View style={{
+                        position: 'absolute',
+                        top: -4,
+                        right: -4,
+                        width: 24,
+                        height: 24,
+                        borderRadius: 12,
+                        backgroundColor: successColor,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderWidth: 2,
+                        borderColor: get('background.default') as string
+                      }}>
+                        <Icon name="check" size={12} color="#FFFFFF" />
+                      </View>
+                    )}
+                    <Text style={{
+                      color: colors.text,
+                      fontSize: 20,
+                      fontWeight: '700'
+                    }}>
+                      {initials}
+                    </Text>
+                  </View>
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      color: active ? textPrimary : textMuted,
+                      fontSize: 13,
+                      fontWeight: active ? '600' : '500',
+                      maxWidth: 80,
+                      textAlign: 'center'
+                    }}
+                  >
+                    {member.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {/* Split Method - Combined Card */}
+        <View style={{
+          backgroundColor: surface1,
+          borderRadius: radius.xl,
+          borderWidth: 1,
+          borderColor: borderSubtle,
+          overflow: 'hidden',
+          marginBottom: spacing.s24
+        }}>
+          <View style={{ padding: spacing.s16 }}>
+            <Text style={{ color: textPrimary, fontSize: 17, fontWeight: '600', marginBottom: spacing.s12 }}>
+              How to split
+            </Text>
+            <View style={{
+              flexDirection: 'row',
+              backgroundColor: isDark ? surface2 : get('background.default') as string,
+              borderRadius: radius.lg,
+              padding: 6,
+              gap: 6
+            }}>
+              <Pressable
+                onPress={() => setMode('equal')}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  borderRadius: radius.md,
+                  backgroundColor: mode === 'equal' ? accentPrimary : 'transparent',
+                  paddingVertical: spacing.s14,
+                  alignItems: 'center',
+                  opacity: pressed ? 0.8 : 1,
+                  shadowColor: mode === 'equal' ? accentPrimary : 'transparent',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 4,
+                  elevation: mode === 'equal' ? 2 : 0
+                })}
+              >
+                <Text style={{ color: mode === 'equal' ? textOnPrimary : textPrimary, fontWeight: '700', fontSize: 16 }}>
+                  Equally
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setMode('exact')}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  borderRadius: radius.md,
+                  backgroundColor: mode === 'exact' ? accentPrimary : 'transparent',
+                  paddingVertical: spacing.s14,
+                  alignItems: 'center',
+                  opacity: pressed ? 0.8 : 1,
+                  shadowColor: mode === 'exact' ? accentPrimary : 'transparent',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 4,
+                  elevation: mode === 'exact' ? 2 : 0
+                })}
+              >
+                <Text style={{ color: mode === 'exact' ? textOnPrimary : textPrimary, fontWeight: '700', fontSize: 16 }}>
+                  Custom
+                </Text>
+              </Pressable>
+            </View>
           </View>
 
-          {mode === 'equal' && (
-            <Text style={{ color: textMuted, fontSize: 12 }}>
-              {participantIds.length || '—'} participant{participantIds.length === 1 ? '' : 's'} will split equally.
-            </Text>
-          )}
-
-          {mode === 'shares' && (
-            <View style={{ gap: spacing.s8 }}>
-              <Text style={{ color: textMuted, fontSize: 12 }}>Enter weights – higher numbers pay more.</Text>
-              <View style={{ gap: spacing.s8 }}>
+          {/* Custom Amounts - Expands when Custom is selected */}
+          {mode === 'exact' && (
+            <View style={{
+              borderTopWidth: 1,
+              borderTopColor: borderSubtle,
+              padding: spacing.s16,
+              gap: spacing.s12
+            }}>
+              <Text style={{ color: textMuted, fontSize: 13, fontWeight: '600' }}>
+                Enter each person's share
+              </Text>
+              <View style={{ gap: spacing.s10 }}>
                 {participantIds.map(pid => {
                   const member = activeMembers.find(m => m.id === pid);
                   if (!member) return null;
@@ -473,377 +579,224 @@ export default function AddBill() {
                     <View key={pid} style={{
                       flexDirection: 'row',
                       alignItems: 'center',
-                      borderRadius: radius.lg,
-                      borderWidth: 1,
-                      borderColor: withAlpha(borderSubtle, 0.7),
                       backgroundColor: surface2,
-                      paddingHorizontal: spacing.s12,
-                      paddingVertical: spacing.s10,
+                      borderRadius: radius.lg,
+                      paddingLeft: spacing.s16,
+                      paddingRight: spacing.s12,
+                      paddingVertical: spacing.s14,
                       gap: spacing.s12
                     }}>
-                      <Text style={{ color: textPrimary, flex: 1, fontWeight: '600' }}>{member.name}</Text>
+                      <Text style={{ color: textPrimary, flex: 1, fontWeight: '600', fontSize: 15 }}>{member.name}</Text>
+                      <Text style={{ color: textMuted, fontSize: 20, fontWeight: '300' }}>$</Text>
                       <TextInput
-                        value={shares[pid] ?? ''}
-                        onChangeText={t => setShares(s => ({ ...s, [pid]: t }))}
-                        placeholder="1"
+                        value={exacts[pid] ?? ''}
+                        onChangeText={t => setExacts(s => ({ ...s, [pid]: t }))}
+                        placeholder="0"
                         placeholderTextColor={textMuted}
                         keyboardType="decimal-pad"
                         style={{
                           width: 80,
-                          borderRadius: radius.md,
-                          borderWidth: 1,
-                          borderColor: withAlpha(borderSubtle, 0.7),
-                          paddingVertical: spacing.s8,
-                          paddingHorizontal: spacing.s8,
                           textAlign: 'right',
-                          color: textPrimary
+                          color: textPrimary,
+                          fontWeight: '700',
+                          fontSize: 18
                         }}
                       />
                     </View>
                   );
                 })}
               </View>
-            </View>
-          )}
-
-          {mode === 'exact' && (
-            <View style={{ gap: spacing.s8 }}>
-              <Text style={{ color: textMuted, fontSize: 12 }}>
-                {proportionalTax
-                  ? 'Enter base amounts before tax/discount. We’ll apply adjustments evenly.'
-                  : 'Enter each person’s final amount after tax/discount.'}
-              </Text>
-              <View style={{ gap: spacing.s8 }}>
-                {participantIds.map(pid => {
-                  const member = activeMembers.find(m => m.id === pid);
-                  if (!member) return null;
-                  return (
-                    <View key={pid} style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      borderRadius: radius.lg,
-                      borderWidth: 1,
-                      borderColor: withAlpha(borderSubtle, 0.7),
-                      backgroundColor: surface2,
-                      paddingHorizontal: spacing.s12,
-                      paddingVertical: spacing.s10,
-                      gap: spacing.s12
-                    }}>
-                      <Text style={{ color: textPrimary, flex: 1, fontWeight: '600' }}>{member.name}</Text>
-                      <TextInput
-                        value={exacts[pid] ?? ''}
-                        onChangeText={t => setExacts(s => ({ ...s, [pid]: t }))}
-                        placeholder={proportionalTax ? 'Base amount' : 'Final amount'}
-                        placeholderTextColor={textMuted}
-                        keyboardType="decimal-pad"
-                        style={{
-                          width: 100,
-                          borderRadius: radius.md,
-                          borderWidth: 1,
-                          borderColor: withAlpha(borderSubtle, 0.7),
-                          paddingVertical: spacing.s8,
-                          paddingHorizontal: spacing.s8,
-                          textAlign: 'right',
-                          color: textPrimary
-                        }}
-                      />
-                    </View>
-                  );
-                })}
-              </View>
-              {amountMode === 'final' && mode === 'exact' && proportionalTax ? (
-                <Text style={{ color: derivedAdj >= 0 ? get('semantic.success') as string : get('semantic.warning') as string, fontSize: 12 }}>
-                  We’ll distribute the {derivedAdj >= 0 ? 'additional' : 'remaining'} {formatCurrency(Math.abs(derivedAdj))} proportionally.
-                </Text>
-              ) : null}
+              {Math.abs(sumExacts - amountNum) > 0.01 && amountNum > 0 && (
+                <View style={{
+                  marginTop: spacing.s4,
+                  padding: spacing.s12,
+                  backgroundColor: withAlpha(get('semantic.info') as string, isDark ? 0.15 : 0.1),
+                  borderRadius: radius.md,
+                  borderLeftWidth: 3,
+                  borderLeftColor: get('semantic.info') as string
+                }}>
+                  <Text style={{ color: textPrimary, fontSize: 13, fontWeight: '600', marginBottom: spacing.s4 }}>
+                    {sumExacts < amountNum
+                      ? `${formatCurrency(amountNum - sumExacts)} unassigned`
+                      : `${formatCurrency(sumExacts - amountNum)} over base`}
+                  </Text>
+                  <Text style={{ color: textMuted, fontSize: 12 }}>
+                    {sumExacts < amountNum
+                      ? 'Any difference + tax/fees will be split proportionally based on custom amounts'
+                      : 'Tax & fees will be added on top of these amounts'}
+                  </Text>
+                </View>
+              )}
             </View>
           )}
         </View>
 
-        <View style={sectionCardStyle}>
-          <Pressable
-            onPress={toggleAdvanced}
-            style={({ pressed }) => ({
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingVertical: spacing.s4,
-              opacity: pressed ? 0.7 : 1
-            })}
-          >
-            <View>
-              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Tax & discounts</Text>
-              <Text style={{ color: textMuted, fontSize: 12, marginTop: spacing.s4 }}>Optional adjustments for receipt extras.</Text>
-            </View>
-            <View style={{ transform: [{ rotate: advancedOpen ? '90deg' : '0deg' }] }}>
-              <Icon name="chevron-right" size={20} colorToken="text.muted" />
-            </View>
-          </Pressable>
+        {/* Tax & Fees (Collapsible) - At Bottom */}
+        <View>
+          <View style={{
+            backgroundColor: surface1,
+            borderRadius: radius.lg,
+            borderWidth: 1,
+            borderColor: borderSubtle,
+            overflow: 'hidden'
+          }}>
+            <Pressable
+              onPress={() => setShowTaxFees(!showTaxFees)}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingVertical: spacing.s12,
+                paddingHorizontal: spacing.s16,
+                opacity: pressed ? 0.7 : 1
+              })}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s10 }}>
+                <Icon name={showTaxFees ? 'chevron-down' : 'chevron-right'} size={20} color={textMuted} />
+                <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
+                  Tax & Fees {totalFees > 0 ? `(${formatCurrency(totalFees)})` : ''}
+                </Text>
+              </View>
+              {totalFees > 0 && (
+                <View style={{
+                  backgroundColor: withAlpha(get('semantic.info') as string, 0.15),
+                  paddingHorizontal: spacing.s10,
+                  paddingVertical: spacing.s4,
+                  borderRadius: radius.sm
+                }}>
+                  <Text style={{ color: get('semantic.info') as string, fontSize: 12, fontWeight: '700' }}>
+                    {((totalFees / amountNum) * 100).toFixed(1)}%
+                  </Text>
+                </View>
+              )}
+            </Pressable>
 
-          {showAdvanced && (
-            <View style={{ gap: spacing.s12 }}>
-              <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
-                <View style={{ flex: 1, gap: spacing.s8 }}>
-                  <Text style={{ color: textPrimary, fontWeight: '600' }}>Tax {taxPct ? '(%)' : ''}</Text>
+            {showTaxFees && (
+              <View style={{
+                paddingHorizontal: spacing.s16,
+                paddingBottom: spacing.s16,
+                gap: spacing.s10,
+                borderTopWidth: 1,
+                borderTopColor: borderSubtle,
+                paddingTop: spacing.s12
+              }}>
+                {/* Tax */}
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: surface2,
+                  borderRadius: radius.md,
+                  paddingLeft: spacing.s14,
+                  paddingRight: spacing.s12,
+                  paddingVertical: spacing.s12,
+                  gap: spacing.s12
+                }}>
+                  <Text style={{ color: textPrimary, flex: 1, fontSize: 15 }}>Tax</Text>
                   <TextInput
                     value={tax}
                     onChangeText={setTax}
-                    placeholder={taxPct ? 'e.g. 7 for 7%' : 'Tax amount'}
-                    keyboardType="decimal-pad"
+                    placeholder="0"
                     placeholderTextColor={textMuted}
+                    keyboardType="decimal-pad"
                     style={{
-                      borderWidth: 1,
-                      borderColor: withAlpha(borderSubtle, 0.7),
-                      borderRadius: radius.lg,
-                      paddingVertical: spacing.s10,
-                      paddingHorizontal: spacing.s12,
+                      width: 60,
+                      textAlign: 'right',
                       color: textPrimary,
-                      backgroundColor: surface2
+                      fontWeight: '600',
+                      fontSize: 16
                     }}
                   />
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ color: textMuted }}>Percent</Text>
-                    <Switch value={taxPct} onValueChange={setTaxPct} />
-                  </View>
+                  <Text style={{ color: textMuted, fontSize: 16 }}>%</Text>
                 </View>
-                <View style={{ flex: 1, gap: spacing.s8 }}>
-                  <Text style={{ color: textPrimary, fontWeight: '600' }}>Discount {discountPct ? '(%)' : ''}</Text>
-                  <TextInput
-                    value={discount}
-                    onChangeText={setDiscount}
-                    placeholder={discountPct ? 'e.g. 10 for 10%' : 'Discount amount'}
-                    keyboardType="decimal-pad"
-                    placeholderTextColor={textMuted}
-                    style={{
-                      borderWidth: 1,
-                      borderColor: withAlpha(borderSubtle, 0.7),
-                      borderRadius: radius.lg,
-                      paddingVertical: spacing.s10,
-                      paddingHorizontal: spacing.s12,
-                      color: textPrimary,
-                      backgroundColor: surface2
-                    }}
-                  />
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ color: textMuted }}>Percent</Text>
-                    <Switch value={discountPct} onValueChange={setDiscountPct} />
-                  </View>
-                </View>
-              </View>
 
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={{ color: textMuted }}>Apply proportionally to everyone</Text>
-                <Switch
-                  value={proportionalTax}
-                  onValueChange={setProportionalTax}
-                  disabled={amountMode === 'final' && mode === 'exact'}
-                />
-              </View>
-            </View>
-          )}
-        </View>
-
-        <View style={sectionCardStyle}>
-          <View style={{ gap: spacing.s4 }}>
-            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Who paid?</Text>
-            <Text style={{ color: textMuted, fontSize: 12 }}>Choose how the receipt was covered.</Text>
-          </View>
-
-          <View style={{
-            flexDirection: 'row',
-            backgroundColor: withAlpha(surface2, 0.6),
-            borderRadius: radius.pill,
-            padding: 4,
-            gap: 4
-          }}>
-            {[
-              { value: 'single', label: 'One person' },
-              { value: 'multi-even', label: 'Split evenly' },
-              { value: 'multi-custom', label: 'Custom amounts' }
-            ].map(opt => {
-              const active = payerMode === opt.value;
-              return (
-                <Pressable
-                  key={opt.value}
-                  onPress={() => setPayerMode(opt.value as typeof payerMode)}
-                  style={({ pressed }) => ({
-                    flex: 1,
-                    borderRadius: radius.pill,
-                    backgroundColor: active ? accentPrimary : 'transparent',
-                    paddingVertical: spacing.s8,
-                    paddingHorizontal: spacing.s12,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    opacity: pressed ? 0.85 : 1
-                  })}
-                >
-                  <Text style={{ color: active ? textOnPrimary : textPrimary, fontWeight: '600' }}>{opt.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {payerMode === 'single' && (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
-              {activeMembers.map(member => {
-                const active = paidBy === member.id;
-                return (
-                  <Pressable
-                    key={member.id}
-                    onPress={() => setPaidBy(member.id)}
-                    style={({ pressed }) => ({
-                      ...chipStyle(active),
-                      opacity: pressed ? 0.8 : 1
-                    })}
-                  >
-                    <Text style={{ color: active ? accentPrimary : textPrimary, fontWeight: '600' }}>{member.name}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-
-          {payerMode === 'multi-even' && (
-            <View style={{ gap: spacing.s12 }}>
-              <Text style={{ color: textMuted, fontSize: 12 }}>Select everyone who chipped in equally.</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
-                {activeMembers.map(member => {
-                  const active = !!payersEven[member.id];
-                  return (
-                    <Pressable
-                      key={member.id}
-                      onPress={() => setPayersEven(prev => ({ ...prev, [member.id]: !prev[member.id] }))}
-                      style={({ pressed }) => ({
-                        ...chipStyle(active),
-                        opacity: pressed ? 0.8 : 1
-                      })}
-                    >
-                      <Text style={{ color: active ? accentPrimary : textPrimary, fontWeight: '600' }}>{member.name}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-
-          {payerMode === 'multi-custom' && (
-            <View style={{ gap: spacing.s12 }}>
-              <Text style={{ color: textMuted, fontSize: 12 }}>Toggle contributors and enter the amount each person paid.</Text>
-              <View style={{ gap: spacing.s8 }}>
-                {activeMembers.map(member => {
-                  const active = !!payersCustom[member.id];
-                  return (
-                    <View key={member.id} style={{
-                      borderRadius: radius.lg,
-                      borderWidth: 1,
-                      borderColor: withAlpha(borderSubtle, 0.7),
-                      backgroundColor: active ? withAlpha(accentPrimary, isDark ? 0.20 : 0.12) : surface2,
-                      paddingHorizontal: spacing.s12,
-                      paddingVertical: spacing.s10,
-                      gap: spacing.s8
-                    }}>
-                      <Pressable
-                        onPress={() => setPayersCustom(prev => ({ ...prev, [member.id]: !prev[member.id] }))}
-                        style={({ pressed }) => ({
-                          flexDirection: 'row',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          opacity: pressed ? 0.7 : 1
-                        })}
-                      >
-                        <Text style={{ color: textPrimary, fontWeight: '600' }}>{member.name}</Text>
-                        <Icon name={active ? 'check' : 'plus'} size={18} colorToken={active ? 'accent.primary' : 'text.muted'} />
-                      </Pressable>
-                      <TextInput
-                        value={contribs[member.id] ?? ''}
-                        onChangeText={t => setContribs(s => ({ ...s, [member.id]: t }))}
-                        placeholder="0.00"
-                        placeholderTextColor={textMuted}
-                        keyboardType="decimal-pad"
-                        onFocus={() => setPayersCustom(prev => ({ ...prev, [member.id]: true }))}
-                        style={{
-                          borderRadius: radius.md,
-                          borderWidth: 1,
-                          borderColor: withAlpha(borderSubtle, 0.7),
-                          paddingVertical: spacing.s8,
-                          paddingHorizontal: spacing.s8,
-                          textAlign: 'right',
-                          color: textPrimary,
-                          opacity: active ? 1 : 0.6
-                        }}
-                        editable={active}
-                      />
-                    </View>
-                  );
-                })}
-              </View>
-              <Text style={{ color: remaining === 0 ? get('semantic.success') as string : get('semantic.warning') as string, fontWeight: '600' }}>
-                Remaining to allocate: {formatCurrency(remaining)}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <View style={sectionCardStyle}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Split preview</Text>
-            <Text style={{ color: textMuted, fontSize: 12 }}>{previewRows.length} person{previewRows.length === 1 ? '' : 's'}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ color: textMuted }}>Final amount</Text>
-            <Text style={{ color: textPrimary, fontWeight: '700' }}>{formatCurrency(finalAmount)}</Text>
-          </View>
-          {previewRows.length > 0 ? (
-            <View style={{ gap: spacing.s8 }}>
-              {previewRows.map(row => (
-                <View key={row.memberId} style={{
+                {/* Service Charge */}
+                <View style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  borderRadius: radius.lg,
                   backgroundColor: surface2,
-                  paddingHorizontal: spacing.s12,
-                  paddingVertical: spacing.s8
+                  borderRadius: radius.md,
+                  paddingLeft: spacing.s14,
+                  paddingRight: spacing.s12,
+                  paddingVertical: spacing.s12,
+                  gap: spacing.s12
                 }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: textPrimary, fontWeight: '600' }}>{row.name}</Text>
-                    <Text style={{ color: textMuted, fontSize: 12 }}>
-                      Base {formatCurrency(row.base)} {row.adj !== 0 ? `· Adj ${row.adj > 0 ? '+' : ''}${formatCurrency(Math.abs(row.adj))}` : ''}
+                  <Text style={{ color: textPrimary, flex: 1, fontSize: 15 }}>Service Charge</Text>
+                  <TextInput
+                    value={serviceCharge}
+                    onChangeText={setServiceCharge}
+                    placeholder="0"
+                    placeholderTextColor={textMuted}
+                    keyboardType="decimal-pad"
+                    style={{
+                      width: 60,
+                      textAlign: 'right',
+                      color: textPrimary,
+                      fontWeight: '600',
+                      fontSize: 16
+                    }}
+                  />
+                  <Text style={{ color: textMuted, fontSize: 16 }}>%</Text>
+                </View>
+
+                {/* VAT */}
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: surface2,
+                  borderRadius: radius.md,
+                  paddingLeft: spacing.s14,
+                  paddingRight: spacing.s12,
+                  paddingVertical: spacing.s12,
+                  gap: spacing.s12
+                }}>
+                  <Text style={{ color: textPrimary, flex: 1, fontSize: 15 }}>VAT</Text>
+                  <TextInput
+                    value={vat}
+                    onChangeText={setVat}
+                    placeholder="0"
+                    placeholderTextColor={textMuted}
+                    keyboardType="decimal-pad"
+                    style={{
+                      width: 60,
+                      textAlign: 'right',
+                      color: textPrimary,
+                      fontWeight: '600',
+                      fontSize: 16
+                    }}
+                  />
+                  <Text style={{ color: textMuted, fontSize: 16 }}>%</Text>
+                </View>
+
+                {totalFees > 0 && (
+                  <View style={{
+                    marginTop: spacing.s8,
+                    padding: spacing.s12,
+                    backgroundColor: withAlpha(get('semantic.info') as string, isDark ? 0.1 : 0.08),
+                    borderRadius: radius.md,
+                    borderLeftWidth: 3,
+                    borderLeftColor: get('semantic.info') as string
+                  }}>
+                    <Text style={{ color: textMuted, fontSize: 13 }}>
+                      Total with fees: <Text style={{ fontWeight: '700', color: textPrimary }}>{formatCurrency(finalTotal)}</Text>
                     </Text>
                   </View>
-                  <Text style={{ color: textPrimary, fontWeight: '700' }}>{formatCurrency(row.final)}</Text>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <Text style={{ color: textMuted, fontSize: 12 }}>Add amounts to see the breakdown.</Text>
-          )}
-        </View>
-
-        <View style={{ gap: spacing.s12 }}>
-          <Button title="Save bill" onPress={onSave} />
-          <Button variant="ghost" title="Cancel" onPress={() => nav.goBack()} />
+                )}
+              </View>
+            )}
+          </View>
         </View>
       </View>
     </ScreenScroll>
-  );
-}
 
-function withAlpha(hex: string, alpha: number) {
-  if (!hex || typeof hex !== 'string') return hex;
-  if (hex.startsWith('#')) {
-    const clean = hex.slice(1, 7);
-    const padded = clean.length === 6 ? clean : clean.padEnd(6, '0');
-    const a = Math.round(Math.min(Math.max(alpha, 0), 1) * 255).toString(16).padStart(2, '0');
-    return `#${padded}${a}`;
-  }
-  if (hex.startsWith('rgba')) {
-    return hex.replace(/rgba?\(([^)]+)\)/, (_, inner) => {
-      const parts = inner.split(',').map(p => p.trim());
-      if (parts.length < 3) return hex;
-      const [r, g, b] = parts;
-      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-    });
-  }
-  return hex;
+    <DateTimeSheet
+      visible={dtOpen}
+      date={billDate}
+      onCancel={() => setDtOpen(false)}
+      onConfirm={(d) => {
+        setBillDate(d);
+        setDtOpen(false);
+      }}
+    />
+    </>
+  );
 }

@@ -11,6 +11,7 @@ import { useGoalsStore, type Goal } from '../../store/goals';
 import { useAccountsStore } from '../../store/accounts';
 import { formatCurrency } from '../../lib/format';
 import Svg, { Circle, G } from 'react-native-svg';
+import { useStreaksStore, getStreakMessage, getNextMilestone } from '../../store/streaks';
 
 type TabType = 'milestone' | 'networth';
 
@@ -109,9 +110,14 @@ const GoalsRoot: React.FC = () => {
   const { get, isDark } = useThemeTokens();
   const { goals, achievements, level, xp, hydrate } = useGoalsStore();
   const { accounts } = useAccountsStore();
+  const { currentStreak, longestStreak, recordVisit, hydrate: hydrateStreaks } = useStreaksStore();
   const [activeTab, setActiveTab] = useState<TabType>('milestone');
 
-  useEffect(() => { hydrate(); }, [hydrate]);
+  useEffect(() => {
+    hydrate();
+    hydrateStreaks();
+    recordVisit();
+  }, [hydrate, hydrateStreaks, recordVisit]);
 
   const xpForLevel = (lvl: number) => lvl * 100;
   const currentLevelXP = xpForLevel(level);
@@ -138,6 +144,7 @@ const GoalsRoot: React.FC = () => {
   const text = get('text.primary') as string;
   const muted = get('text.muted') as string;
   const cardBg = get('surface.level1') as string;
+  const surface2 = get('surface.level2') as string;
   const border = get('border.subtle') as string;
   const accentPrimary = get('accent.primary') as string;
   const accentSecondary = get('accent.secondary') as string;
@@ -305,6 +312,64 @@ const GoalsRoot: React.FC = () => {
             </View>
           </AnimatedPressable>
         </View>
+
+        {/* Streak Counter */}
+        {currentStreak > 0 && (
+          <View
+            style={{
+              backgroundColor: cardBg,
+              borderRadius: radius.lg,
+              borderWidth: 1,
+              borderColor: border,
+              padding: spacing.s16,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.s12,
+            }}
+          >
+            <View
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: radius.md,
+                backgroundColor: successColor,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Icon name="zap" size={28} colorToken="text.onPrimary" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s4 }}>
+                <Text style={{ color: text, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
+                  {currentStreak}
+                </Text>
+                <Text style={{ color: muted, fontSize: 14, fontWeight: '600' }}>
+                  day streak
+                </Text>
+              </View>
+              <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s2 }}>
+                {getStreakMessage(currentStreak)}
+              </Text>
+              {getNextMilestone(currentStreak) && (
+                <View
+                  style={{
+                    marginTop: spacing.s8,
+                    paddingHorizontal: spacing.s10,
+                    paddingVertical: spacing.s4,
+                    borderRadius: radius.pill,
+                    backgroundColor: surface2,
+                    alignSelf: 'flex-start',
+                  }}
+                >
+                  <Text style={{ color: muted, fontSize: 11, fontWeight: '600' }}>
+                    {getNextMilestone(currentStreak)!.days - currentStreak} days to {getNextMilestone(currentStreak)!.label}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Hero - Level & XP */}
         <View style={{

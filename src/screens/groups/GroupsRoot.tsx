@@ -135,7 +135,7 @@ export default function GroupsRoot() {
     const me = (activeMembers || []).find((m: any) => (m.name || '').trim().toLowerCase() === meName);
     const myShare = me ? balanceMap[me.id] || 0 : 0;
     const myShareLabel = !me
-      ? 'Add yourself to this group to track your share.'
+      ? 'Not a member'
       : myShare > 0.009
         ? `You are owed ${formatCurrency(myShare)}`
         : myShare < -0.009
@@ -202,14 +202,16 @@ export default function GroupsRoot() {
             </View>
           </View>
 
-          <View style={{
-            marginTop: spacing.s12,
-            padding: spacing.s12,
-            borderRadius: radius.lg,
-            backgroundColor: settled ? surface2 : withAlpha(accentSecondary, isDark ? 0.15 : 0.10)
-          }}>
-            <Text style={{ color: myShareColor, fontWeight: '600' }}>{myShareLabel}</Text>
-          </View>
+          {me && (
+            <View style={{
+              marginTop: spacing.s12,
+              padding: spacing.s12,
+              borderRadius: radius.lg,
+              backgroundColor: settled ? surface2 : withAlpha(accentSecondary, isDark ? 0.15 : 0.10)
+            }}>
+              <Text style={{ color: myShareColor, fontWeight: '600' }}>{myShareLabel}</Text>
+            </View>
+          )}
 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8, marginTop: spacing.s12 }}>
             <View style={{
@@ -254,7 +256,7 @@ export default function GroupsRoot() {
   };
 
   return (
-    <Screen>
+    <Screen inTab>
       <FlatList
         data={filteredData}
         keyExtractor={(item: any) => item.id}
@@ -264,20 +266,24 @@ export default function GroupsRoot() {
         ListHeaderComponentStyle={{ marginBottom: spacing.s16 }}
         ListHeaderComponent={(
           <View>
-            <View style={{ marginTop: spacing.s8 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.s16 }}>
-                <View style={{ flex: 1, paddingRight: spacing.s8 }}>
+            <View style={{ marginTop: spacing.s12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8, marginBottom: spacing.s16 }}>
+                <Pressable
+                  onPress={() => nav.goBack()}
+                  style={({ pressed }) => ({
+                    padding: spacing.s8,
+                    marginLeft: -spacing.s8,
+                    marginTop: -spacing.s4,
+                    borderRadius: radius.md,
+                    backgroundColor: pressed ? surface1 : 'transparent',
+                  })}
+                  hitSlop={8}
+                >
+                  <Icon name="chevron-left" size={28} color={textPrimary} />
+                </Pressable>
+                <View style={{ flex: 1 }}>
                   <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.5 }}>Shared bills</Text>
-                  <Text style={{ color: textMuted, marginTop: spacing.s4, fontSize: 14 }}>
-                    Keep tabs on every group balance and settle up with confidence.
-                  </Text>
                 </View>
-                <Button
-                  title="+ New group"
-                  size="sm"
-                  variant="primary"
-                  onPress={() => nav.navigate('CreateGroup')}
-                />
               </View>
 
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s12, marginBottom: spacing.s8 }}>
@@ -310,41 +316,63 @@ export default function GroupsRoot() {
 
             <View style={{
               marginTop: spacing.s16,
-              backgroundColor: surface1,
-              borderRadius: radius.pill,
-              padding: spacing.s4,
               flexDirection: 'row',
-              alignSelf: 'flex-start',
-              borderWidth: 1,
-              borderColor: borderSubtle
+              alignItems: 'center',
+              gap: spacing.s8,
             }}>
+              <View style={{
+                backgroundColor: surface1,
+                borderRadius: radius.pill,
+                padding: spacing.s4,
+                flexDirection: 'row',
+                borderWidth: 1,
+                borderColor: borderSubtle,
+                flex: 1,
+              }}>
+                <Pressable
+                  onPress={() => setFilterTab('all')}
+                  style={({ pressed }) => ({
+                    paddingVertical: spacing.s6,
+                    paddingHorizontal: spacing.s16,
+                    borderRadius: radius.pill,
+                    backgroundColor: filterTab === 'all' ? accentPrimary : surface1,
+                    opacity: pressed ? 0.85 : 1,
+                    flex: 1,
+                  })}
+                >
+                  <Text style={{ color: filterTab === 'all' ? textOnPrimary : textPrimary, fontWeight: '600', textAlign: 'center' }}>
+                    All groups ({data.length})
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setFilterTab('unsettled')}
+                  style={({ pressed }) => ({
+                    paddingVertical: spacing.s6,
+                    paddingHorizontal: spacing.s16,
+                    borderRadius: radius.pill,
+                    backgroundColor: filterTab === 'unsettled' ? accentPrimary : surface1,
+                    opacity: pressed ? 0.85 : 1,
+                    flex: 1,
+                  })}
+                >
+                  <Text style={{ color: filterTab === 'unsettled' ? textOnPrimary : textPrimary, fontWeight: '600', textAlign: 'center' }}>
+                    Needs attention ({summary.unsettledCount})
+                  </Text>
+                </Pressable>
+              </View>
               <Pressable
-                onPress={() => setFilterTab('all')}
+                onPress={() => nav.navigate('CreateGroup')}
                 style={({ pressed }) => ({
-                  paddingVertical: spacing.s6,
-                  paddingHorizontal: spacing.s16,
+                  width: 40,
+                  height: 40,
                   borderRadius: radius.pill,
-                  backgroundColor: filterTab === 'all' ? accentPrimary : surface1,
-                  opacity: pressed ? 0.85 : 1
+                  backgroundColor: accentPrimary,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: pressed ? 0.85 : 1,
                 })}
               >
-                <Text style={{ color: filterTab === 'all' ? textOnPrimary : textPrimary, fontWeight: '600' }}>
-                  All groups ({data.length})
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setFilterTab('unsettled')}
-                style={({ pressed }) => ({
-                  paddingVertical: spacing.s6,
-                  paddingHorizontal: spacing.s16,
-                  borderRadius: radius.pill,
-                  backgroundColor: filterTab === 'unsettled' ? accentPrimary : surface1,
-                  opacity: pressed ? 0.85 : 1
-                })}
-              >
-                <Text style={{ color: filterTab === 'unsettled' ? textOnPrimary : textPrimary, fontWeight: '600' }}>
-                  Needs attention ({summary.unsettledCount})
-                </Text>
+                <Icon name="plus" size={20} color={textOnPrimary} />
               </Pressable>
             </View>
           </View>

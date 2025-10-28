@@ -37,6 +37,8 @@ type State = {
   addSettlement: (groupId: ID, fromId: ID, toId: ID, amount: number, billId?: ID, memo?: string) => Promise<ID>;
   markSplitPaid: (groupId: ID, billId: ID, memberId: ID) => Promise<void>;
   findBill: (groupId: ID, billId: ID) => Bill | undefined;
+  updateGroup: (groupId: ID, patch: { name?: string; note?: string }) => Promise<void>;
+  deleteGroup: (groupId: ID) => Promise<void>;
 };
 
 const KEY = 'fingrow/groups';
@@ -151,7 +153,7 @@ export const useGroupsStore = create<State>((set, get) => ({
       const totals = participants.map(id => input.exacts?.[id] ?? 0);
       const sumEx = round2(sum(totals));
       if (input.proportionalTax) {
-        if (Math.abs(sumEx - base) > 0.01) throw new Error('Exact base amounts must sum to base amount');
+        // Allow custom amounts that don't sum to base - the difference will be split proportionally with tax/fees
         baseSplits = participants.map(id => ({ memberId: id, share: round2(input.exacts?.[id] ?? 0) }));
       } else {
         baseSplits = [];
@@ -209,8 +211,7 @@ export const useGroupsStore = create<State>((set, get) => ({
       splits: finalSplits,
       createdAt: Date.now()
     };
-    group.bills.unshift(bill);
-    arr[gi] = { ...group };
+    arr[gi] = { ...group, bills: [bill, ...group.bills] };
     set({ groups: arr }); await save(arr);
     return bill.id;
   },
@@ -233,8 +234,9 @@ export const useGroupsStore = create<State>((set, get) => ({
     const arr = [...get().groups];
     const gi = arr.findIndex(g => g.id === groupId);
     if (gi < 0) throw new Error('Group not found');
+    const group = arr[gi];
     const s: Settlement = { id: uid(), fromId, toId, amount: round2(amount), createdAt: Date.now(), billId, memo };
-    arr[gi].settlements = [s, ...(arr[gi].settlements || [])];
+    arr[gi] = { ...group, settlements: [s, ...(group.settlements || [])] };
     set({ groups: arr }); await save(arr);
     return s.id;
   },
@@ -242,25 +244,51 @@ export const useGroupsStore = create<State>((set, get) => ({
     const arr = [...get().groups];
     const gi = arr.findIndex(g => g.id === groupId);
     if (gi < 0) throw new Error('Group not found');
-    const bill = arr[gi].bills.find(b => b.id === billId);
+    const group = arr[gi];
+    const bill = group.bills.find(b => b.id === billId);
     if (!bill) throw new Error('Bill not found');
     const split = bill.splits.find(s => s.memberId === memberId);
     if (!split) throw new Error('Split not found');
     if (split.settled) return;
 
     const totalContrib = bill.contributions.reduce((a,c)=>a+c.amount,0) || 1;
+    const newSettlements: Settlement[] = [];
     // Spread the member's payment to payers pro-rata by their contributions
     bill.contributions.forEach(c => {
-  const amount = round2(split.share * (c.amount / totalContrib));
-  if (c.memberId === memberId) return; // skip self
-  if (amount < 0.01) return; // ignore dust
-  arr[gi].settlements = [{ id: uid(), fromId: memberId, toId: c.memberId, amount, createdAt: Date.now(), billId }, ...(arr[gi].settlements || [])];
-});
-    split.settled = true;
+      const amount = round2(split.share * (c.amount / totalContrib));
+      if (c.memberId === memberId) return; // skip self
+      if (amount < 0.01) return; // ignore dust
+      newSettlements.push({ id: uid(), fromId: memberId, toId: c.memberId, amount, createdAt: Date.now(), billId });
+    });
+
+    const updatedBills = group.bills.map(b => {
+      if (b.id === billId) {
+        return {
+          ...b,
+          splits: b.splits.map(s => s.memberId === memberId ? { ...s, settled: true } : s)
+        };
+      }
+      return b;
+    });
+
+    arr[gi] = { ...group, bills: updatedBills, settlements: [...newSettlements, ...(group.settlements || [])] };
     set({ groups: arr }); await save(arr);
   },
   findBill: (groupId, billId) => {
     const g = get().groups.find(x => x.id === groupId);
     return g?.bills.find(b => b.id === billId);
+  },
+  updateGroup: async (groupId: ID, patch: { name?: string; note?: string }) => {
+    const arr = [...get().groups];
+    const gi = arr.findIndex(g => g.id === groupId);
+    if (gi < 0) throw new Error('Group not found');
+    arr[gi] = { ...arr[gi], ...patch };
+    set({ groups: arr });
+    await save(arr);
+  },
+  deleteGroup: async (groupId: ID) => {
+    const arr = get().groups.filter(g => g.id !== groupId);
+    set({ groups: arr });
+    await save(arr);
   }
 }));

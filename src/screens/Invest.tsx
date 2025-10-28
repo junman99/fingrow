@@ -75,6 +75,7 @@ export const Invest = React.memo(() => {
   const [showManager, setShowManager] = React.useState(false);
   const [showAddHolding, setShowAddHolding] = React.useState(false);
   const [addMode, setAddMode] = React.useState<'holdings'|'watchlist'>('holdings');
+  const [portfolioDefaultTab, setPortfolioDefaultTab] = React.useState<'Holdings'|'Watchlist'>('Holdings');
   const [editPortfolioId, setEditPortfolioId] = React.useState<string | null>(null);
   const [deleteMode, setDeleteMode] = React.useState(false);
   const [selectedPids, setSelectedPids] = React.useState<string[]>([]);
@@ -575,6 +576,7 @@ export const Invest = React.memo(() => {
             onOpenManager={() => setShowManager(true)}
             onOpenPortfolio={(id) => {
               console.log('🟢 [Invest] onOpenPortfolio callback called with id:', id);
+              setPortfolioDefaultTab('Holdings'); // Reset to Holdings when opening normally
               setCurrentPortfolioId(id);
             }}
             onCreate={() => setShowCreateSheet(true)}
@@ -625,7 +627,11 @@ export const Invest = React.memo(() => {
           visible={true}
           onClose={() => {
             setShowAddHolding(false);
-            if (modalPortfolioId) { setCurrentPortfolioId(modalPortfolioId); }
+            if (modalPortfolioId) {
+              setCurrentPortfolioId(modalPortfolioId);
+              // Set the default tab based on what mode was used
+              setPortfolioDefaultTab(addMode === 'watchlist' ? 'Watchlist' : 'Holdings');
+            }
             setModalPortfolioId(null);
           }}
           portfolioId={modalPortfolioId}
@@ -638,16 +644,18 @@ export const Invest = React.memo(() => {
           portfolioId={currentPortfolioId}
           visible={!!currentPortfolioId}
           dimmed={showAddHolding}
+          defaultTab={portfolioDefaultTab}
           onClose={() => {
             console.log('🟡 [Invest] PortfolioDetailSheet onClose called');
             if (!showAddHolding) {
               setCurrentPortfolioId(null);
+              setPortfolioDefaultTab('Holdings'); // Reset to default
             }
           }}
           onEditWatchlist={() => { const id = currentPortfolioId; setCurrentPortfolioId(null); nav.navigate('EditWatchlist' as never, { portfolioId: id } as never); }}
           onFilterHoldings={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setShowHoldingsFilter(true); }}
           onSortHoldings={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setShowHoldingsSort(true); }}
-          onAddHolding={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setAddMode('holdings'); setShowAddHolding(true); }}
+          onAddHolding={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setAddMode('watchlist'); setShowAddHolding(true); }}
           onOpenManager={() => setShowManager(true)}
           onAddWatchlist={() => { setModalPortfolioId(currentPortfolioId); setCurrentPortfolioId(null); setAddMode('watchlist'); setShowAddHolding(true); }}
         />

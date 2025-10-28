@@ -1,7 +1,5 @@
-import React from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
-import * as Haptics from 'expo-haptics';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, Pressable, StyleSheet, Modal, Animated, Alert } from 'react-native';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { ScreenScroll } from '../../components/ScreenScroll';
 import Button from '../../components/Button';
@@ -11,6 +9,7 @@ import { spacing, radius } from '../../theme/tokens';
 import { useGroupsStore } from '../../store/groups';
 import { useProfileStore } from '../../store/profile';
 import { formatCurrency } from '../../lib/format';
+import BottomSheet from '../../components/BottomSheet';
 
 const fmtTime = (d: Date) => {
   const h = d.getHours();
@@ -31,12 +30,97 @@ const sectionLabel = (ts: number) => {
   return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
+function withAlpha(hex: string, alpha: number) {
+  if (!hex || typeof hex !== 'string') return hex;
+  if (hex.startsWith('#')) {
+    const clean = hex.slice(1, 7);
+    const padded = clean.length === 6 ? clean : clean.padEnd(6, '0');
+    const a = Math.round(Math.min(Math.max(alpha, 0), 1) * 255).toString(16).padStart(2, '0');
+    return `#${padded}${a}`;
+  }
+  if (hex.startsWith('rgba')) {
+    return hex.replace(/rgba?\(([^)]+)\)/, (_, inner) => {
+      const parts = inner.split(',').map(p => p.trim());
+      if (parts.length < 3) return hex;
+      const [r, g, b] = parts;
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    });
+  }
+  return hex;
+}
+
+// Animated Pressable component for cards
+const AnimatedPressable: React.FC<{
+  onPress: () => void;
+  children: React.ReactNode;
+  style?: any;
+}> = ({ onPress, children, style }) => {
+  const scaleAnim = React.useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  return (
+    <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+      <Animated.View style={[style, { transform: [{ scale: scaleAnim }] }]}>
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
+};
+
 export default function GroupDetail() {
   const nav = useNavigation<any>();
   const route = useRoute<any>();
   const { groupId } = (route?.params ?? {}) as { groupId: string };
-  const { groups, hydrate, balances } = useGroupsStore();
+  const { groups, hydrate, balances, deleteGroup } = useGroupsStore();
   const { get, isDark } = useThemeTokens();
+  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [showMembersList, setShowMembersList] = useState(false);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [showSettleUpCard, setShowSettleUpCard] = useState(false);
+  const slideAnim = useRef(new Animated.Value(300)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  useEffect(() => {
+    if (showMembersList) {
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 11,
+      }).start();
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: 300,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [showMembersList, slideAnim]);
 
   useFocusEffect(React.useCallback(() => { hydrate(); }, [hydrate]));
   const group = groups.find(g => g.id === groupId);
@@ -54,7 +138,6 @@ export default function GroupDetail() {
 
   const groupBal = balances(group.id) || {};
   const membersActive = group.members.filter(m => !m.archived);
-  const extraCount = Math.max(0, membersActive.length - 8);
 
   const posVals = Object.values(groupBal || {}).filter(v => (v as number) > 0);
   const unsettledTotal = posVals.reduce((a: number, b: any) => a + Math.abs(b as number), 0);
@@ -111,369 +194,976 @@ export default function GroupDetail() {
     const today = new Date();
     const yest = new Date(); yest.setDate(today.getDate() - 1);
     const fmt = (dd: Date) => dd.toDateString();
-    if (fmt(d) === fmt(today)) updatedLabel = 'Updated today';
-    else if (fmt(d) === fmt(yest)) updatedLabel = 'Updated yesterday';
-    else updatedLabel = `Updated ${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    if (fmt(d) === fmt(today)) updatedLabel = 'Today';
+    else if (fmt(d) === fmt(yest)) updatedLabel = 'Yesterday';
+    else updatedLabel = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
   const accentPrimary = get('accent.primary') as string;
-  const accentSecondary = get('accent.secondary') as string;
   const textPrimary = get('text.primary') as string;
   const textMuted = get('text.muted') as string;
   const textOnPrimary = get('text.onPrimary') as string;
-  const textOnSurface = get('text.onSurface') as string;
   const surface1 = get('surface.level1') as string;
   const surface2 = get('surface.level2') as string;
   const borderSubtle = get('border.subtle') as string;
-  const backgroundDefault = get('background.default') as string;
+  const successColor = get('semantic.success') as string;
+  const warningColor = get('semantic.warning') as string;
+  const dangerColor = get('semantic.danger') as string;
 
-  const metrics = [
-    {
-      label: 'Outstanding',
-      value: unsettledTotal > 0.009 ? formatCurrency(unsettledTotal) : 'All settled',
-      caption: unsettledTotal > 0.009 ? 'Across all members' : 'Everyone is even'
-    },
-    {
-      label: 'You owe',
-      value: youOwe > 0.009 ? formatCurrency(youOwe) : 'All clear',
-      caption: youOwe > 0.009 ? 'Pay this to get square' : 'No paybacks pending'
-    },
-    {
-      label: 'Owed to you',
-      value: theyOwe > 0.009 ? formatCurrency(theyOwe) : 'Nothing yet',
-      caption: theyOwe > 0.009 ? 'Give your crew a nudge' : 'No one owes you'
-    }
-  ];
+  const renderMemberRow = (member: any, index: number) => {
+    const initials = member.name.trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase() || '').join('') || '–';
+    const balance = groupBal[member.id] || 0;
+    const balanceText = balance > 0.009
+      ? `Owed ${formatCurrency(balance)}`
+      : balance < -0.009
+      ? `Owes ${formatCurrency(Math.abs(balance))}`
+      : 'Settled';
+    const balanceColor = balance > 0.009
+      ? successColor
+      : balance < -0.009
+      ? warningColor
+      : textMuted;
 
-  const cardStyle = {
-    backgroundColor: surface1,
-    borderRadius: radius.xl,
-    padding: spacing.s16,
-    gap: spacing.s12,
-    borderWidth: 1,
-    borderColor: borderSubtle
-  } as const;
-
-  const memberChip = (name: string, index: number) => {
-    const initials = name.trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase() || '').join('') || '–';
     return (
-      <View key={`${name}-${index}`} style={{
-        alignItems: 'center',
-        width: 72
-      }}>
-        <View style={{
-          width: 56,
-          height: 56,
-          borderRadius: 28,
+      <Pressable
+        key={member.id}
+        onPress={() => {
+          setShowMembersList(false);
+          setSelectedMember(member);
+        }}
+        style={({ pressed }) => ({
+          flexDirection: 'row',
           alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: withAlpha(accentPrimary, isDark ? 0.20 : 0.12),
-          borderWidth: 1.5,
-          borderColor: borderSubtle
-        }}>
-          <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 18 }}>{initials}</Text>
+          gap: spacing.s12,
+          paddingVertical: spacing.s12,
+          paddingHorizontal: spacing.s12,
+          backgroundColor: pressed ? surface2 : 'transparent',
+          borderRadius: radius.md,
+        })}
+      >
+        <View
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: withAlpha(accentPrimary, isDark ? 0.20 : 0.12),
+            borderWidth: 1,
+            borderColor: borderSubtle
+          }}
+        >
+          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 14 }}>{initials}</Text>
         </View>
-        <Text numberOfLines={1} style={{ color: textPrimary, fontSize: 12, marginTop: spacing.s6 }}>{name || 'Member'}</Text>
-      </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 15 }} numberOfLines={1}>
+            {member.name}
+          </Text>
+          {member.contact && (
+            <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }} numberOfLines={1}>
+              {member.contact}
+            </Text>
+          )}
+        </View>
+        <Text style={{ color: balanceColor, fontWeight: '600', fontSize: 14 }}>
+          {balanceText}
+        </Text>
+        <Icon name="chevron-right" size={20} colorToken="text.muted" />
+      </Pressable>
     );
   };
 
   const renderBillRow = (groupIndex: number, groupCount: number) => (item: any, index: number) => {
     const d = new Date(item.createdAt || Date.now());
     const time = fmtTime(d);
-    const isLast = groupIndex === groupCount - 1 && index === (billGroups[groupIndex].items.length - 1);
+    const isLastInCard = groupIndex === groupCount - 1 && index === (billGroups[groupIndex].items.length - 1);
     const amountPositive = item.outstanding > 0.009;
     const amountNegative = item.outstanding < -0.009;
-    const indicatorColor = amountPositive
-      ? get('semantic.success') as string
-      : amountNegative
-        ? get('semantic.danger') as string
-        : withAlpha(borderSubtle, 0.8);
     const amountLabel = amountPositive
       ? `+${formatCurrency(item.outstanding)}`
       : amountNegative
         ? `-${formatCurrency(Math.abs(item.outstanding))}`
         : formatCurrency(0);
     const amountColor = amountPositive
-      ? get('semantic.success') as string
+      ? successColor
       : amountNegative
-        ? get('semantic.danger') as string
+        ? dangerColor
         : textMuted;
 
     return (
-      <Swipeable
+      <Pressable
         key={item.id}
-        overshootLeft={false}
-        overshootRight={false}
-        friction={2}
-        renderLeftActions={() => (
-          <View style={{ justifyContent: 'center' }}>
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                nav.navigate('SettleUp', { groupId: group.id });
-              }}
-              style={{ width: 104, height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: accentPrimary }}
-            >
-              <Text style={{ color: textOnPrimary, fontWeight: '700' }}>Settle</Text>
-            </Pressable>
-          </View>
-        )}
-        renderRightActions={() => (
-          <View style={{ justifyContent: 'center', alignItems: 'flex-end' }}>
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                nav.navigate('SettleUp', { groupId: group.id });
-              }}
-              style={{
-                width: 120,
-                height: '100%',
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: surface2
-              }}
-            >
-              <Text style={{ color: textPrimary, fontWeight: '700' }}>Add payment</Text>
-            </Pressable>
-          </View>
-        )}
+        onPress={() => nav.navigate('BillDetails', { groupId: group.id, billId: item.id })}
       >
-        <Pressable onPress={() => nav.navigate('BillDetails', { groupId: group.id, billId: item.id })}>
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingVertical: spacing.s12,
+          borderBottomWidth: isLastInCard ? 0 : StyleSheet.hairlineWidth,
+          borderBottomColor: borderSubtle
+        }}>
           <View style={{
-            flexDirection: 'row',
+            width: 40,
+            height: 40,
+            borderRadius: radius.md,
+            backgroundColor: amountPositive
+              ? withAlpha(successColor, isDark ? 0.2 : 0.12)
+              : amountNegative
+                ? withAlpha(dangerColor, isDark ? 0.2 : 0.12)
+                : withAlpha(textMuted, isDark ? 0.15 : 0.08),
+            marginRight: spacing.s12,
             alignItems: 'center',
-            paddingVertical: spacing.s12,
-            borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
-            borderBottomColor: withAlpha(borderSubtle, 0.8),
-            gap: spacing.s12
+            justifyContent: 'center'
           }}>
-            <View style={{
-              width: 6,
-              height: 48,
-              borderRadius: radius.pill,
-              backgroundColor: indicatorColor
-            }} />
-            <View style={{ flex: 1 }}>
-              <Text numberOfLines={1} style={{ color: textPrimary, fontWeight: '700' }}>
-                {item.title || 'Untitled bill'}
-              </Text>
-              <Text numberOfLines={1} style={{ color: textMuted, marginTop: spacing.s4 }}>
-                {`Paid by ${item.payerName} · ${time}`}
-              </Text>
-            </View>
-            <View style={{ alignItems: 'flex-end', gap: spacing.s4 }}>
-              <Text style={{ color: amountColor, fontWeight: '700' }}>{amountLabel}</Text>
-              <View style={{
-                paddingHorizontal: spacing.s8,
-                paddingVertical: 4,
-                borderRadius: radius.pill,
-                backgroundColor: withAlpha(surface2, 0.9)
-              }}>
-                <Text style={{ color: textPrimary, fontSize: 12 }}>{item.state}</Text>
-              </View>
-            </View>
+            <Icon
+              name="receipt"
+              size={20}
+              color={amountPositive ? successColor : amountNegative ? dangerColor : textMuted}
+            />
           </View>
-        </Pressable>
-      </Swipeable>
+
+          <View style={{ flex: 1 }}>
+            <Text numberOfLines={1} style={{ color: textPrimary, fontWeight: '700' }}>
+              {item.title || 'Untitled bill'}
+            </Text>
+            <Text numberOfLines={1} style={{ color: textMuted, marginTop: 2 }}>
+              {time} • {item.payerName}
+            </Text>
+          </View>
+
+          <Text style={{ color: amountColor, fontWeight: '700' }}>
+            {amountLabel}
+          </Text>
+        </View>
+      </Pressable>
     );
   };
 
+  // Member detail modal
+  const memberBalance = selectedMember ? (groupBal[selectedMember.id] || 0) : 0;
+  const memberJoinedDate = selectedMember?.joinedAt
+    ? new Date(selectedMember.joinedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+    : group.createdAt
+    ? new Date(group.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+    : 'Unknown';
+
   return (
-    <ScreenScroll contentStyle={{ paddingBottom: spacing.s32 }}>
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s16 }}>
-        <View style={{ gap: spacing.s12 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: spacing.s12 }}>
-            <View style={{ flex: 1, gap: spacing.s4 }}>
-              <Text style={{ color: textMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' }}>Shared group</Text>
-              <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', lineHeight: 36, letterSpacing: -0.5 }}>{group.name}</Text>
-              {updatedLabel ? <Text style={{ color: textMuted, fontSize: 13 }}>{updatedLabel}</Text> : null}
+    <>
+      <ScreenScroll inTab contentStyle={{ paddingBottom: spacing.s32 }}>
+        <Animated.View style={{ opacity: fadeAnim, paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s20 }}>
+          {/* Header with back button */}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12 }}>
+            <Pressable
+              onPress={() => nav.goBack()}
+              style={({ pressed }) => ({
+                padding: spacing.s8,
+                marginLeft: -spacing.s8,
+                marginTop: -spacing.s4,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? surface1 : 'transparent',
+              })}
+              hitSlop={8}
+            >
+              <Icon name="chevron-left" size={28} color={textPrimary} />
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.8, marginTop: spacing.s2 }}>{group.name}</Text>
+              {updatedLabel ? <Text style={{ color: textMuted, fontSize: 13, marginTop: spacing.s4 }}>{updatedLabel}</Text> : null}
             </View>
-            <View style={{
-              backgroundColor: withAlpha(accentPrimary, isDark ? 0.20 : 0.12),
-              borderRadius: radius.lg,
-              paddingHorizontal: spacing.s12,
-              paddingVertical: spacing.s8,
-              alignItems: 'flex-end',
-              gap: spacing.s4,
-              borderWidth: 1,
-              borderColor: borderSubtle
-            }}>
-              <Text style={{ color: textMuted, fontSize: 12 }}>Members</Text>
-              <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 20 }}>{membersActive.length}</Text>
-            </View>
+            <Pressable
+              onPress={() => setShowSettingsMenu(true)}
+              style={({ pressed }) => ({
+                padding: spacing.s8,
+                marginRight: -spacing.s8,
+                marginTop: -spacing.s4,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? surface1 : 'transparent',
+              })}
+              hitSlop={8}
+            >
+              <Icon name="settings" size={24} color={textPrimary} />
+            </Pressable>
           </View>
 
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s12 }}>
-            {metrics.map(metric => (
-              <View key={metric.label} style={{
-                flex: 1,
-                minWidth: 140,
-                backgroundColor: surface2,
-                borderRadius: radius.lg,
-                padding: spacing.s12,
-                gap: spacing.s4,
-                borderWidth: 1,
-                borderColor: borderSubtle
-              }}>
-                <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600' }}>{metric.label}</Text>
-                <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800' }}>{metric.value}</Text>
-                <Text style={{ color: textMuted, fontSize: 12 }}>{metric.caption}</Text>
+          {/* Hero Summary - No Card */}
+          <View style={{ gap: spacing.s16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: textMuted, fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Total Outstanding
+                </Text>
+                <Text style={{ color: textPrimary, fontSize: 40, fontWeight: '900', letterSpacing: -1.5, marginTop: spacing.s6 }}>
+                  {unsettledTotal > 0.009 ? formatCurrency(unsettledTotal) : '$0'}
+                </Text>
+                <Text style={{ color: textMuted, fontSize: 13, marginTop: spacing.s4 }}>
+                  {unsettledTotal > 0.009 ? 'Across all members' : 'Everyone is settled up'}
+                </Text>
               </View>
-            ))}
-          </View>
-
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
-            <Button
-              size="sm"
-              variant="primary"
-              title="Settle up"
-              disabled={unsettledTotal <= 0.009}
-              onPress={() => nav.navigate('SettleUp', { groupId: group.id })}
-              style={{ flexGrow: 1, minWidth: 140 }}
-            />
-            <Button
-              size="sm"
-              variant="secondary"
-              title="Add bill"
-              onPress={() => nav.navigate('AddBill', { groupId: group.id })}
-              style={{ flexGrow: 1, minWidth: 140 }}
-            />
-          </View>
-        </View>
-
-        {group.note ? (
-          <View style={cardStyle}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
-              <Icon name="edit" size={16} colorToken="text.muted" />
-              <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 }}>Group note</Text>
-            </View>
-            <Text style={{ color: textPrimary, lineHeight: 20 }}>{group.note}</Text>
-          </View>
-        ) : null}
-
-        <View style={cardStyle}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.s8 }}>
-            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Members</Text>
-            <Button
-              variant="secondary"
-              size="sm"
-              title="Manage"
-              onPress={() => nav.navigate('ManageMembers', { groupId: group.id })}
-            />
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.s12, paddingVertical: spacing.s4 }}>
-            {membersActive.slice(0, 8).map((member, idx) => memberChip(member.name, idx))}
-            {extraCount > 0 ? (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => nav.navigate('ManageMembers', { groupId: group.id })}
-                style={({ pressed }) => ({
-                  width: 72,
+              <AnimatedPressable
+                onPress={() => setShowMembersList(true)}
+                style={{
+                  backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.18),
+                  borderRadius: radius.xl,
+                  paddingHorizontal: spacing.s16,
+                  paddingVertical: spacing.s14,
                   alignItems: 'center',
-                  opacity: pressed ? 0.72 : 1
-                })}
-              >
-                <View style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 28,
+                  gap: spacing.s6,
                   borderWidth: 1,
                   borderColor: withAlpha(accentPrimary, 0.4),
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: withAlpha(accentPrimary, 0.12)
-                }}>
-                  <Text style={{ color: accentPrimary, fontWeight: '700' }}>+{extraCount}</Text>
-                </View>
-                <Text style={{ color: accentPrimary, fontSize: 12, marginTop: spacing.s6 }}>See all</Text>
-              </Pressable>
-            ) : null}
-          </ScrollView>
-        </View>
-
-        <View style={cardStyle}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.s8 }}>
-            <View>
-              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Recent activity</Text>
-              <Text style={{ color: textMuted, fontSize: 12, marginTop: spacing.s4 }}>Swipe a bill to log a settle or view details.</Text>
+                  minWidth: 90
+                }}
+              >
+                <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600' }}>Members</Text>
+                <Text style={{ color: textPrimary, fontWeight: '900', fontSize: 28, letterSpacing: -0.5 }}>{membersActive.length}</Text>
+              </AnimatedPressable>
             </View>
-            <Button
-              size="sm"
-              variant="secondary"
-              title="Add bill"
-              onPress={() => nav.navigate('AddBill', { groupId: group.id })}
-            />
+
+            {/* Your Balance Summary */}
+            <View style={{
+              flexDirection: 'row',
+              gap: spacing.s12
+            }}>
+              <View style={{
+                flex: 1,
+                backgroundColor: withAlpha(youOwe > 0.009 ? dangerColor : surface2, isDark ? 0.15 : 0.1),
+                borderRadius: radius.lg,
+                padding: spacing.s14,
+                borderWidth: 1,
+                borderColor: withAlpha(youOwe > 0.009 ? dangerColor : borderSubtle, 0.3)
+              }}>
+                <Text style={{ color: textMuted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>You owe</Text>
+                <Text style={{
+                  color: youOwe > 0.009 ? dangerColor : textPrimary,
+                  fontSize: 22,
+                  fontWeight: '900',
+                  marginTop: spacing.s6,
+                  letterSpacing: -0.5
+                }}>
+                  {youOwe > 0.009 ? formatCurrency(youOwe) : '$0'}
+                </Text>
+              </View>
+              <View style={{
+                flex: 1,
+                backgroundColor: withAlpha(theyOwe > 0.009 ? successColor : surface2, isDark ? 0.15 : 0.1),
+                borderRadius: radius.lg,
+                padding: spacing.s14,
+                borderWidth: 1,
+                borderColor: withAlpha(theyOwe > 0.009 ? successColor : borderSubtle, 0.3)
+              }}>
+                <Text style={{ color: textMuted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Owed to you</Text>
+                <Text style={{
+                  color: theyOwe > 0.009 ? successColor : textPrimary,
+                  fontSize: 22,
+                  fontWeight: '900',
+                  marginTop: spacing.s6,
+                  letterSpacing: -0.5
+                }}>
+                  {theyOwe > 0.009 ? formatCurrency(theyOwe) : '$0'}
+                </Text>
+              </View>
+            </View>
           </View>
 
-          {billGroups.length === 0 ? (
+
+          {/* Group Note */}
+          {group.note ? (
             <View style={{
-              borderRadius: radius.lg,
-              borderWidth: 1,
-              borderColor: withAlpha(borderSubtle, 0.8),
+              backgroundColor: withAlpha(surface1, 0.8),
+              borderRadius: radius.xl,
               padding: spacing.s16,
-              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: withAlpha(borderSubtle, 0.6),
               gap: spacing.s8
             }}>
-              <Icon name="receipt" size={24} colorToken="text.muted" />
-              <Text style={{ color: textPrimary, fontWeight: '700' }}>No bills yet</Text>
-              <Text style={{ color: textMuted, textAlign: 'center' }}>
-                Track your first shared expense to see balances update here.
-              </Text>
-              <Button
-                size="sm"
-                title="Create a bill"
-                onPress={() => nav.navigate('AddBill', { groupId: group.id })}
-              />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+                <Icon name="info" size={16} colorToken="text.muted" />
+                <Text style={{ color: textMuted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 }}>Group Note</Text>
+              </View>
+              <Text style={{ color: textPrimary, lineHeight: 20, fontSize: 14 }}>{group.note}</Text>
             </View>
-          ) : (
+          ) : null}
+
+          {/* Recent Activity */}
+          <View style={{
+            borderRadius: radius.lg,
+            overflow: 'hidden',
+            backgroundColor: surface1
+          }}>
             <View style={{
-              borderRadius: radius.lg,
-              borderWidth: 1,
-              borderColor: withAlpha(borderSubtle, 0.8),
-              backgroundColor: surface2,
-              paddingHorizontal: spacing.s12,
-              paddingTop: spacing.s12
+              paddingHorizontal: spacing.s16,
+              paddingTop: spacing.s16,
+              paddingBottom: spacing.s12,
+              backgroundColor: surface1,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between'
             }}>
-              {billGroups.map((billGroup: any, groupIndex: number) => (
-                <View key={billGroup.title} style={{ marginBottom: groupIndex === billGroups.length - 1 ? spacing.s4 : spacing.s12 }}>
-                  <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4, paddingHorizontal: spacing.s4 }}>{billGroup.title}</Text>
-                  <View>
+              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Recent Activity</Text>
+              <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
+                <Pressable
+                  onPress={() => setShowSettleUpCard(!showSettleUpCard)}
+                  disabled={unsettledTotal <= 0.009}
+                  style={({ pressed }) => ({
+                    width: 36,
+                    height: 36,
+                    borderRadius: radius.md,
+                    backgroundColor: showSettleUpCard ? accentPrimary : surface2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: (pressed || unsettledTotal <= 0.009) ? 0.5 : 1
+                  })}
+                >
+                  <Icon name="check" size={18} color={showSettleUpCard ? textOnPrimary : accentPrimary} />
+                </Pressable>
+                <Pressable
+                  onPress={() => nav.navigate('AddBill', { groupId: group.id })}
+                  style={({ pressed }) => ({
+                    width: 36,
+                    height: 36,
+                    borderRadius: radius.md,
+                    backgroundColor: surface2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: pressed ? 0.85 : 1
+                  })}
+                >
+                  <Icon name="plus" size={18} colorToken="accent.primary" />
+                </Pressable>
+              </View>
+            </View>
+
+            {billGroups.length === 0 ? (
+              <Text style={{ color: textMuted, padding: spacing.s16 }}>No bills yet.</Text>
+            ) : (
+              <View style={{ paddingHorizontal: spacing.s16, paddingBottom: spacing.s16 }}>
+                {billGroups.map((billGroup: any, groupIndex: number) => (
+                  <View key={billGroup.title}>
+                    <Text style={{
+                      color: textMuted,
+                      fontSize: 12,
+                      marginTop: spacing.s10
+                    }}>
+                      {billGroup.title}
+                    </Text>
                     {billGroup.items.map(renderBillRow(groupIndex, billGroups.length))}
                   </View>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
+                ))}
+              </View>
+            )}
+          </View>
 
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
-          <Button
-            variant="secondary"
-            title="Reminders"
-            onPress={() => nav.navigate('GroupReminders', { groupId: group.id })}
+        </Animated.View>
+      </ScreenScroll>
+
+      {/* Settle Up Modal - Centered & Beautiful */}
+      {showSettleUpCard && unsettledTotal > 0.009 && (
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: isDark ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.6)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: spacing.s20,
+            zIndex: 100
+          }}
+        >
+          <Pressable
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            onPress={() => setShowSettleUpCard(false)}
           />
-        </View>
-      </View>
-    </ScreenScroll>
-  );
-}
+          <View
+            style={{
+              width: '100%',
+              maxWidth: 400,
+              backgroundColor: surface1,
+              borderRadius: 24,
+              padding: spacing.s24,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 20 },
+              shadowOpacity: 0.4,
+              shadowRadius: 32,
+              elevation: 20
+            }}
+          >
+            {/* Close button */}
+            <Pressable
+              onPress={() => setShowSettleUpCard(false)}
+              style={({ pressed }) => ({
+                position: 'absolute',
+                top: spacing.s16,
+                right: spacing.s16,
+                padding: spacing.s8,
+                borderRadius: radius.pill,
+                backgroundColor: surface2,
+                opacity: pressed ? 0.6 : 1,
+                zIndex: 10
+              })}
+            >
+              <Icon name="x" size={20} color={textMuted} />
+            </Pressable>
 
-function withAlpha(hex: string, alpha: number) {
-  if (!hex || typeof hex !== 'string') return hex;
-  if (hex.startsWith('#')) {
-    const clean = hex.slice(1, 7);
-    const padded = clean.length === 6 ? clean : clean.padEnd(6, '0');
-    const a = Math.round(Math.min(Math.max(alpha, 0), 1) * 255).toString(16).padStart(2, '0');
-    return `#${padded}${a}`;
-  }
-  if (hex.startsWith('rgba')) {
-    return hex.replace(/rgba?\(([^)]+)\)/, (_, inner) => {
-      const parts = inner.split(',').map(p => p.trim());
-      if (parts.length < 3) return hex;
-      const [r, g, b] = parts;
-      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-    });
-  }
-  return hex;
+            {/* Icon & Title */}
+            <View style={{ alignItems: 'center', marginBottom: spacing.s20, marginTop: spacing.s8 }}>
+              <View style={{
+                width: 72,
+                height: 72,
+                borderRadius: 36,
+                backgroundColor: withAlpha(successColor, 0.15),
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: spacing.s16
+              }}>
+                <Text style={{ fontSize: 36 }}>🎉</Text>
+              </View>
+              <Text style={{ color: textPrimary, fontSize: 26, fontWeight: '900', marginBottom: spacing.s6, textAlign: 'center' }}>
+                Settle Up
+              </Text>
+              <Text style={{ color: textMuted, fontSize: 14, textAlign: 'center' }}>
+                Outstanding balance: {formatCurrency(unsettledTotal)}
+              </Text>
+            </View>
+
+            {/* Who owes who */}
+            <View style={{ marginBottom: spacing.s24 }}>
+              {group.members.filter((m: any) => !m.archived).map((member: any) => {
+                const balance = groupBal[member.id] || 0;
+                if (Math.abs(balance) < 0.01) return null;
+                const isOwed = balance > 0;
+                return (
+                  <View key={member.id} style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: spacing.s12,
+                    paddingHorizontal: spacing.s16,
+                    backgroundColor: surface2,
+                    borderRadius: radius.lg,
+                    marginBottom: spacing.s8
+                  }}>
+                    <View style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      backgroundColor: withAlpha(isOwed ? successColor : warningColor, 0.15),
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: spacing.s12
+                    }}>
+                      <Text style={{ color: isOwed ? successColor : warningColor, fontSize: 14, fontWeight: '800' }}>
+                        {member.name.trim().split(/\s+/).slice(0, 2).map((p: string) => p[0]?.toUpperCase() || '').join('') || '?'}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
+                        {member.name}
+                      </Text>
+                      <Text style={{ color: textMuted, fontSize: 13 }}>
+                        {isOwed ? 'is owed' : 'owes'} {formatCurrency(Math.abs(balance))}
+                      </Text>
+                    </View>
+                    <Icon name={isOwed ? 'arrow-down' : 'arrow-up'} size={20} color={isOwed ? successColor : warningColor} />
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* Action button */}
+            <Pressable
+              onPress={() => {
+                setShowSettleUpCard(false);
+                nav.navigate('SettleUp', { groupId: group.id });
+              }}
+              style={({ pressed }) => ({
+                backgroundColor: accentPrimary,
+                paddingVertical: spacing.s16,
+                borderRadius: radius.xl,
+                alignItems: 'center',
+                shadowColor: accentPrimary,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+                elevation: 4,
+                opacity: pressed ? 0.85 : 1
+              })}
+            >
+              <Text style={{ color: textOnPrimary, fontSize: 17, fontWeight: '800' }}>
+                Continue to Settle Up
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* Members List Modal */}
+      <Modal
+        visible={showMembersList}
+        transparent
+        animationType="none"
+        onRequestClose={() => setShowMembersList(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            justifyContent: 'flex-end',
+          }}
+        >
+          <Pressable
+            style={{ flex: 1 }}
+            onPress={() => setShowMembersList(false)}
+          />
+          <Animated.View
+            style={{
+              backgroundColor: surface1,
+              borderTopLeftRadius: radius.xxl,
+              borderTopRightRadius: radius.xxl,
+              paddingTop: spacing.s24,
+              paddingBottom: spacing.s32,
+              paddingHorizontal: spacing.s20,
+              maxHeight: '80%',
+              transform: [{ translateY: slideAnim }],
+              borderTopWidth: 3,
+              borderTopColor: withAlpha(accentPrimary, 0.3)
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s20 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+                <Pressable
+                  onPress={() => setShowMembersList(false)}
+                  style={({ pressed }) => ({
+                    padding: spacing.s8,
+                    marginLeft: -spacing.s8,
+                    borderRadius: radius.md,
+                    backgroundColor: pressed ? surface2 : 'transparent',
+                  })}
+                  hitSlop={8}
+                >
+                  <Icon name="chevron-left" size={24} color={textPrimary} />
+                </Pressable>
+                <View>
+                  <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 22, letterSpacing: -0.5 }}>
+                    Group Members
+                  </Text>
+                  <Text style={{ color: textMuted, fontSize: 13, marginTop: spacing.s2 }}>
+                    {membersActive.length} active member{membersActive.length === 1 ? '' : 's'}
+                  </Text>
+                </View>
+              </View>
+              <Button
+                variant="secondary"
+                size="sm"
+                title="Manage"
+                onPress={() => {
+                  setShowMembersList(false);
+                  nav.navigate('ManageMembers', { groupId: group.id });
+                }}
+              />
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={{ gap: spacing.s4, paddingBottom: spacing.s16 }}>
+                {membersActive.map((member, idx) => renderMemberRow(member, idx))}
+              </View>
+            </ScrollView>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Member Detail Modal */}
+      <Modal
+        visible={!!selectedMember}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedMember(null)}
+      >
+        <Pressable
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: spacing.s16,
+          }}
+          onPress={() => setSelectedMember(null)}
+        >
+          <Animated.View
+            style={{
+              backgroundColor: surface1,
+              borderRadius: radius.xxl,
+              padding: spacing.s24,
+              width: '100%',
+              maxWidth: 400,
+              gap: spacing.s20,
+              borderWidth: 2,
+              borderColor: withAlpha(accentPrimary, 0.3),
+              transform: [{ scale: fadeAnim }]
+            }}
+            onStartShouldSetResponder={() => true}
+          >
+            {selectedMember && (
+              <>
+                <View style={{ alignItems: 'center', gap: spacing.s12 }}>
+                  <View
+                    style={{
+                      width: 90,
+                      height: 90,
+                      borderRadius: 45,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
+                      borderWidth: 3,
+                      borderColor: withAlpha(accentPrimary, 0.4),
+                    }}
+                  >
+                    <Text style={{ color: textPrimary, fontWeight: '900', fontSize: 32 }}>
+                      {selectedMember.name.trim().split(/\s+/).slice(0, 2).map((part: string) => part[0]?.toUpperCase() || '').join('') || '–'}
+                    </Text>
+                  </View>
+                  <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 24, letterSpacing: -0.5 }}>
+                    {selectedMember.name}
+                  </Text>
+                </View>
+
+                <View style={{ gap: spacing.s12 }}>
+                  {selectedMember.contact && (
+                    <View
+                      style={{
+                        backgroundColor: surface2,
+                        borderRadius: radius.lg,
+                        padding: spacing.s16,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: spacing.s12,
+                        borderWidth: 1,
+                        borderColor: withAlpha(borderSubtle, 0.5)
+                      }}
+                    >
+                      <Icon name="mail" size={20} colorToken="accent.primary" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600' }}>Contact</Text>
+                        <Text style={{ color: textPrimary, fontSize: 15, marginTop: 2 }}>
+                          {selectedMember.contact}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  <View
+                    style={{
+                      backgroundColor: surface2,
+                      borderRadius: radius.lg,
+                      padding: spacing.s16,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: spacing.s12,
+                      borderWidth: 1,
+                      borderColor: withAlpha(borderSubtle, 0.5)
+                    }}
+                  >
+                    <Icon name="calendar" size={20} colorToken="accent.primary" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600' }}>Joined</Text>
+                      <Text style={{ color: textPrimary, fontSize: 15, marginTop: 2 }}>
+                        {memberJoinedDate}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View
+                    style={{
+                      backgroundColor: surface2,
+                      borderRadius: radius.lg,
+                      padding: spacing.s16,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: spacing.s12,
+                      borderWidth: 1,
+                      borderColor: withAlpha(borderSubtle, 0.5)
+                    }}
+                  >
+                    <Icon name="dollar-sign" size={20} colorToken="accent.primary" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600' }}>Balance</Text>
+                      <Text
+                        style={{
+                          color: memberBalance > 0.009
+                            ? successColor
+                            : memberBalance < -0.009
+                            ? warningColor
+                            : textPrimary,
+                          fontSize: 20,
+                          fontWeight: '800',
+                          marginTop: 4,
+                          letterSpacing: -0.5
+                        }}
+                      >
+                        {memberBalance > 0.009
+                          ? `Owed ${formatCurrency(memberBalance)}`
+                          : memberBalance < -0.009
+                          ? `Owes ${formatCurrency(Math.abs(memberBalance))}`
+                          : 'Settled'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <Button
+                  title="Close"
+                  variant="secondary"
+                  onPress={() => setSelectedMember(null)}
+                />
+              </>
+            )}
+          </Animated.View>
+        </Pressable>
+      </Modal>
+
+      {/* Settings Menu Bottom Sheet */}
+      <BottomSheet
+        visible={showSettingsMenu}
+        onClose={() => setShowSettingsMenu(false)}
+      >
+        <View style={{ gap: spacing.s16, paddingBottom: spacing.s16 }}>
+          <View>
+            <Text style={{ color: textPrimary, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 }}>
+              Group settings
+            </Text>
+            <Text style={{ color: textMuted, fontSize: 13, marginTop: spacing.s4 }}>
+              Manage {group.name}
+            </Text>
+          </View>
+
+          <View style={{ gap: spacing.s8 }}>
+            {/* Manage Members */}
+            <Pressable
+              onPress={() => {
+                setShowSettingsMenu(false);
+                setTimeout(() => nav.navigate('ManageMembers', { groupId: group.id }), 200);
+              }}
+              style={({ pressed }) => ({
+                backgroundColor: surface1,
+                borderRadius: radius.lg,
+                padding: spacing.s16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.s12,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <View style={{
+                width: 40,
+                height: 40,
+                borderRadius: radius.md,
+                backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Icon name="users" size={20} colorToken="accent.primary" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>Manage members</Text>
+                <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>Edit or remove members</Text>
+              </View>
+              <Icon name="chevron-right" size={20} colorToken="text.muted" />
+            </Pressable>
+
+            {/* View Reminders */}
+            <Pressable
+              onPress={() => {
+                setShowSettingsMenu(false);
+                setTimeout(() => nav.navigate('GroupReminders', { groupId: group.id }), 200);
+              }}
+              style={({ pressed }) => ({
+                backgroundColor: surface1,
+                borderRadius: radius.lg,
+                padding: spacing.s16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.s12,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <View style={{
+                width: 40,
+                height: 40,
+                borderRadius: radius.md,
+                backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Icon name="bell" size={20} colorToken="accent.primary" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>View reminders</Text>
+                <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>Manage payment reminders</Text>
+              </View>
+              <Icon name="chevron-right" size={20} colorToken="text.muted" />
+            </Pressable>
+
+            {/* Edit Group */}
+            <Pressable
+              onPress={() => {
+                setShowSettingsMenu(false);
+                setTimeout(() => nav.navigate('EditGroup', { groupId: group.id }), 200);
+              }}
+              style={({ pressed }) => ({
+                backgroundColor: surface1,
+                borderRadius: radius.lg,
+                padding: spacing.s16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.s12,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <View style={{
+                width: 40,
+                height: 40,
+                borderRadius: radius.md,
+                backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Icon name="edit-3" size={20} colorToken="accent.primary" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>Edit group</Text>
+                <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>Change name or description</Text>
+              </View>
+              <Icon name="chevron-right" size={20} colorToken="text.muted" />
+            </Pressable>
+
+            {/* Export History */}
+            <Pressable
+              onPress={() => {
+                setShowSettingsMenu(false);
+                setTimeout(() => {
+                  // Generate CSV data
+                  const csvBills = ['Bill ID,Title,Amount,Date,Paid By,Status'];
+                  (group.bills || []).forEach(bill => {
+                    const payer = (bill.contributions || [])[0];
+                    const payerMember = (group.members || []).find(m => m.id === payer?.memberId);
+                    const payerName = payerMember?.name || 'Unknown';
+                    const date = new Date(bill.createdAt || Date.now()).toLocaleDateString();
+                    const allSettled = (bill.splits || []).every(s => s.settled);
+                    const status = allSettled ? 'Settled' : 'Pending';
+                    csvBills.push(`${bill.id},"${bill.title}",${bill.finalAmount},${date},"${payerName}",${status}`);
+                  });
+
+                  const csvSettlements = ['Settlement ID,From,To,Amount,Date,Bill ID'];
+                  (group.settlements || []).forEach(settlement => {
+                    const fromMember = (group.members || []).find(m => m.id === settlement.fromId);
+                    const toMember = (group.members || []).find(m => m.id === settlement.toId);
+                    const date = new Date(settlement.createdAt || Date.now()).toLocaleDateString();
+                    csvSettlements.push(`${settlement.id},"${fromMember?.name || 'Unknown'}","${toMember?.name || 'Unknown'}",${settlement.amount},${date},${settlement.billId || 'N/A'}`);
+                  });
+
+                  const billsCSV = csvBills.join('\n');
+                  const settlementsCSV = csvSettlements.join('\n');
+                  const fullCSV = `BILLS\n${billsCSV}\n\nSETTLEMENTS\n${settlementsCSV}`;
+
+                  Alert.alert(
+                    'Export History',
+                    `Ready to export ${group.bills.length} bills and ${group.settlements?.length || 0} settlements.\n\nNote: Full export functionality (saving to file) will be implemented soon.`,
+                    [
+                      { text: 'OK' },
+                      {
+                        text: 'Preview',
+                        onPress: () => Alert.alert('CSV Preview', fullCSV.substring(0, 500) + '...')
+                      }
+                    ]
+                  );
+                }, 200);
+              }}
+              style={({ pressed }) => ({
+                backgroundColor: surface1,
+                borderRadius: radius.lg,
+                padding: spacing.s16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.s12,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <View style={{
+                width: 40,
+                height: 40,
+                borderRadius: radius.md,
+                backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Icon name="download" size={20} colorToken="accent.primary" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>Export history</Text>
+                <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>Download bills and payments</Text>
+              </View>
+              <Icon name="chevron-right" size={20} colorToken="text.muted" />
+            </Pressable>
+
+            {/* Delete Group */}
+            <Pressable
+              onPress={() => {
+                setShowSettingsMenu(false);
+                setTimeout(() => {
+                  Alert.alert(
+                    'Delete group',
+                    `Are you sure you want to delete "${group.name}"?\n\nThis will permanently delete:\n• ${group.bills?.length || 0} bills\n• ${group.settlements?.length || 0} settlements\n• ${group.members?.length || 0} members\n\nThis action cannot be undone.`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: async () => {
+                          try {
+                            await deleteGroup(group.id);
+                            Alert.alert('Success', 'Group deleted successfully', [
+                              { text: 'OK', onPress: () => nav.navigate('GroupsRoot') }
+                            ]);
+                          } catch (e: any) {
+                            Alert.alert('Error', e?.message || String(e));
+                          }
+                        }
+                      }
+                    ]
+                  );
+                }, 200);
+              }}
+              style={({ pressed }) => ({
+                backgroundColor: withAlpha(dangerColor, isDark ? 0.15 : 0.1),
+                borderRadius: radius.lg,
+                padding: spacing.s16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.s12,
+                opacity: pressed ? 0.7 : 1,
+                borderWidth: 1,
+                borderColor: withAlpha(dangerColor, 0.3),
+              })}
+            >
+              <View style={{
+                width: 40,
+                height: 40,
+                borderRadius: radius.md,
+                backgroundColor: withAlpha(dangerColor, isDark ? 0.25 : 0.15),
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Icon name="trash-2" size={20} color={dangerColor} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: dangerColor, fontWeight: '700', fontSize: 15 }}>Delete group</Text>
+                <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>Permanently remove this group</Text>
+              </View>
+              <Icon name="chevron-right" size={20} color={dangerColor} />
+            </Pressable>
+          </View>
+        </View>
+      </BottomSheet>
+    </>
+  );
 }

@@ -1,37 +1,54 @@
-
-import React from 'react';
-import { View, Text, Alert, Pressable } from 'react-native';
-import { Screen } from '../../components/Screen';
+import React, { useState, useMemo } from 'react';
+import { View, Text, Alert, Pressable, StyleSheet } from 'react-native';
+import { ScreenScroll } from '../../components/ScreenScroll';
 import Button from '../../components/Button';
+import Icon from '../../components/Icon';
 import { spacing, radius } from '../../theme/tokens';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useGroupsStore } from '../../store/groups';
-import { Swipeable } from 'react-native-gesture-handler';
+
+function withAlpha(hex: string, alpha: number) {
+  if (!hex || typeof hex !== 'string') return hex;
+  if (hex.startsWith('#')) {
+    const clean = hex.slice(1, 7);
+    const padded = clean.length === 6 ? clean : clean.padEnd(6, '0');
+    const a = Math.round(Math.min(Math.max(alpha, 0), 1) * 255).toString(16).padStart(2, '0');
+    return `#${padded}${a}`;
+  }
+  return hex;
+}
 
 export default function ManageMembers() {
-  const { get } = useThemeTokens();
+  const { get, isDark } = useThemeTokens();
   const route = useRoute<any>();
   const nav = useNavigation<any>();
   const { groupId } = (route?.params ?? {}) as { groupId: string };
   const { groups, archiveMember, deleteMember } = useGroupsStore();
   const group = groups.find(g => g.id === groupId);
+  const [showArchived, setShowArchived] = useState(false);
 
-  const [showArchived, setShowArchived] = React.useState(false);
+  const textPrimary = get('text.primary') as string;
+  const textMuted = get('text.muted') as string;
+  const surface1 = get('surface.level1') as string;
+  const surface2 = get('surface.level2') as string;
+  const borderSubtle = get('border.subtle') as string;
+  const accentPrimary = get('accent.primary') as string;
+  const dangerColor = get('semantic.danger') as string;
+  const successColor = get('semantic.success') as string;
 
   if (!group) {
     return (
-      <Screen>
+      <ScreenScroll>
         <View style={{ padding: spacing.s16 }}>
-          <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Members</Text>
-          <Text style={{ color: get('text.muted') as string }}>Group not found.</Text>
+          <Text style={{ color: textPrimary, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>Members</Text>
+          <Text style={{ color: textMuted }}>Group not found.</Text>
         </View>
-      </Screen>
+      </ScreenScroll>
     );
   }
 
-  // Precompute whether a member can be safely deleted (no history)
-  const canDelete: Record<string, boolean> = React.useMemo(() => {
+  const canDelete: Record<string, boolean> = useMemo(() => {
     const used: Record<string, boolean> = {};
     (group.bills || []).forEach(b => {
       (b.contributions || []).forEach(c => { used[c.memberId] = true; });
@@ -45,44 +62,146 @@ export default function ManageMembers() {
 
   const askDelete = (memberId: string, name: string) => {
     Alert.alert('Delete member',
-      `Delete ${name}? This is only allowed if they have no history. Otherwise, archive instead.`,
+      `Delete ${name}? This action cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: async () => {
-          try { await deleteMember(group.id, memberId); } catch (e: any) { Alert.alert('Cannot delete', e?.message || String(e)); }
-        } },
+          try {
+            await deleteMember(group.id, memberId);
+          } catch (e: any) {
+            Alert.alert('Cannot delete', e?.message || String(e));
+          }
+        }},
       ],
     );
   };
 
   const Row = ({ m }: any) => {
     const deletable = canDelete[m.id];
-    const right = (
-      <View style={{ flexDirection: 'row' }}>
-        <View style={{ backgroundColor: deletable ? (get('semantic.danger') as string) : (get('surface.level2') as string), justifyContent: 'center', paddingHorizontal: spacing.s16 }}>
-          <Text
-            style={{ color: deletable ? (get('text.onPrimary') as string) : (get('text.muted') as string) }}
-            onPress={() => { deletable ? askDelete(m.id, m.name) : Alert.alert('Cannot delete', 'This member has history. Archive instead.'); }}
-          >
-            Delete
-          </Text>
-        </View>
-      </View>
-    );
+    const initials = m.name.trim().split(/\s+/).slice(0, 2).map((part: string) => part[0]?.toUpperCase() || '').join('') || '?';
+
     return (
-      <Swipeable renderRightActions={() => right}>
-        <View style={{ paddingVertical: spacing.s12, paddingHorizontal: spacing.s12, borderBottomWidth: 1, borderBottomColor: get('border.subtle') as string, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: m.archived ? get('text.muted') as string : get('text.primary') as string, fontWeight: '600' }} numberOfLines={1}>{m.name}</Text>
-            <Text style={{ color: get('text.muted') as string }} numberOfLines={1}>
-              {m.contact ? m.contact : (canDelete[m.id] ? 'No history' : 'Has history — cannot delete')}
+      <View style={{
+        backgroundColor: surface1,
+        borderRadius: radius.lg,
+        padding: spacing.s16,
+        marginBottom: spacing.s12,
+        borderWidth: 1,
+        borderColor: borderSubtle,
+      }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+          <View style={{
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+            backgroundColor: m.archived
+              ? withAlpha(textMuted, isDark ? 0.15 : 0.1)
+              : withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderWidth: 2,
+            borderColor: m.archived ? borderSubtle : withAlpha(accentPrimary, 0.3),
+          }}>
+            <Text style={{
+              color: m.archived ? textMuted : accentPrimary,
+              fontWeight: '800',
+              fontSize: 16
+            }}>
+              {initials}
             </Text>
           </View>
-          <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-            <Button variant="secondary" title={m.archived ? 'Unarchive' : 'Archive'} onPress={() => archiveMember(group.id, m.id, !m.archived)} />
+
+          <View style={{ flex: 1 }}>
+            <Text style={{
+              color: m.archived ? textMuted : textPrimary,
+              fontWeight: '700',
+              fontSize: 16
+            }} numberOfLines={1}>
+              {m.name}
+              {m.archived && <Text style={{ color: textMuted, fontWeight: '600' }}> (Archived)</Text>}
+            </Text>
+            {m.contact && (
+              <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }} numberOfLines={1}>
+                {m.contact}
+              </Text>
+            )}
+            {!m.contact && (
+              <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>
+                {deletable ? 'No transaction history' : 'Has transaction history'}
+              </Text>
+            )}
           </View>
         </View>
-      </Swipeable>
+
+        <View style={{
+          flexDirection: 'row',
+          gap: spacing.s8,
+          marginTop: spacing.s12,
+          paddingTop: spacing.s12,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: borderSubtle
+        }}>
+          <Pressable
+            onPress={() => nav.navigate('AddMember', { groupId: group.id, memberId: m.id })}
+            style={({ pressed }) => ({
+              flex: 1,
+              paddingVertical: spacing.s10,
+              borderRadius: radius.md,
+              backgroundColor: surface2,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: pressed ? 0.7 : 1,
+              flexDirection: 'row',
+              gap: spacing.s6,
+            })}
+          >
+            <Icon name="edit-3" size={16} colorToken="accent.primary" />
+            <Text style={{ color: accentPrimary, fontWeight: '600', fontSize: 14 }}>Edit</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => archiveMember(group.id, m.id, !m.archived)}
+            style={({ pressed }) => ({
+              flex: 1,
+              paddingVertical: spacing.s10,
+              borderRadius: radius.md,
+              backgroundColor: surface2,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: pressed ? 0.7 : 1,
+              flexDirection: 'row',
+              gap: spacing.s6,
+            })}
+          >
+            <Icon name={m.archived ? "archive-restore" : "archive"} size={16} colorToken="text.primary" />
+            <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 14 }}>
+              {m.archived ? 'Restore' : 'Archive'}
+            </Text>
+          </Pressable>
+
+          {deletable && (
+            <Pressable
+              onPress={() => askDelete(m.id, m.name)}
+              style={({ pressed }) => ({
+                flex: 1,
+                paddingVertical: spacing.s10,
+                borderRadius: radius.md,
+                backgroundColor: withAlpha(dangerColor, isDark ? 0.15 : 0.1),
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: pressed ? 0.7 : 1,
+                flexDirection: 'row',
+                gap: spacing.s6,
+                borderWidth: 1,
+                borderColor: withAlpha(dangerColor, 0.3),
+              })}
+            >
+              <Icon name="trash-2" size={16} color={dangerColor} />
+              <Text style={{ color: dangerColor, fontWeight: '600', fontSize: 14 }}>Delete</Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
     );
   };
 
@@ -90,39 +209,105 @@ export default function ManageMembers() {
   const archived = group.members.filter(m => m.archived);
 
   return (
-    <Screen>
-      <View style={{ padding: spacing.s16, gap: spacing.s16, flex: 1 }}>
-        <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between' }}>
-          <Text style={{ color: get('text.primary') as string, fontSize: 24, fontWeight: '800', marginTop: spacing.s12, marginBottom: spacing.s12 }}>{`Members (${active.length})`}</Text>
-          <Button title="+ Add" variant="secondary" onPress={() => nav.navigate('AddMember', { groupId: group.id })} />
+    <ScreenScroll contentStyle={{ paddingBottom: spacing.s32 }}>
+      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s20 }}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+          <Pressable
+            onPress={() => nav.goBack()}
+            style={({ pressed }) => ({
+              padding: spacing.s8,
+              marginLeft: -spacing.s8,
+              borderRadius: radius.md,
+              backgroundColor: pressed ? surface1 : 'transparent',
+            })}
+            hitSlop={8}
+          >
+            <Icon name="chevron-left" size={28} color={textPrimary} />
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
+              Manage Members
+            </Text>
+            <Text style={{ color: textMuted, fontSize: 13, marginTop: spacing.s4 }}>
+              {active.length} active {active.length === 1 ? 'member' : 'members'}
+              {archived.length > 0 && ` • ${archived.length} archived`}
+            </Text>
+          </View>
         </View>
-        {/* Active */}
-        <View style={{ borderWidth: 1, borderColor: get('border.subtle') as string, borderRadius: radius.md, backgroundColor: get('surface.level1') as string }}>
+
+        {/* Add Member Button */}
+        <Button
+          title="Add member"
+          icon="user-plus"
+          variant="primary"
+          onPress={() => nav.navigate('AddMember', { groupId: group.id })}
+        />
+
+        {/* Active Members */}
+        <View>
+          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16, marginBottom: spacing.s12 }}>
+            Active Members
+          </Text>
           {active.length === 0 ? (
-            <Text style={{ color: get('text.muted') as string, padding: spacing.s12 }}>No active members.</Text>
+            <View style={{
+              backgroundColor: surface1,
+              borderRadius: radius.lg,
+              padding: spacing.s24,
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: borderSubtle,
+            }}>
+              <View style={{
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                backgroundColor: withAlpha(accentPrimary, isDark ? 0.15 : 0.1),
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: spacing.s12,
+              }}>
+                <Icon name="users" size={28} colorToken="accent.primary" />
+              </View>
+              <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>No active members</Text>
+              <Text style={{ color: textMuted, fontSize: 13, marginTop: spacing.s4, textAlign: 'center' }}>
+                Add members to start splitting bills
+              </Text>
+            </View>
           ) : (
-            active.map(m => <Row key={m.id} m={m} />)
+            active.map((m) => <Row key={m.id} m={m} />)
           )}
         </View>
 
-        {/* Archived collapsible */}
-        <View style={{ gap: spacing.s8 }}>
-          <Pressable accessibilityRole="button" onPress={() => setShowArchived(s => !s)}>
-            <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
-              <Text style={{ color: get('text.muted') as string, fontWeight: '700' }}>Archived ({archived.length})</Text>
-              <Text style={{ color: get('text.muted') as string }}>{showArchived ? 'Hide' : 'Show'}</Text>
-            </View>
-          </Pressable>
-          {showArchived && archived.length > 0 && (
-            <View style={{ borderWidth: 1, borderColor: get('border.subtle') as string, borderRadius: radius.md, backgroundColor: get('surface.level1') as string }}>
-              {archived.map(m => <Row key={m.id} m={m} />)}
-            </View>
-          )}
-          {showArchived && archived.length === 0 && (
-            <Text style={{ color: get('text.muted') as string }}>No archived members.</Text>
-          )}
-        </View>
+        {/* Archived Members */}
+        {archived.length > 0 && (
+          <View>
+            <Pressable
+              onPress={() => setShowArchived(s => !s)}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingVertical: spacing.s12,
+                paddingHorizontal: spacing.s16,
+                backgroundColor: pressed ? surface1 : 'transparent',
+                borderRadius: radius.md,
+                marginBottom: showArchived ? spacing.s12 : 0,
+              })}
+            >
+              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>
+                Archived Members ({archived.length})
+              </Text>
+              <Icon
+                name={showArchived ? "chevron-up" : "chevron-down"}
+                size={20}
+                colorToken="text.muted"
+              />
+            </Pressable>
+            {showArchived && archived.map((m) => <Row key={m.id} m={m} />)}
+          </View>
+        )}
       </View>
-    </Screen>
+    </ScreenScroll>
   );
 }
