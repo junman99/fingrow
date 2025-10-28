@@ -427,8 +427,9 @@ export default function Add() {
     };
 
     const categoryColor = categoryColors[item.key] || accentPrimary;
-
-    const bg = selected ? withAlpha(categoryColor, isDark ? 0.20 : 0.12) : surface1;
+    const currentCats = mode === 'expense' ? EXPENSE_CATS : INCOME_CATS;
+    const isRightEdge = (index + 1) % numColumns === 0;
+    const isBottomEdge = index >= currentCats.length - numColumns;
 
     return (
       <Pressable
@@ -436,36 +437,36 @@ export default function Add() {
         onPress={() => setCategory(item)}
         style={({ pressed }) => ({
           width: itemWidth,
-          transform: [{ scale: pressed ? 0.96 : 1 }],
+          opacity: pressed ? 0.7 : 1,
         })}
       >
         <View
           style={{
             width: '100%',
-            borderRadius: radius.lg,
-            paddingVertical: spacing.s10,
+            paddingVertical: spacing.s12,
             paddingHorizontal: spacing.s8,
-            backgroundColor: bg,
             alignItems: 'center',
             justifyContent: 'center',
-            borderWidth: selected ? 2 : 1,
-            borderColor: selected ? categoryColor : borderSubtle,
+            borderRightWidth: isRightEdge ? 0 : 1,
+            borderBottomWidth: isBottomEdge ? 0 : 1,
+            borderColor: borderSubtle,
+            backgroundColor: selected ? withAlpha(categoryColor, isDark ? 0.15 : 0.08) : 'transparent',
           }}
         >
           <View
             style={{
-              width: 36,
-              height: 36,
+              width: 40,
+              height: 40,
               borderRadius: radius.md,
-              backgroundColor: selected ? categoryColor : surface2,
+              backgroundColor: selected ? categoryColor : withAlpha(categoryColor, isDark ? 0.2 : 0.12),
               alignItems: 'center',
               justifyContent: 'center',
               marginBottom: spacing.s6,
             }}
           >
             <IconComp
-              size={20}
-              color={selected ? textOnPrimary : textMuted}
+              size={22}
+              color={selected ? textOnPrimary : categoryColor}
               strokeWidth={selected ? 2.5 : 2}
             />
           </View>
@@ -673,7 +674,14 @@ export default function Add() {
               contentContainerStyle={{ paddingBottom: spacing.s12 }}
               style={{ maxHeight: tileMaxHeight }}
             >
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s12 }}>
+              <View style={{
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                borderWidth: 1,
+                borderColor: borderSubtle,
+                borderRadius: radius.lg,
+                overflow: 'hidden',
+              }}>
                 {(mode === 'expense' ? EXPENSE_CATS : INCOME_CATS).map((item, index) => renderCat(item, index))}
               </View>
             </ScrollView>

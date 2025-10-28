@@ -2,6 +2,11 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Home } from '../screens/Home';
 import { Budgets } from '../screens/Budgets';
+import { Insights } from '../screens/Insights';
+import { Transactions } from '../screens/Transactions';
+import BudgetSettings from '../screens/BudgetSettings';
+import CategoryInsights from '../screens/CategoryInsights';
+import UpcomingBills from '../screens/UpcomingBills';
 import GroupsRoot from '../screens/groups/GroupsRoot';
 import GroupDetail from '../screens/groups/GroupDetail';
 import AddMember from '../screens/groups/AddMember';
@@ -16,6 +21,11 @@ import EditGroup from '../screens/groups/EditGroup';
 export type HomeStackParamList = {
   HomeRoot: undefined;
   BudgetsRoot: undefined;
+  BudgetSettings: undefined;
+  CategoryInsights: undefined;
+  UpcomingBills: undefined;
+  InsightsRoot: undefined;
+  HistoryRoot: undefined;
   GroupsRoot: undefined;
   GroupDetail: { groupId: string };
   AddMember: { groupId: string; memberId?: string; archiveToggle?: boolean };
@@ -41,6 +51,41 @@ export default function HomeNavigator() {
       <Stack.Screen
         name="BudgetsRoot"
         component={Budgets}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="BudgetSettings"
+        component={BudgetSettings}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="CategoryInsights"
+        component={CategoryInsights}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="UpcomingBills"
+        component={UpcomingBills}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="InsightsRoot"
+        component={Insights}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="HistoryRoot"
+        component={Transactions}
         options={{
           animation: 'slide_from_right',
         }}

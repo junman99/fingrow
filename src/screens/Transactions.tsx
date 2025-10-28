@@ -248,6 +248,17 @@ export const Transactions: React.FC = () => {
   const rangeButtonRef = useRef<View>(null);
   const normalizedSearch = search.trim().toLowerCase();
 
+  // Fade animation
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
   // Animation for search bar
   const searchHeightAnim = useRef(new Animated.Value(0)).current;
   const searchOpacityAnim = useRef(new Animated.Value(0)).current;
@@ -451,10 +462,41 @@ export const Transactions: React.FC = () => {
 
   return (
     <Screen inTab style={{ paddingBottom: 0 }}>
-      {/* AppHeader removed; hero card now contains close + summary */}
+      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+        {/* Header with back button */}
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: spacing.s16,
+          paddingTop: spacing.s12,
+          paddingBottom: spacing.s8,
+        }}>
+          <Pressable
+            onPress={() => nav.goBack()}
+            style={({ pressed }) => ({
+              width: 40,
+              height: 40,
+              borderRadius: radius.md,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: pressed ? withOpacity(surface1, 0.5) : 'transparent',
+              marginRight: spacing.s8,
+            })}
+          >
+            <Icon name="chevron-left" size={24} colorToken="text.primary" />
+          </Pressable>
+          <Text style={{
+            fontSize: 28,
+            fontWeight: '800',
+            color: textPrimary,
+            letterSpacing: -0.5,
+          }}>
+            History
+          </Text>
+        </View>
 
-      <View style={{ flex: 1 }}>
-        <FlatList
+        <View style={{ flex: 1 }}>
+          <FlatList
           data={sectionsRaw}
           keyExtractor={(s) => s.key}
           bounces={false}
@@ -509,10 +551,7 @@ export const Transactions: React.FC = () => {
             <View style={styles.headerContainer}>
               {/* Page Header with Stats */}
               <View style={{ marginBottom: spacing.s16 }}>
-                <Text style={{ fontSize: 32, fontWeight: '800', color: textPrimary, letterSpacing: -0.5 }}>
-                  History
-                </Text>
-                <Text style={{ color: muted, fontSize: 14, marginTop: spacing.s2 }}>
+                <Text style={{ color: muted, fontSize: 14 }}>
                   {rangeLabel} • {filtered.length} transaction{filtered.length !== 1 ? 's' : ''}
                 </Text>
 
@@ -753,7 +792,8 @@ export const Transactions: React.FC = () => {
             );
           }}
         />
-      </View>
+        </View>
+      </Animated.View>
 
       <PopoverMenu
         visible={typeMenuVisible}

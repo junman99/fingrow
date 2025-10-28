@@ -1,5 +1,6 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, Pressable, Linking, ScrollView, Animated } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenScroll } from '../components/ScreenScroll';
 import { useThemeTokens } from '../theme/ThemeProvider';
@@ -74,12 +75,23 @@ const AnimatedPressable: React.FC<{
 };
 
 export const Insights: React.FC = () => {
+  const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { get, isDark } = useThemeTokens();
   const { transactions, hydrate } = useTxStore();
   const { monthlyBudget } = useBudgetsStore();
   const [offset, setOffset] = useState(0); // 0 = current month
   const [granularity, setGranularity] = useState<'daily' | 'monthly'>('monthly');
+
+  // Fade animation
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   useEffect(() => { hydrate(); }, []);
 
@@ -216,22 +228,51 @@ export const Insights: React.FC = () => {
 
   return (
     <ScreenScroll inTab>
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s16 }}>
-        {/* Title and Month */}
-        <View style={{ gap: spacing.s12 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
+        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s16 }}>
+          {/* Header with back button */}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12, marginBottom: spacing.s8 }}>
+            <Pressable
+              onPress={() => nav.goBack()}
+              style={({ pressed }) => ({
+                padding: spacing.s8,
+                marginLeft: -spacing.s8,
+                marginTop: -spacing.s4,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? surface1 : 'transparent',
+              })}
+              hitSlop={8}
+            >
+              <Icon name="chevron-left" size={28} color={textPrimary} />
+            </Pressable>
             <View style={{ flex: 1 }}>
               <Text style={{
-                color: textMuted,
-                fontSize: 12,
-                textTransform: 'uppercase',
-                letterSpacing: 0.6,
-                fontWeight: '700'
-              }}>
-                Deep Dive
-              </Text>
-              <Text style={{
                 color: textPrimary,
+                fontSize: 28,
+                fontWeight: '800',
+                letterSpacing: -0.5,
+                marginTop: spacing.s2
+              }}>
+                Insights
+              </Text>
+            </View>
+          </View>
+
+          {/* Month selector */}
+          <View style={{ gap: spacing.s12 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{
+                  color: textMuted,
+                  fontSize: 12,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.6,
+                  fontWeight: '700'
+                }}>
+                  Deep Dive
+                </Text>
+                <Text style={{
+                  color: textPrimary,
                 fontSize: 32,
                 fontWeight: '800',
                 letterSpacing: -0.5,
@@ -938,7 +979,8 @@ export const Insights: React.FC = () => {
             )}
           </View>
         </View>
-      </View>
+        </View>
+      </Animated.View>
     </ScreenScroll>
   );
 };

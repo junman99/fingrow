@@ -292,7 +292,7 @@ export default function GroupsRoot() {
                   <Icon name="chevron-left" size={28} color={textPrimary} />
                 </Pressable>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.5 }}>Shared bills</Text>
+                  <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>Shared bills</Text>
                 </View>
               </View>
 

@@ -26,15 +26,11 @@ const AddFabButton: React.FC<AddFabProps> = ({ anim, accent, textColor, onPress 
   const collapsedWidth = 56;
   const expandedWidth = 196;
   const width = anim.interpolate({ inputRange: [0, 1], outputRange: [collapsedWidth, expandedWidth] });
-  const textOpacity = anim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 0.35, 1] });
-  const textTranslate = anim.interpolate({ inputRange: [0, 1], outputRange: [8, 2] });
+  const textOpacity = anim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 0, 1] });
+  const textWidth = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 120] });
+  const paddingHorizontal = anim.interpolate({ inputRange: [0, 1], outputRange: [0, spacing.s16] });
+  const gap = anim.interpolate({ inputRange: [0, 1], outputRange: [0, spacing.s8] });
   const iconSize = 24;
-  const iconBaseOffset = (collapsedWidth - iconSize) / 2;
-  const iconTargetOffset = spacing.s16 + spacing.s4;
-  const iconTranslate = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, iconTargetOffset - iconBaseOffset]
-  });
   const height = 56;
 
   return (
@@ -50,37 +46,33 @@ const AddFabButton: React.FC<AddFabProps> = ({ anim, accent, textColor, onPress 
       <Pressable
         onPress={onPress}
         style={({ pressed }) => ({
-          alignItems: 'center',
-          justifyContent: 'center',
-          paddingVertical: spacing.s12,
-          paddingLeft: spacing.s16,
-          paddingRight: spacing.s16,
+          flex: 1,
           opacity: pressed ? 0.9 : 1
         })}
       >
-        <Animated.View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: iconBaseOffset,
-            transform: [{ translateX: iconTranslate }]
-          }}
-        >
+        <Animated.View style={{
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingHorizontal,
+          gap,
+        }}>
           <Icon name="plus-rounded" size={24} colorToken="text.onPrimary" />
+          <Animated.View style={{ width: textWidth, overflow: 'hidden' }}>
+            <AnimatedText
+              numberOfLines={1}
+              style={{
+                color: textColor,
+                fontWeight: '700',
+                fontSize: 15,
+                opacity: textOpacity,
+              }}
+            >
+              Add transaction
+            </AnimatedText>
+          </Animated.View>
         </Animated.View>
-        <AnimatedText
-          numberOfLines={1}
-          style={{
-            color: textColor,
-            fontWeight: '700',
-            fontSize: 15,
-            textAlign: 'center',
-            opacity: textOpacity,
-            transform: [{ translateX: textTranslate }]
-          }}
-        >
-          Add transaction
-        </AnimatedText>
       </Pressable>
     </Animated.View>
   );
@@ -245,14 +237,14 @@ export const Home: React.FC = () => {
       key: 'insights',
       icon: 'bar-chart-3' as const,
       label: 'Insights',
-      onPress: () => navigateWhenIdle(() => nav.navigate('InsightsModal')),
+      onPress: () => navigateWhenIdle(() => nav.navigate('InsightsRoot')),
       accent: accentPrimary
     },
     {
       key: 'history',
       icon: 'history' as const,
       label: 'History',
-      onPress: () => navigateWhenIdle(() => nav.navigate('TransactionsModal')),
+      onPress: () => navigateWhenIdle(() => nav.navigate('HistoryRoot')),
       accent: get('semantic.success') as string
     }
   ]), [accentSecondary, accentPrimary, warningAccent, nav, navigateWhenIdle, get]);

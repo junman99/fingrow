@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, Switch, Alert, Share, Pressable, ScrollView } from 'react-native';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { View, Text, Switch, Alert, Share, Pressable, ScrollView, Animated } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenScroll } from '../components/ScreenScroll';
@@ -58,6 +58,16 @@ export const Budgets: React.FC = () => {
   const { monthlyBudget, setMonthlyBudget, warnThreshold, setWarnThreshold, hydrate, ready } = useBudgetsStore();
   const { overrides, hydrate: hydrateEnv, ready: readyEnv } = useEnvelopesStore();
   useEffect(()=>{ if(!readyEnv) hydrateEnv(); }, [readyEnv]);
+
+  // Fade animation
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
   // Alert toggles (persisted)
   const ALERTS_KEY = 'fingrow/budget/alert-prefs';
   const [alertsOn, setAlertsOn] = useState(true);
@@ -256,44 +266,44 @@ export const Budgets: React.FC = () => {
     await setMonthlyBudget(val && !Number.isNaN(val) ? val : null);
     const thr = Math.min(100, Math.max(1, Number(thresholdText) || 80));
     await setWarnThreshold(thr / 100);
-    nav.goBack();
   };
 
   return (
-    <ScreenScroll contentStyle={{ paddingBottom: spacing.s24 }}>
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s16 }}>
-        {/* Header with back button */}
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12, marginBottom: spacing.s8 }}>
-          <Pressable
-            onPress={() => nav.goBack()}
-            style={({ pressed }) => ({
-              padding: spacing.s8,
-              marginLeft: -spacing.s8,
-              marginTop: -spacing.s4,
-              borderRadius: radius.md,
-              backgroundColor: pressed ? surface1 : 'transparent',
-            })}
-            hitSlop={8}
-          >
-            <Icon name="chevron-left" size={28} color={textPrimary} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 }}>Budget</Text>
+    <ScreenScroll inTab contentStyle={{ paddingBottom: spacing.s24 }}>
+      <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
+        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s16 }}>
+          {/* Header with back button */}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12, marginBottom: spacing.s8 }}>
+            <Pressable
+              onPress={() => nav.goBack()}
+              style={({ pressed }) => ({
+                padding: spacing.s8,
+                marginLeft: -spacing.s8,
+                marginTop: -spacing.s4,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? surface1 : 'transparent',
+              })}
+              hitSlop={8}
+            >
+              <Icon name="chevron-left" size={28} color={textPrimary} />
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 }}>Budget</Text>
+            </View>
+            <Pressable
+              onPress={() => nav.navigate('BudgetSettings')}
+              style={({ pressed }) => ({
+                padding: spacing.s8,
+                marginRight: -spacing.s8,
+                marginTop: -spacing.s4,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? surface1 : 'transparent',
+              })}
+              hitSlop={8}
+            >
+              <Icon name="settings" size={24} color={accentPrimary} />
+            </Pressable>
           </View>
-          <Pressable
-            onPress={onSave}
-            style={({ pressed }) => ({
-              padding: spacing.s8,
-              marginRight: -spacing.s8,
-              marginTop: -spacing.s4,
-              borderRadius: radius.md,
-              backgroundColor: pressed ? surface1 : 'transparent',
-            })}
-            hitSlop={8}
-          >
-            <Text style={{ color: accentPrimary, fontWeight: '700', fontSize: 17 }}>Save</Text>
-          </Pressable>
-        </View>
 
         {/* Budget Pulse - Direct on Background */}
         <View style={{ gap: spacing.s16 }}>
@@ -366,30 +376,13 @@ export const Budgets: React.FC = () => {
             </View>
           )}
 
-          {/* Coach Note */}
-          <View style={{
-            borderRadius: radius.lg,
-            borderWidth: 1,
-            borderColor: borderSubtle,
-            padding: spacing.s14,
-            backgroundColor: surface1,
-            gap: spacing.s6
-          }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
-              <View style={{
-                width: 32,
-                height: 32,
-                borderRadius: radius.md,
-                backgroundColor: withAlpha(accentPrimary, 0.12),
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Text style={{ fontSize: 16 }}>💡</Text>
-              </View>
-              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>Coach note</Text>
+          {/* Coach tip - compact */}
+          {budget > 0 && (
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8, paddingHorizontal: spacing.s4 }}>
+              <Text style={{ fontSize: 14 }}>💡</Text>
+              <Text style={{ color: textMuted, fontSize: 13, lineHeight: 18, flex: 1 }}>{heroInsight}</Text>
             </View>
-            <Text style={{ color: textMuted, fontSize: 14, lineHeight: 20 }}>{heroInsight}</Text>
-          </View>
+          )}
 
           {/* Additional Info */}
           <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
@@ -501,288 +494,70 @@ export const Budgets: React.FC = () => {
           <Button title="Review recent transactions" variant="secondary" onPress={() => nav.navigate('TransactionsModal')} />
         </View>
 
-        <View style={{
-          backgroundColor: surface1,
-          borderRadius: radius.xl,
-          padding: spacing.s16,
-          gap: spacing.s12,
-          borderWidth: 1,
-          borderColor: withAlpha(borderSubtle, isDark ? 0.5 : 1)
-        }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Category spotlight</Text>
-            <Button title="Edit envelopes" variant="secondary" onPress={() => nav.navigate('Envelopes')} size="sm" />
-          </View>
-          {budget <= 0 ? (
-            <Text style={{ color: textMuted }}>Set a monthly budget to unlock adaptive envelopes.</Text>
-          ) : (
-            <>
-              <View style={{
-                backgroundColor: withAlpha(accentSecondary, isDark ? 0.28 : 0.16),
-                borderRadius: radius.lg,
-                padding: spacing.s12,
-                gap: spacing.s6,
+        {/* Quick Access Cards */}
+        <View style={{ gap: spacing.s12 }}>
+          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Quick access</Text>
+          <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
+            <Pressable
+              onPress={() => nav.navigate('CategoryInsights')}
+              style={({ pressed }) => ({
+                flex: 1,
+                backgroundColor: surface1,
+                borderRadius: radius.xl,
+                padding: spacing.s16,
+                gap: spacing.s12,
                 borderWidth: 1,
-                borderColor: withAlpha(borderSubtle, isDark ? 0.5 : 0.9)
+                borderColor: withAlpha(borderSubtle, isDark ? 0.5 : 1),
+                opacity: pressed ? 0.85 : 1
+              })}
+            >
+              <View style={{
+                width: 48,
+                height: 48,
+                borderRadius: radius.lg,
+                backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
+                alignItems: 'center',
+                justifyContent: 'center'
               }}>
-                <Text style={{ color: accentSecondary, fontWeight: '700' }}>Overview</Text>
-                <Text style={{ color: textPrimary, fontSize: 18, fontWeight: '800' }}>
-                  {topCategory ? topCategory.name : 'Keep categorising your spend'}
-                </Text>
-                <Text style={{ color: textMuted }}>
-                  {topCategory
-                    ? `${fmtMoney(topCategory.spent)} spent · ${topCategory.cap > 0 ? `${Math.round(Math.min(100, topCategory.ratio * 100))}% of cap` : 'No cap yet'}`
-                    : `We'll surface your most active envelope once you have more data.`}
-                </Text>
-                {categoryCoveragePct != null ? (
-                  <Text style={{ color: textMuted }}>
-                    {categoryCoveragePct}% of tracked caps used · {fmtMoney(categoryRemainingTotal)} remaining
-                  </Text>
-                ) : null}
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ color: textMuted }}>
-                    {cats.length ? `${cats.length} tracked categories` : 'No categories tracked yet'}
-                  </Text>
-                  <Button
-                    title={focusToggleLabel}
-                    variant="secondary"
-                    size="sm"
-                    onPress={() => setShowCategoryInsights(v => !v)}
-                  />
-                </View>
+                <Icon name="pie-chart" size={24} color={accentPrimary} />
               </View>
+              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>Category spotlight</Text>
+              <Text style={{ color: textMuted, fontSize: 13 }}>See envelope breakdown</Text>
+            </Pressable>
 
-              {showCategoryInsights ? (
-                <>
-                  {topCategory ? (
-                    <View style={{
-                      backgroundColor: withAlpha(accentPrimary, isDark ? 0.22 : 0.12),
-                      borderRadius: radius.lg,
-                      padding: spacing.s12,
-                      gap: spacing.s6
-                    }}>
-                      <Text style={{ color: accentPrimary, fontWeight: '700' }}>Focus category</Text>
-                      <Text style={{ color: textPrimary, fontSize: 18, fontWeight: '800' }}>{topCategory.name}</Text>
-                      <Text style={{ color: textMuted }}>{fmtMoney(topCategory.spent)} spent · {topCategory.cap > 0 ? `${Math.round(Math.min(100, topCategory.ratio * 100))}% of cap` : 'No cap yet'}</Text>
-                      {topCategory.cap > 0 ? (
-                        <Text style={{ color: textMuted }}>Daily runway {fmtMoney(Math.max(0, Math.floor((topCategory.cap - topCategory.spent) / Math.max(1, daysLeft))))}</Text>
-                      ) : null}
-                    </View>
-                  ) : null}
-                  <View style={{ gap: spacing.s10 }}>
-                    {cats.map((c, idx) => {
-                      const pct = c.cap > 0 ? Math.round(Math.min(100, (c.spent / c.cap) * 100)) : 0;
-                      const barColor = idx % 2 === 0 ? accentPrimary : accentSecondary;
-                      return (
-                        <View
-                          key={`${c.name}-${idx}`}
-                          style={{
-                            borderRadius: radius.lg,
-                            backgroundColor: withAlpha(barColor, isDark ? 0.22 : 0.1),
-                            padding: spacing.s12,
-                            gap: spacing.s6
-                          }}
-                        >
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Text style={{ color: textPrimary, fontWeight: '700' }}>{c.name}</Text>
-                            <Text style={{ color: textMuted }}>{fmtMoney(c.spent)} / {fmtMoney(c.cap || 0)}</Text>
-                          </View>
-                          <View style={{ height: 8, borderRadius: 4, backgroundColor: withAlpha('#ffffff', isDark ? 0.18 : 0.22), overflow: 'hidden' }}>
-                            <View style={{
-                              height: '100%',
-                              width: `${Math.min(100, c.cap > 0 ? (c.spent / c.cap) * 100 : 0)}%`,
-                              backgroundColor: barColor
-                            }} />
-                          </View>
-                          <Text style={{ color: textMuted }}>
-                            {c.cap > 0
-                              ? (c.spent <= c.cap ? `${fmtMoney(c.cap - c.spent)} remaining · ${pct}% used` : `Over by ${fmtMoney(c.spent - c.cap)}`)
-                              : 'Learning spend profile'}
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                </>
-              ) : null}
-            </>
-          )}
-        </View>
-
-        <View style={{
-          backgroundColor: surface1,
-          borderRadius: radius.xl,
-          padding: spacing.s16,
-          gap: spacing.s12,
-          borderWidth: 1,
-          borderColor: withAlpha(borderSubtle, isDark ? 0.5 : 1)
-        }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Upcoming bills hold</Text>
-            <Button title="Manage bills" variant="secondary" onPress={() => nav.navigate('Bills')} size="sm" />
-          </View>
-          <Text style={{ color: textMuted }}>Holding {fmtMoney(holdAmount)} for bills due before {endOfDay(period.end).toDateString()}.</Text>
-          {holdItems.length === 0 ? (
-            <Text style={{ color: textMuted }}>No upcoming bills logged this cycle.</Text>
-          ) : (
-            holdItems.slice(0, 5).map((it: any, idx: number) => (
-              <View
-                key={`${it.key}-${idx}`}
-                style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.s4 }}
-              >
-                <Text style={{ color: textPrimary, flex: 1, marginRight: spacing.s8 }} numberOfLines={1}>{it.label}</Text>
-                <Text style={{ color: textMuted }}>{fmtMoney(it.amount)} · {it.due.toDateString()}</Text>
+            <Pressable
+              onPress={() => nav.navigate('UpcomingBills')}
+              style={({ pressed }) => ({
+                flex: 1,
+                backgroundColor: surface1,
+                borderRadius: radius.xl,
+                padding: spacing.s16,
+                gap: spacing.s12,
+                borderWidth: 1,
+                borderColor: withAlpha(borderSubtle, isDark ? 0.5 : 1),
+                opacity: pressed ? 0.85 : 1
+              })}
+            >
+              <View style={{
+                width: 48,
+                height: 48,
+                borderRadius: radius.lg,
+                backgroundColor: withAlpha(warningColor, isDark ? 0.25 : 0.15),
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Icon name="calendar" size={24} color={warningColor} />
               </View>
-            ))
-          )}
-        </View>
-
-        <View style={{
-          backgroundColor: surface1,
-          borderRadius: radius.xl,
-          padding: spacing.s16,
-          gap: spacing.s12,
-          borderWidth: 1,
-          borderColor: withAlpha(borderSubtle, isDark ? 0.5 : 1)
-        }}>
-          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Alerts & automations</Text>
-          <View style={{ gap: spacing.s10 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flex: 1, paddingRight: spacing.s12 }}>
-                <Text style={{ color: textPrimary, fontWeight: '600' }}>Budget thresholds</Text>
-                <Text style={{ color: textMuted }}>Ping at 80/100/110% of plan.</Text>
-              </View>
-              <Switch value={alertsOn} onValueChange={(v) => savePrefs({ alertsOn: v })} />
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flex: 1, paddingRight: spacing.s12 }}>
-                <Text style={{ color: textPrimary, fontWeight: '600' }}>Pace alerts</Text>
-                <Text style={{ color: textMuted }}>Flag when you sprint ahead by 10%.</Text>
-              </View>
-              <Switch value={paceOn} onValueChange={(v) => savePrefs({ paceOn: v })} />
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flex: 1, paddingRight: spacing.s12 }}>
-                <Text style={{ color: textPrimary, fontWeight: '600' }}>Weekly digest</Text>
-                <Text style={{ color: textMuted }}>Monday 9am snapshot in your inbox.</Text>
-              </View>
-              <Switch value={digestOn} onValueChange={(v) => savePrefs({ digestOn: v })} />
-            </View>
+              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>Upcoming bills</Text>
+              <Text style={{ color: textMuted, fontSize: 13 }}>{holdSummaryLabel}</Text>
+            </Pressable>
           </View>
         </View>
 
-        <View style={{
-          backgroundColor: surface1,
-          borderRadius: radius.xl,
-          padding: spacing.s16,
-          gap: spacing.s12,
-          borderWidth: 1,
-          borderColor: withAlpha(borderSubtle, isDark ? 0.5 : 1)
-        }}>
-          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Pay cycle rhythm</Text>
-          <Text style={{ color: textMuted }}>{cadenceLabel}</Text>
-          <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-            {cycleOptions.map(option => {
-              const active = cycle === option.key;
-              return (
-                <Pressable
-                  key={option.key}
-                  accessibilityRole="button"
-                  onPress={() => saveCycle(option.key)}
-                  style={({ pressed }) => ({
-                    paddingVertical: spacing.s8,
-                    paddingHorizontal: spacing.s16,
-                    borderRadius: radius.pill,
-                    backgroundColor: active ? accentPrimary : withAlpha(borderSubtle, isDark ? 0.35 : 0.45),
-                    borderWidth: active ? 0 : 1,
-                    borderColor: withAlpha(borderSubtle, isDark ? 0.45 : 0.6),
-                    opacity: pressed ? 0.9 : 1
-                  })}
-                >
-                  <Text style={{ color: active ? textOnPrimary : textPrimary, fontWeight: '700' }}>{option.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          {cycle === 'biweekly' ? (
-            <View style={{ gap: spacing.s6 }}>
-              <Text style={{ color: textMuted }}>Anchor: {anchorISO ? new Date(anchorISO).toDateString() : 'Not set (uses today)'}</Text>
-              <Button
-                title="Anchor to today"
-                variant="secondary"
-                size="sm"
-                onPress={async () => {
-                  const now = new Date().toISOString();
-                  setAnchorISO(now);
-                  await AsyncStorage.setItem(CYCLE_KEY, JSON.stringify({ cycle, anchor: now }));
-                }}
-              />
-            </View>
-          ) : null}
         </View>
-
-        <View style={{
-          backgroundColor: surface1,
-          borderRadius: radius.xl,
-          padding: spacing.s16,
-          gap: spacing.s12,
-          borderWidth: 1,
-          borderColor: withAlpha(borderSubtle, isDark ? 0.5 : 1)
-        }}>
-          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Budget settings</Text>
-          <View style={{ gap: spacing.s8 }}>
-            <Text style={{ color: textMuted }}>Monthly budget</Text>
-            <Input value={budgetText} onChangeText={setBudgetText} placeholder="e.g. 1200" keyboardType="numeric" />
-          </View>
-          <View style={{ gap: spacing.s8 }}>
-            <Text style={{ color: textMuted }}>Alert threshold (%)</Text>
-            <Input value={thresholdText} onChangeText={setThresholdText} placeholder="80" keyboardType="numeric" />
-          </View>
-          <Text style={{ color: textMuted }}>Leave empty to remove the budget or fine-tune alert triggers.</Text>
-          <Button title="Save changes" onPress={onSave} />
-        </View>
-
-        <LinearGradient
-          colors={isDark ? [withAlpha(accentSecondary, 0.36), withAlpha(accentPrimary, 0.28)] : [withAlpha(accentSecondary, 0.32), withAlpha(accentPrimary, 0.24)]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ borderRadius: radius.xl, padding: spacing.s16, gap: spacing.s12 }}
-        >
-          <Text style={{ color: heroText, fontWeight: '700', fontSize: 16 }}>Need a backup?</Text>
-          <Text style={{ color: heroMuted }}>Tap below to export this period's ledger and review it offline.</Text>
-          <Button title="Export CSV (this period)" variant="secondary" onPress={() => exportPeriodCsv(startOfDay(period.start), endOfDay(period.end))} />
-        </LinearGradient>
-      </View>
+      </Animated.View>
     </ScreenScroll>
   );
 };
 
 export default Budgets;
-
-
-async function exportPeriodCsv(start: Date, end: Date) {
-  try {
-    const txAll = require('../store/transactions').useTxStore.getState().transactions || [];
-    const rows = txAll
-      .filter((t:any)=> {
-        const d = new Date(t.date);
-        return d >= start && d <= end;
-      })
-      .map((t:any)=> {
-        const dateISO = new Date(t.date).toISOString().slice(0,10);
-        const type = t.type || '';
-        const amt = Number(t.amount||0).toFixed(2);
-        const cat = (t.category||'').replace(/[,\n]/g,' ');
-        const note = (t.note||'').replace(/[,\n]/g,' ').trim();
-        return `${dateISO},${type},${amt},${cat},${note}`;
-      });
-    const header = 'date,type,amount,category,note';
-    const csv = [header, ...rows].join('\n');
-    const name = `fingrow_${start.toISOString().slice(0,10)}__${end.toISOString().slice(0,10)}.csv`;
-    const fileUri = ((FileSystem as any)?.documentDirectory || (FileSystem as any)?.cacheDirectory || '') + name;
-    await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: 'utf8' as any });
-    await Share.share({ url: fileUri, message: 'FinGrow CSV', title: 'Share FinGrow CSV' }).catch(()=> Alert.alert('CSV saved', `Saved to: ${fileUri}`));
-  } catch (e) {
-    Alert.alert('Export failed', 'Sorry, could not create the CSV.');
-  }
-}
