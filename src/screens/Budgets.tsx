@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { View, Text, Switch, Alert, Share, Pressable, ScrollView, Animated } from 'react-native';
+import { View, Text, Switch, Alert, Share, Pressable, ScrollView, Animated, Modal, TouchableWithoutFeedback } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenScroll } from '../components/ScreenScroll';
@@ -12,6 +12,7 @@ import { ensureWeeklyDigest, maybeFirePaceAlert, maybeFireThresholdAlerts, toggl
 import Button from '../components/Button';
 import Input from '../components/Input';
 import Icon from '../components/Icon';
+import ProjectionChart from '../components/ProjectionChart';
 import { useNavigation } from '@react-navigation/native';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
@@ -68,6 +69,44 @@ export const Budgets: React.FC = () => {
       useNativeDriver: true,
     }).start();
   }, []);
+
+  // Tip tooltip state
+  const [showTip, setShowTip] = useState(false);
+  const tipOpacity = useRef(new Animated.Value(0)).current;
+  const tipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const toggleTip = () => {
+    if (showTip) {
+      // Hide immediately
+      Animated.timing(tipOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => setShowTip(false));
+      if (tipTimeoutRef.current) clearTimeout(tipTimeoutRef.current);
+    } else {
+      // Show and auto-hide after 5 seconds
+      setShowTip(true);
+      Animated.timing(tipOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+      tipTimeoutRef.current = setTimeout(() => {
+        Animated.timing(tipOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }).start(() => setShowTip(false));
+      }, 5000);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (tipTimeoutRef.current) clearTimeout(tipTimeoutRef.current);
+    };
+  }, []);
   // Alert toggles (persisted)
   const ALERTS_KEY = 'fingrow/budget/alert-prefs';
   const [alertsOn, setAlertsOn] = useState(true);
@@ -97,10 +136,30 @@ export const Budgets: React.FC = () => {
   const { transactions } = require('../store/transactions').useTxStore.getState();
   const [cycle, setCycle] = useState<Cycle>('monthly');
   const [anchorISO, setAnchorISO] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState(new Date());
+  const [monthPickerOpen, setMonthPickerOpen] = useState(false);
+  const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
+
   useEffect(() => { (async () => { try { const raw = await AsyncStorage.getItem(CYCLE_KEY); if (raw) { const parsed = JSON.parse(raw); if (parsed?.cycle) setCycle(parsed.cycle); if (parsed?.anchor) setAnchorISO(parsed.anchor); } } catch {} })(); }, []);
   const saveCycle = async (c: Cycle) => { const payload = { cycle: c, anchor: c === 'biweekly' ? (anchorISO || new Date().toISOString()) : null }; setCycle(c); if (c==='biweekly' && !anchorISO) setAnchorISO(payload.anchor); await AsyncStorage.setItem(CYCLE_KEY, JSON.stringify(payload)); };
+
   const today = new Date();
-  const period = cycle === 'monthly' ? { start: startOfMonth(today), end: endOfMonth(today) } : getBiweeklyPeriod(anchorISO, today);
+  const period = cycle === 'monthly' ? { start: startOfMonth(selectedMonth), end: endOfMonth(selectedMonth) } : getBiweeklyPeriod(anchorISO, selectedMonth);
+
+  const openMonthPicker = () => {
+    setPickerYear(selectedMonth.getFullYear());
+    setMonthPickerOpen(true);
+  };
+
+  const selectMonth = (year: number, month: number) => {
+    const now = new Date();
+    // Don't allow future months
+    if (year > now.getFullYear() || (year === now.getFullYear() && month > now.getMonth())) return;
+    setSelectedMonth(new Date(year, month, 1));
+    setMonthPickerOpen(false);
+  };
+
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const totalDays = Math.max(1, Math.round((endOfDay(period.end).getTime() - startOfDay(period.start).getTime()) / 86400000));
   const daysPassed = Math.min(totalDays, Math.max(0, Math.round((endOfDay(today).getTime() - startOfDay(period.start).getTime()) / 86400000)));
   const daysLeft = Math.max(0, totalDays - daysPassed);
@@ -163,12 +222,42 @@ export const Budgets: React.FC = () => {
 
   if (budget>0 && avgDaily>0) { const need = budget - spent; if (need<0) overrunEta = today; else { const d = Math.ceil(need/avgDaily); overrunEta = new Date(today.getTime()+d*86400000); if (overrunEta>period.end) overrunEta=null; } }
 
+  // Chart data: actual cumulative spending only
+  const actualChartData = useMemo(() => {
+    const periodTxs = allTx.filter((t: any) =>
+      t.type === 'expense' &&
+      new Date(t.date) >= period.start &&
+      new Date(t.date) <= period.end
+    ).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    // Build cumulative spending by day
+    const dailySpending: { t: number; v: number }[] = [];
+    let cumulative = 0;
+    const startTime = period.start.getTime();
+
+    for (let day = 0; day <= daysPassed; day++) {
+      const dayStart = new Date(startTime + day * 24*60*60*1000);
+      const dayEnd = new Date(dayStart.getTime() + 24*60*60*1000 - 1);
+
+      const dayTxs = periodTxs.filter((t: any) => {
+        const txDate = new Date(t.date);
+        return txDate >= dayStart && txDate <= dayEnd;
+      });
+
+      cumulative += dayTxs.reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
+      dailySpending.push({ t: dayStart.getTime(), v: cumulative });
+    }
+
+    return dailySpending;
+  }, [allTx, period, daysPassed]);
+
   const accentPrimary = get('accent.primary') as string;
   const accentSecondary = get('accent.secondary') as string;
   const textPrimary = get('text.primary') as string;
   const textMuted = get('text.muted') as string;
   const textOnPrimary = get('text.onPrimary') as string;
   const surface1 = get('surface.level1') as string;
+  const surface2 = get('surface.level2') as string;
   const borderSubtle = get('border.subtle') as string;
   const warningColor = get('semantic.warning') as string;
   const dangerColor = get('semantic.danger') as string;
@@ -209,29 +298,64 @@ export const Budgets: React.FC = () => {
     return 'Nice balance so far—keep routing spending through envelopes you trust.';
   }, [budget, paceDelta, topCategory, usedRatio]);
 
-  const statCards = useMemo(() => ([
-    {
-      key: 'spent',
-      label: 'Spent so far',
-      value: fmtMoney(spent),
-      caption: budget > 0 ? `${usedPct}% of plan` : 'No budget set',
-      accent: withAlpha(progressColor, isDark ? 0.18 : 0.12)
-    },
-    {
-      key: 'remaining',
-      label: 'Remaining budget',
-      value: fmtMoney(budget - spent),
-      caption: budget > 0 ? daysLeftLabel : 'Set a budget to unlock pacing',
-      accent: withAlpha(successColor, isDark ? 0.18 : 0.1)
-    },
-    {
-      key: 'holds',
-      label: 'Held for bills',
-      value: fmtMoney(holdAmount),
-      caption: holdSummaryLabel,
-      accent: withAlpha(warningColor, isDark ? 0.2 : 0.14)
-    }
-  ]), [budget, daysLeftLabel, holdAmount, holdSummaryLabel, isDark, progressColor, spent, successColor, usedPct, warningColor]);
+  const statCards = useMemo(() => {
+    // Top category this cycle
+    const topCat = cats.length > 0 ? cats[0] : null;
+    const topCatPct = topCat && budget > 0 ? Math.round((topCat.spent / budget) * 100) : 0;
+
+    // Biggest single expense
+    const periodTxList = (transactions || []).filter((t: any) =>
+      t.type === 'expense' &&
+      new Date(t.date) >= period.start &&
+      new Date(t.date) <= period.end
+    );
+    const biggestTx = periodTxList.length > 0
+      ? periodTxList.reduce((max: any, t: any) => (Number(t.amount) > Number(max.amount) ? t : max), periodTxList[0])
+      : null;
+
+    // Spending trend - compare to last cycle
+    const lastCycleStart = new Date(period.start);
+    const lastCycleEnd = new Date(period.end);
+    const cycleDuration = period.end.getTime() - period.start.getTime();
+    lastCycleStart.setTime(lastCycleStart.getTime() - cycleDuration);
+    lastCycleEnd.setTime(lastCycleEnd.getTime() - cycleDuration);
+
+    const lastCycleSpent = (transactions || [])
+      .filter((t: any) => t.type === 'expense' && new Date(t.date) >= lastCycleStart && new Date(t.date) <= lastCycleEnd)
+      .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
+
+    const trendDiff = spent - lastCycleSpent;
+    const trendPct = lastCycleSpent > 0 ? Math.round((trendDiff / lastCycleSpent) * 100) : 0;
+    const trendLabel = trendDiff > 0
+      ? `Up ${Math.abs(trendPct)}% vs last cycle`
+      : trendDiff < 0
+        ? `Down ${Math.abs(trendPct)}% vs last cycle`
+        : 'Same as last cycle';
+
+    return [
+      {
+        key: 'top-category',
+        label: 'Top category',
+        value: topCat ? fmtMoney(topCat.spent) : '$0',
+        caption: topCat ? `${topCat.name} (${topCatPct}%)` : 'No spending yet',
+        accent: withAlpha(accentPrimary, isDark ? 0.2 : 0.14)
+      },
+      {
+        key: 'trend',
+        label: 'Spending trend',
+        value: trendDiff !== 0 ? fmtMoney(Math.abs(trendDiff)) : '$0',
+        caption: trendLabel,
+        accent: withAlpha(trendDiff > 0 ? warningColor : successColor, isDark ? 0.2 : 0.14)
+      },
+      {
+        key: 'biggest',
+        label: 'Biggest expense',
+        value: biggestTx ? fmtMoney(Number(biggestTx.amount)) : '$0',
+        caption: biggestTx ? `${biggestTx.category || 'Uncategorized'}` : 'No expenses yet',
+        accent: withAlpha(dangerColor, isDark ? 0.2 : 0.14)
+      }
+    ];
+  }, [budget, cats, isDark, spent, successColor, warningColor, accentPrimary, dangerColor, transactions, period]);
 
   const nudges = useMemo(() => {
     const items: string[] = [];
@@ -271,9 +395,9 @@ export const Budgets: React.FC = () => {
   return (
     <ScreenScroll inTab contentStyle={{ paddingBottom: spacing.s24 }}>
       <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
-        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s16 }}>
+        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: 0 }}>
           {/* Header with back button */}
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12, marginBottom: spacing.s8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12 }}>
             <Pressable
               onPress={() => nav.goBack()}
               style={({ pressed }) => ({
@@ -290,97 +414,200 @@ export const Budgets: React.FC = () => {
             <View style={{ flex: 1 }}>
               <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 }}>Budget</Text>
             </View>
-            <Pressable
-              onPress={() => nav.navigate('BudgetSettings')}
-              style={({ pressed }) => ({
-                padding: spacing.s8,
-                marginRight: -spacing.s8,
-                marginTop: -spacing.s4,
-                borderRadius: radius.md,
-                backgroundColor: pressed ? surface1 : 'transparent',
-              })}
-              hitSlop={8}
-            >
-              <Icon name="settings" size={24} color={accentPrimary} />
-            </Pressable>
-          </View>
 
-        {/* Budget Pulse - Direct on Background */}
-        <View style={{ gap: spacing.s16 }}>
-          <View style={{ gap: spacing.s4 }}>
-            <Text style={{ color: textMuted, fontSize: 13, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>Budget pulse</Text>
-            <Text style={{ color: textPrimary, fontSize: 36, fontWeight: '800', letterSpacing: -1 }}>{safePerDayLabel}</Text>
-            <Text style={{ color: textMuted, fontSize: 15 }}>safe to spend per day</Text>
-          </View>
+            <View style={{ alignItems: 'flex-end', gap: spacing.s6 }}>
+              <Pressable
+                onPress={() => nav.navigate('BudgetSettings')}
+                style={({ pressed }) => ({
+                  padding: spacing.s8,
+                  marginRight: -spacing.s8,
+                  marginTop: -spacing.s4,
+                  borderRadius: radius.md,
+                  backgroundColor: pressed ? surface1 : 'transparent',
+                })}
+                hitSlop={8}
+              >
+                <Icon name="settings" size={24} color={textPrimary} />
+              </Pressable>
 
-          {/* Status Badges */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, flexWrap: 'wrap' }}>
-            <View style={{
-              paddingHorizontal: spacing.s12,
-              paddingVertical: spacing.s6,
-              borderRadius: radius.pill,
-              backgroundColor: riskBg,
-              borderWidth: 1,
-              borderColor: withAlpha(riskColor, 0.3)
-            }}>
-              <Text style={{ color: riskColor, fontWeight: '700', fontSize: 13 }}>{riskLabel}</Text>
-            </View>
-            <View style={{
-              paddingHorizontal: spacing.s12,
-              paddingVertical: spacing.s6,
-              borderRadius: radius.pill,
-              backgroundColor: withAlpha(textMuted, 0.1),
-              borderWidth: 1,
-              borderColor: withAlpha(textMuted, 0.2)
-            }}>
-              <Text style={{ color: textMuted, fontWeight: '600', fontSize: 13 }}>{daysLeftLabel}</Text>
-            </View>
-            <View style={{
-              paddingHorizontal: spacing.s12,
-              paddingVertical: spacing.s6,
-              borderRadius: radius.pill,
-              backgroundColor: withAlpha(textMuted, 0.1),
-              borderWidth: 1,
-              borderColor: withAlpha(textMuted, 0.2)
-            }}>
-              <Text style={{ color: textMuted, fontWeight: '600', fontSize: 13 }}>{cadenceLabel}</Text>
+              {/* Month Selector Pill */}
+              <Pressable
+                onPress={openMonthPicker}
+                hitSlop={8}
+                style={({ pressed }) => ({
+                  paddingHorizontal: spacing.s10,
+                  paddingVertical: spacing.s6,
+                  borderRadius: radius.pill,
+                  backgroundColor: surface2,
+                  opacity: pressed ? 0.85 : 1
+                })}
+              >
+                <Text style={{
+                  color: textPrimary,
+                  fontSize: 12,
+                  fontWeight: '700',
+                  letterSpacing: 0.3
+                }}>
+                  {selectedMonth.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+                </Text>
+              </Pressable>
             </View>
           </View>
 
-          {/* Progress Bar */}
-          <View style={{ gap: spacing.s8 }}>
-            <View style={{ height: 12, borderRadius: 6, backgroundColor: withAlpha(textMuted, 0.12), overflow: 'hidden' }}>
+        {/* Budget Overview - Cleaner, More Visual */}
+        <View style={{ gap: spacing.s16, marginTop: -spacing.s8 }}>
+          {/* Main Budget Display with Progress */}
+          <View style={{ gap: spacing.s12 }}>
+            {/* Amount Display */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s6 }}>
+                <Text style={{ color: textPrimary, fontSize: 38, fontWeight: '900', letterSpacing: -1.2 }}>
+                  {fmtMoney(spent)}
+                </Text>
+                <Text style={{ color: textMuted, fontSize: 20, fontWeight: '600' }}>
+                  / {fmtMoney(budget)}
+                </Text>
+              </View>
+              <Text style={{ color: progressColor, fontSize: 24, fontWeight: '800' }}>{usedPct}%</Text>
+            </View>
+
+            {/* Progress Bar - Dynamic Color */}
+            <View style={{ height: 14, borderRadius: 7, backgroundColor: withAlpha(textMuted, 0.12), overflow: 'hidden' }}>
               <View style={{
                 width: `${Math.min(100, Math.max(0, usedRatio * 100))}%`,
                 height: '100%',
                 backgroundColor: progressColor,
-                borderRadius: 6
+                borderRadius: 7
               }} />
             </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>{fmtMoney(spent)} / {fmtMoney(budget)}</Text>
-              <Text style={{ color: textMuted, fontSize: 13 }}>{usedPct}% used</Text>
+
+            {/* Compact Status Row - Icons + Minimal Text */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.s4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6 }}>
+                <Icon name="calendar" size={16} color={textMuted} />
+                <Text style={{ color: textMuted, fontSize: 14, fontWeight: '600' }}>{daysLeft}d left</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6 }}>
+                <Icon name="clock" size={16} color={textMuted} />
+                <Text style={{ color: textMuted, fontSize: 14, fontWeight: '600' }}>{cycle === 'monthly' ? 'Monthly' : 'Bi-weekly'}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6 }}>
+                <View style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: riskColor
+                }} />
+                <Text style={{ color: riskColor, fontSize: 14, fontWeight: '700' }}>{riskLabel}</Text>
+              </View>
             </View>
           </View>
 
-          {/* Pace Info */}
+          {/* Pace Info with Tip */}
           {budget > 0 && (
-            <View style={{
-              padding: spacing.s12,
-              borderRadius: radius.lg,
-              backgroundColor: paceChipBg,
-              borderWidth: 1,
-              borderColor: withAlpha(paceChipColor, 0.3)
-            }}>
-              <Text style={{ color: paceChipColor, fontWeight: '600', fontSize: 14 }}>{paceChipLabel}</Text>
-            </View>
-          )}
+            <View style={{ position: 'relative' }}>
+              <View style={{
+                padding: spacing.s12,
+                paddingRight: spacing.s48,
+                borderRadius: radius.lg,
+                backgroundColor: paceChipBg,
+                borderWidth: 1,
+                borderColor: withAlpha(paceChipColor, 0.3),
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <Text style={{ color: paceChipColor, fontWeight: '600', fontSize: 14, flex: 1 }}>
+                  {paceDelta <= 0 ? 'On pace' : 'Over pace'} · {safePerDayLabel} safe daily
+                </Text>
+                <Pressable
+                  onPress={toggleTip}
+                  style={({ pressed }) => ({
+                    position: 'absolute',
+                    right: spacing.s12,
+                    padding: spacing.s6,
+                    borderRadius: radius.pill,
+                    backgroundColor: pressed ? withAlpha(paceChipColor, 0.15) : 'transparent',
+                  })}
+                  hitSlop={8}
+                >
+                  <Text style={{ fontSize: 18 }}>💡</Text>
+                </Pressable>
+              </View>
 
-          {/* Coach tip - compact */}
-          {budget > 0 && (
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8, paddingHorizontal: spacing.s4 }}>
-              <Text style={{ fontSize: 14 }}>💡</Text>
-              <Text style={{ color: textMuted, fontSize: 13, lineHeight: 18, flex: 1 }}>{heroInsight}</Text>
+              {/* Floating tip bubble */}
+              {showTip && (
+                <>
+                  {/* Backdrop to dismiss */}
+                  <Pressable
+                    style={{
+                      position: 'absolute',
+                      top: -1000,
+                      left: -spacing.s16,
+                      right: -spacing.s16,
+                      bottom: 0,
+                      height: 2000,
+                      zIndex: 10
+                    }}
+                    onPress={toggleTip}
+                  />
+                  <Animated.View style={{
+                    position: 'absolute',
+                    bottom: '100%',
+                    marginBottom: spacing.s8,
+                    right: 0,
+                    left: 0,
+                    opacity: tipOpacity,
+                    transform: [{
+                      translateY: tipOpacity.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [10, 0]
+                      })
+                    }],
+                    padding: spacing.s14,
+                    borderRadius: radius.xl,
+                    backgroundColor: isDark ? surface1 : '#ffffff',
+                    borderWidth: 2,
+                    borderColor: withAlpha(accentPrimary, 0.4),
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 8 },
+                    shadowOpacity: isDark ? 0.5 : 0.15,
+                    shadowRadius: 16,
+                    elevation: 8,
+                    zIndex: 20
+                  }}>
+                    <Text style={{ color: textPrimary, fontSize: 13, lineHeight: 18 }}>{heroInsight}</Text>
+                    {/* Pointer arrow pointing down */}
+                    <View style={{
+                      position: 'absolute',
+                      top: '100%',
+                      right: spacing.s20,
+                      width: 0,
+                      height: 0,
+                      borderLeftWidth: 8,
+                      borderRightWidth: 8,
+                      borderTopWidth: 8,
+                      borderLeftColor: 'transparent',
+                      borderRightColor: 'transparent',
+                      borderTopColor: withAlpha(accentPrimary, 0.4)
+                    }} />
+                    <View style={{
+                      position: 'absolute',
+                      top: '100%',
+                      marginTop: -2,
+                      right: spacing.s20 + 1,
+                      width: 0,
+                      height: 0,
+                      borderLeftWidth: 7,
+                      borderRightWidth: 7,
+                      borderTopWidth: 7,
+                      borderLeftColor: 'transparent',
+                      borderRightColor: 'transparent',
+                      borderTopColor: isDark ? surface1 : '#ffffff'
+                    }} />
+                  </Animated.View>
+                </>
+              )}
             </View>
           )}
 
@@ -396,6 +623,48 @@ export const Budgets: React.FC = () => {
               <Text style={{ color: successColor, fontWeight: '800', fontSize: 18 }}>{remainingAfterHoldsLabel}</Text>
               <Text style={{ color: textMuted, fontSize: 11, marginTop: spacing.s2 }}>{periodRangeLabel}</Text>
             </View>
+          </View>
+        </View>
+
+        {/* Quick Access Cards */}
+        <View style={{ gap: spacing.s12 }}>
+          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Quick access</Text>
+          <View style={{ flexDirection: 'row', gap: spacing.s10 }}>
+            <Pressable
+              onPress={() => nav.navigate('CategoryInsights')}
+              style={({ pressed }) => ({
+                flex: 1,
+                backgroundColor: withAlpha(accentPrimary, isDark ? 0.2 : 0.12),
+                borderRadius: radius.lg,
+                padding: spacing.s12,
+                gap: spacing.s6,
+                borderWidth: 1.5,
+                borderColor: withAlpha(accentPrimary, 0.35),
+                opacity: pressed ? 0.7 : 1
+              })}
+            >
+              <Icon name="pie-chart" size={22} color={accentPrimary} />
+              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 14 }}>Categories</Text>
+              <Text style={{ color: textMuted, fontSize: 12 }}>View breakdown</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => nav.navigate('UpcomingBills')}
+              style={({ pressed }) => ({
+                flex: 1,
+                backgroundColor: withAlpha(warningColor, isDark ? 0.2 : 0.12),
+                borderRadius: radius.lg,
+                padding: spacing.s12,
+                gap: spacing.s6,
+                borderWidth: 1.5,
+                borderColor: withAlpha(warningColor, 0.35),
+                opacity: pressed ? 0.7 : 1
+              })}
+            >
+              <Icon name="calendar" size={22} color={warningColor} />
+              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 14 }}>Bills</Text>
+              <Text style={{ color: textMuted, fontSize: 12 }}>{holdSummaryLabel}</Text>
+            </Pressable>
           </View>
         </View>
 
@@ -468,94 +737,157 @@ export const Budgets: React.FC = () => {
           backgroundColor: surface1,
           borderRadius: radius.xl,
           padding: spacing.s16,
-          gap: spacing.s12,
+          gap: spacing.s10,
           borderWidth: 1,
           borderColor: withAlpha(borderSubtle, isDark ? 0.5 : 1)
         }}>
-          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Projection & pace</Text>
-          <View style={{ gap: spacing.s6 }}>
-            <Text style={{ color: textMuted }}>Projected end of cycle</Text>
-            <Text style={{ color: textPrimary, fontSize: 22, fontWeight: '800' }}>
-              {fmtMoney(projected)}{budget > 0 ? ` / ${fmtMoney(budget)}` : ''}
+          {/* Title */}
+          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>
+            Projection by end of {cycle === 'monthly' ? 'month' : 'period'}
+          </Text>
+
+          {/* Summary Stats - Single Row */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.s12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s8, flex: 1 }}>
+              <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '900', letterSpacing: -0.8 }}>
+                {fmtMoney(projected)}
+              </Text>
+              <Text style={{ color: textMuted, fontSize: 16, fontWeight: '600' }}>
+                / {fmtMoney(budget)}
+              </Text>
+            </View>
+
+            {/* Status Badge on Right */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+              {projectedOver > 0 ? (
+                <View style={{
+                  paddingHorizontal: spacing.s10,
+                  paddingVertical: spacing.s6,
+                  borderRadius: radius.pill,
+                  backgroundColor: withAlpha(warningColor, isDark ? 0.2 : 0.12),
+                  borderWidth: 1,
+                  borderColor: withAlpha(warningColor, 0.3)
+                }}>
+                  <Text style={{ color: warningColor, fontSize: 12, fontWeight: '700' }}>
+                    ⚠️ Over {fmtMoney(projectedOver)}
+                  </Text>
+                </View>
+              ) : (
+                <View style={{
+                  paddingHorizontal: spacing.s10,
+                  paddingVertical: spacing.s6,
+                  borderRadius: radius.pill,
+                  backgroundColor: withAlpha(successColor, isDark ? 0.2 : 0.12),
+                  borderWidth: 1,
+                  borderColor: withAlpha(successColor, 0.3)
+                }}>
+                  <Text style={{ color: successColor, fontSize: 12, fontWeight: '700' }}>
+                    ✓ On track
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Overrun ETA if applicable */}
+          {overrunEta && (
+            <Text style={{ color: warningColor, fontSize: 12, marginTop: -spacing.s4 }}>
+              Estimated overrun: {overrunEta.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
             </Text>
-            {projectedOver > 0 ? (
-              <Text style={{ color: warningColor }}>Over by {fmtMoney(projectedOver)} if trends continue.</Text>
-            ) : (
-              <Text style={{ color: successColor }}>Tracking within plan.</Text>
-            )}
-            {overrunEta ? (
-              <Text style={{ color: warningColor }}>Estimated overrun on {overrunEta.toDateString()}.</Text>
-            ) : null}
-          </View>
-          <View style={{ gap: spacing.s8 }}>
-            <Text style={{ color: textMuted }}>Cash shielded for bills</Text>
-            <Text style={{ color: textPrimary, fontWeight: '700' }}>{fmtMoney(holdAmount)} • {holdSummaryLabel}</Text>
-          </View>
-          <Button title="Review recent transactions" variant="secondary" onPress={() => nav.navigate('TransactionsModal')} />
-        </View>
+          )}
 
-        {/* Quick Access Cards */}
-        <View style={{ gap: spacing.s12 }}>
-          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Quick access</Text>
-          <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
-            <Pressable
-              onPress={() => nav.navigate('CategoryInsights')}
-              style={({ pressed }) => ({
-                flex: 1,
-                backgroundColor: surface1,
-                borderRadius: radius.xl,
-                padding: spacing.s16,
-                gap: spacing.s12,
-                borderWidth: 1,
-                borderColor: withAlpha(borderSubtle, isDark ? 0.5 : 1),
-                opacity: pressed ? 0.85 : 1
-              })}
-            >
-              <View style={{
-                width: 48,
-                height: 48,
-                borderRadius: radius.lg,
-                backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Icon name="pie-chart" size={24} color={accentPrimary} />
-              </View>
-              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>Category spotlight</Text>
-              <Text style={{ color: textMuted, fontSize: 13 }}>See envelope breakdown</Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => nav.navigate('UpcomingBills')}
-              style={({ pressed }) => ({
-                flex: 1,
-                backgroundColor: surface1,
-                borderRadius: radius.xl,
-                padding: spacing.s16,
-                gap: spacing.s12,
-                borderWidth: 1,
-                borderColor: withAlpha(borderSubtle, isDark ? 0.5 : 1),
-                opacity: pressed ? 0.85 : 1
-              })}
-            >
-              <View style={{
-                width: 48,
-                height: 48,
-                borderRadius: radius.lg,
-                backgroundColor: withAlpha(warningColor, isDark ? 0.25 : 0.15),
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Icon name="calendar" size={24} color={warningColor} />
-              </View>
-              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>Upcoming bills</Text>
-              <Text style={{ color: textMuted, fontSize: 13 }}>{holdSummaryLabel}</Text>
-            </Pressable>
-          </View>
+          {/* Spending Projection Chart */}
+          {actualChartData.length > 0 && budget > 0 && (
+            <View style={{ marginHorizontal: -spacing.s8, marginTop: -spacing.s2 }}>
+              <ProjectionChart
+                actualData={actualChartData}
+                projectedValue={projected}
+                projectedTime={period.end.getTime()}
+                budget={budget}
+                height={180}
+              />
+            </View>
+          )}
         </View>
 
         </View>
       </Animated.View>
+
+      {/* Month Picker Modal */}
+      <Modal visible={monthPickerOpen} transparent animationType="fade" onRequestClose={() => setMonthPickerOpen(false)}>
+        <TouchableWithoutFeedback onPress={() => setMonthPickerOpen(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(8,10,18,0.72)', justifyContent: 'center', alignItems: 'center', padding: spacing.s16 }}>
+            <TouchableWithoutFeedback>
+              <View style={{
+                width: '100%',
+                maxWidth: 360,
+                backgroundColor: surface1,
+                borderRadius: radius.xl,
+                padding: spacing.s16,
+                shadowColor: '#000',
+                shadowOpacity: 0.18,
+                shadowRadius: 18,
+                shadowOffset: { width: 0, height: 10 },
+                elevation: 10
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
+                  <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Select month</Text>
+                  <Pressable onPress={() => setMonthPickerOpen(false)} hitSlop={8}>
+                    <Text style={{ color: textMuted, fontSize: 16 }}>Close</Text>
+                  </Pressable>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
+                  <Pressable
+                    onPress={() => setPickerYear(prev => prev - 1)}
+                    hitSlop={8}
+                    style={{ padding: spacing.s8 }}
+                  >
+                    <Text style={{ color: textPrimary, fontSize: 20 }}>‹</Text>
+                  </Pressable>
+                  <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 18 }}>{pickerYear}</Text>
+                  <Pressable
+                    onPress={() => setPickerYear(prev => (prev >= today.getFullYear() ? prev : prev + 1))}
+                    hitSlop={8}
+                    style={{ padding: spacing.s8, opacity: pickerYear >= today.getFullYear() ? 0.4 : 1 }}
+                    disabled={pickerYear >= today.getFullYear()}
+                  >
+                    <Text style={{ color: textPrimary, fontSize: 20 }}>›</Text>
+                  </Pressable>
+                </View>
+
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
+                  {MONTHS.map((lbl, idx) => {
+                    const now = new Date();
+                    const afterNow = (pickerYear > now.getFullYear()) || (pickerYear === now.getFullYear() && idx > now.getMonth());
+                    const disabled = afterNow;
+                    const isSelected = (pickerYear === selectedMonth.getFullYear() && idx === selectedMonth.getMonth());
+                    return (
+                      <Pressable
+                        key={lbl}
+                        onPress={() => { if (!disabled) selectMonth(pickerYear, idx); }}
+                        disabled={disabled}
+                        style={{
+                          width: '23%',
+                          paddingVertical: spacing.s10,
+                          borderRadius: radius.lg,
+                          alignItems: 'center',
+                          backgroundColor: isSelected ? surface2 : surface1,
+                          borderWidth: isSelected ? 2 : 1,
+                          borderColor: isSelected ? accentPrimary : borderSubtle,
+                          opacity: disabled ? 0.35 : 1
+                        }}
+                      >
+                        <Text style={{ color: textPrimary, fontWeight: isSelected ? '700' : '500' }}>{lbl}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </ScreenScroll>
   );
 };

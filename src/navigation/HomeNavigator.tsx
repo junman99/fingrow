@@ -6,6 +6,7 @@ import { Insights } from '../screens/Insights';
 import { Transactions } from '../screens/Transactions';
 import BudgetSettings from '../screens/BudgetSettings';
 import CategoryInsights from '../screens/CategoryInsights';
+import CategoryTransactions from '../screens/CategoryTransactions';
 import UpcomingBills from '../screens/UpcomingBills';
 import GroupsRoot from '../screens/groups/GroupsRoot';
 import GroupDetail from '../screens/groups/GroupDetail';
@@ -23,6 +24,7 @@ export type HomeStackParamList = {
   BudgetsRoot: undefined;
   BudgetSettings: undefined;
   CategoryInsights: undefined;
+  CategoryTransactions: { category: string };
   UpcomingBills: undefined;
   InsightsRoot: undefined;
   HistoryRoot: undefined;
@@ -65,6 +67,13 @@ export default function HomeNavigator() {
       <Stack.Screen
         name="CategoryInsights"
         component={CategoryInsights}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="CategoryTransactions"
+        component={CategoryTransactions}
         options={{
           animation: 'slide_from_right',
         }}

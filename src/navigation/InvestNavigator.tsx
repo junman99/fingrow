@@ -8,6 +8,7 @@ import EditLot from '../screens/EditLot';
 import HoldingHistory from '../screens/HoldingHistory';
 import CashManagement from '../screens/CashManagement';
 import DCAPlanner from '../screens/DCAPlanner';
+import PortfolioDetail from '../screens/PortfolioDetail';
 
 const Stack = createNativeStackNavigator();
 
@@ -15,6 +16,7 @@ export default function InvestNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="InvestHome" component={InvestHome} />
+      <Stack.Screen name="PortfolioDetail" component={PortfolioDetail} />
       <Stack.Screen name="AddLot" component={AddLot} options={{ presentation: 'modal' }} />
       <Stack.Screen name="HoldingHistory" component={HoldingHistory} options={{ presentation: 'modal' }} />
       <Stack.Screen name="CashManagement" component={CashManagement} options={{ presentation: 'modal' }} />

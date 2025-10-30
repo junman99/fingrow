@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '../components/Screen';
 import Keypad from '../components/Keypad';
 import DateTimeSheet from '../components/DateTimeSheet';
+import AddCategoryModal from './AddCategory';
 import Icon from '../components/Icon';
 
 import { spacing, radius, elevation } from '../theme/tokens';
@@ -33,7 +34,7 @@ import {
 } from 'lucide-react-native';
 
 type Mode = 'expense' | 'income';
-type Cat = { key: string; label: string; icon: React.ComponentType<any>; type: Mode };
+type Cat = { key: string; label: string; icon: React.ComponentType<any> | string; type: Mode };
 
 type SummaryChipProps = {
   icon: 'category' | 'clock' | 'wallet' | 'note' | 'recurring';
@@ -114,7 +115,7 @@ const EXPENSE_CATS: Cat[] = [
   { key: 'travel',     label: 'Travel',         icon: Plane,          type: 'expense' },
   { key: 'subs',       label: 'Subscriptions',  icon: Repeat,         type: 'expense' },
   { key: 'gifts',      label: 'Gifts',          icon: Gift,           type: 'expense' },
-  { key: 'more',       label: 'More',           icon: MoreHorizontal, type: 'expense' },
+  { key: 'add',        label: 'Add',            icon: MoreHorizontal, type: 'expense' },
 ];
 
 const INCOME_CATS: Cat[] = [
@@ -122,6 +123,7 @@ const INCOME_CATS: Cat[] = [
   { key: 'refund',     label: 'Refund',     icon: ArrowLeftRight, type: 'income' },
   { key: 'bonus',      label: 'Bonus',      icon: Wallet,         type: 'income' },
   { key: 'freelance',  label: 'Freelance',  icon: Repeat,         type: 'income' },
+  { key: 'add',        label: 'Add',        icon: MoreHorizontal, type: 'income' },
 ];
 
 function evaluateExpression(expr: string): number {
@@ -186,6 +188,17 @@ export default function Add() {
   const [mode, setMode] = useState<Mode>('expense');
   const [category, setCategory] = useState<Cat>(EXPENSE_CATS[0]);
   const [expr, setExpr] = useState<string>('');
+  const [customExpenseCats, setCustomExpenseCats] = useState<Cat[]>([]);
+  const [customIncomeCats, setCustomIncomeCats] = useState<Cat[]>([]);
+
+  // Update category when mode changes
+  useEffect(() => {
+    if (mode === 'expense') {
+      setCategory(EXPENSE_CATS[0]); // Food
+    } else {
+      setCategory(INCOME_CATS[0]); // Salary
+    }
+  }, [mode]);
 
   const result = useMemo(() => evaluateExpression(expr), [expr]);
   const [toast, setToast] = useState<string>('');
@@ -247,8 +260,11 @@ export default function Add() {
 
   const { add: addRecurring } = useRecurringStore();
   const { width: screenW, height: screenH } = Dimensions.get('window');
-  const keypadHeightEstimate = 400;
-  const keypadReserve = keypadHeightEstimate + spacing.s12;
+  const keypadButtonsHeight = 5 * 48 + 4 * 8; // 5 rows of 48px buttons + 4 gaps of 8px = 272px
+  const keypadDragHandle = 16; // drag handle area at top
+  const keypadHeaderHeight = 110; // chips row + mode toggle/amount row + note chip + gaps
+  const keypadPadding = 10; // top/bottom padding
+  const keypadReserve = keypadButtonsHeight + keypadDragHandle + keypadHeaderHeight + keypadPadding + insets.bottom;
   const whenLabel = useMemo(() => fmtChipTime(txDate), [txDate]);
   const noteChipLabel = useMemo(() => {
     if (!note.trim()) return 'Add note';
@@ -389,17 +405,22 @@ export default function Add() {
   };
 
   const containerPad = spacing.s16;
-  const gridGap = spacing.s12;
-  const availableWidth = Math.max(0, screenW - containerPad * 2);
+  const availableWidth = screenW;
   const numColumns = availableWidth >= 320 ? 4 : 3;
-  const itemWidth = Math.floor((availableWidth - gridGap * (numColumns - 1)) / numColumns);
+  const itemWidth = Math.floor(availableWidth / numColumns);
   // Calculate available space for categories: total height minus keypad, header, and padding
   const categoryHeaderHeight = 75; // "Choose category" title + subtitle + margins
   const tileMaxHeight = Math.max(200, screenH - keypadReserve - categoryHeaderHeight - insets.top - spacing.s12);
 
+  const allExpenseCats = [...EXPENSE_CATS.slice(0, -1), ...customExpenseCats, EXPENSE_CATS[EXPENSE_CATS.length - 1]];
+  const allIncomeCats = [...INCOME_CATS.slice(0, -1), ...customIncomeCats, INCOME_CATS[INCOME_CATS.length - 1]];
+
   const renderCat = (item: Cat, index: number) => {
-    const IconComp = item.icon as any;
+    const isIconComponent = typeof item.icon !== 'string';
+    const IconComp = isIconComponent ? (item.icon as any) : null;
+    const emojiOrLetter = !isIconComponent ? (item.icon as string) : null;
     const selected = category?.key === item.key;
+    const isCustom = item.key.startsWith('custom_');
 
     // Modern color scheme for categories
     const categoryColors: Record<string, string> = {
@@ -420,21 +441,51 @@ export default function Add() {
       subs: '#6C5CE7',
       gifts: '#FF6348',
       more: '#95A5A6',
+      add: '#95A5A6',
       salary: '#00B894',
       refund: '#74B9FF',
       bonus: '#FDCB6E',
       freelance: '#A29BFE',
     };
 
-    const categoryColor = categoryColors[item.key] || accentPrimary;
-    const currentCats = mode === 'expense' ? EXPENSE_CATS : INCOME_CATS;
+    const categoryColor = categoryColors[item.key] || accentSecondary;
+    const currentCats = mode === 'expense' ? allExpenseCats : allIncomeCats;
     const isRightEdge = (index + 1) % numColumns === 0;
     const isBottomEdge = index >= currentCats.length - numColumns;
+
+    const handleDelete = () => {
+      if (mode === 'expense') {
+        setCustomExpenseCats(customExpenseCats.filter(c => c.key !== item.key));
+      } else {
+        setCustomIncomeCats(customIncomeCats.filter(c => c.key !== item.key));
+      }
+      setDeleteMode(false);
+      // If the deleted category was selected, reset to first category
+      if (selected) {
+        setCategory(mode === 'expense' ? EXPENSE_CATS[0] : INCOME_CATS[0]);
+      }
+    };
 
     return (
       <Pressable
         key={item.key}
-        onPress={() => setCategory(item)}
+        onPress={() => {
+          if (deleteMode && isCustom) {
+            // In delete mode, tapping does nothing (must tap X)
+            return;
+          }
+          if (item.key === 'add') {
+            setAddCategoryOpen(true);
+          } else {
+            setCategory(item);
+          }
+        }}
+        onLongPress={() => {
+          if (isCustom) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            setDeleteMode(true);
+          }
+        }}
         style={({ pressed }) => ({
           width: itemWidth,
           opacity: pressed ? 0.7 : 1,
@@ -464,11 +515,45 @@ export default function Add() {
               marginBottom: spacing.s6,
             }}
           >
-            <IconComp
-              size={22}
-              color={selected ? textOnPrimary : categoryColor}
-              strokeWidth={selected ? 2.5 : 2}
-            />
+            {isIconComponent ? (
+              <IconComp
+                size={22}
+                color={selected ? textOnPrimary : categoryColor}
+                strokeWidth={selected ? 2.5 : 2}
+              />
+            ) : (
+              <Text style={{
+                fontSize: emojiOrLetter && emojiOrLetter.length > 1 ? 22 : 18,
+                fontWeight: '700',
+                color: selected ? textOnPrimary : categoryColor,
+              }}>
+                {emojiOrLetter}
+              </Text>
+            )}
+
+            {/* Delete button - shows when in delete mode and is custom category */}
+            {deleteMode && isCustom && (
+              <Pressable
+                onPress={handleDelete}
+                style={{
+                  position: 'absolute',
+                  top: -4,
+                  right: -4,
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  backgroundColor: '#FF3B30',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 2,
+                  borderColor: backgroundDefault,
+                }}
+              >
+                <Text style={{ color: textOnPrimary, fontSize: 12, fontWeight: '700', lineHeight: 12 }}>
+                  ✕
+                </Text>
+              </Pressable>
+            )}
           </View>
           <Text
             style={{
@@ -521,6 +606,8 @@ export default function Add() {
   const [recDateOpen, setRecDateOpen] = useState<boolean>(false);
   const [recEndDateOpen, setRecEndDateOpen] = useState<boolean>(false);
   const [recAmount, setRecAmount] = useState<string>('0.00');
+  const [addCategoryOpen, setAddCategoryOpen] = useState<boolean>(false);
+  const [deleteMode, setDeleteMode] = useState<boolean>(false);
 
   const openRecurringEditor = () => {
     setRecLabel(note?.trim() || category?.label || 'Recurring');
@@ -657,15 +744,33 @@ export default function Add() {
   return (
     <Screen style={{ paddingBottom: 0, backgroundColor: backgroundDefault }} inTab>
       <View style={{ flex: 1 }}>
-        <View style={{ flex: 1, paddingTop: spacing.s10, paddingHorizontal: containerPad, paddingBottom: keypadReserve + spacing.s12 }}>
+        <View style={{ flex: 1, paddingTop: spacing.s10, paddingBottom: keypadReserve + spacing.s12 }}>
           <View style={{ marginBottom: spacing.s8 }}>
-            <View style={{ marginBottom: spacing.s12 }}>
-              <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 20, letterSpacing: -0.5 }}>
-                Choose category
-              </Text>
-              <Text style={{ color: textMuted, marginTop: spacing.s4, fontSize: 13 }}>
-                Tag your transaction for better insights
-              </Text>
+            <View style={{ marginBottom: spacing.s12, paddingHorizontal: containerPad }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 20, letterSpacing: -0.5 }}>
+                    Choose category
+                  </Text>
+                  <Text style={{ color: textMuted, marginTop: spacing.s4, fontSize: 13 }}>
+                    {deleteMode ? 'Tap ✕ to delete custom categories' : 'Tag your transaction for better insights'}
+                  </Text>
+                </View>
+                {deleteMode && (
+                  <Pressable
+                    onPress={() => setDeleteMode(false)}
+                    style={({ pressed }) => ({
+                      paddingHorizontal: spacing.s12,
+                      paddingVertical: spacing.s6,
+                      borderRadius: radius.pill,
+                      backgroundColor: accentPrimary,
+                      opacity: pressed ? 0.85 : 1,
+                    })}
+                  >
+                    <Text style={{ color: textOnPrimary, fontWeight: '700', fontSize: 14 }}>Done</Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
 
             <ScrollView
@@ -677,12 +782,8 @@ export default function Add() {
               <View style={{
                 flexDirection: 'row',
                 flexWrap: 'wrap',
-                borderWidth: 1,
-                borderColor: borderSubtle,
-                borderRadius: radius.lg,
-                overflow: 'hidden',
               }}>
-                {(mode === 'expense' ? EXPENSE_CATS : INCOME_CATS).map((item, index) => renderCat(item, index))}
+                {(mode === 'expense' ? allExpenseCats : allIncomeCats).map((item, index) => renderCat(item, index))}
               </View>
             </ScrollView>
           </View>
@@ -735,12 +836,7 @@ export default function Add() {
             >
               <View style={{ marginBottom: spacing.s12 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s4 }}>
-                  <View>
-                    <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 20 }}>Choose account</Text>
-                    <Text style={{ color: textMuted, fontSize: 13, marginTop: spacing.s4 }}>
-                      {accounts.length === 0 ? 'No accounts yet' : `${accounts.length} account${accounts.length === 1 ? '' : 's'} available`}
-                    </Text>
-                  </View>
+                  <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 20 }}>Choose account</Text>
                   <Pressable onPress={() => setAccountOpen(false)} hitSlop={12}>
                     <Icon name="x" size={20} color={textMuted} />
                   </Pressable>
@@ -779,7 +875,7 @@ export default function Add() {
               ) : (
                 <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
                   <View style={{ gap: spacing.s8 }}>
-                    {accounts.map((acc) => {
+                    {accounts.filter(acc => acc.kind !== 'investment' && acc.kind !== 'retirement').map((acc) => {
                       const active = account === acc.name;
                       const isDefault = acc.isDefault;
                       const kindLabel = acc.kind ? acc.kind.charAt(0).toUpperCase() + acc.kind.slice(1) : 'Account';
@@ -1148,6 +1244,28 @@ export default function Add() {
             />
           </View>
         ) : null}
+
+        <AddCategoryModal
+          visible={addCategoryOpen}
+          onClose={() => setAddCategoryOpen(false)}
+          onSave={(name, emoji) => {
+            const newCat: Cat = {
+              key: `custom_${Date.now()}`,
+              label: name,
+              icon: emoji,
+              type: mode,
+            };
+
+            if (mode === 'expense') {
+              setCustomExpenseCats([...customExpenseCats, newCat]);
+            } else {
+              setCustomIncomeCats([...customIncomeCats, newCat]);
+            }
+
+            // Automatically select the new category
+            setCategory(newCat);
+          }}
+        />
       </View>
     </Screen>
   );

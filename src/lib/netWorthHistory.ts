@@ -7,6 +7,7 @@ export type NetWorthDataPoint = {
   cash: number;
   investments: number;
   debt: number;
+  label?: string; // Optional label for chart display
 };
 
 /**
@@ -178,12 +179,12 @@ export function aggregateNetWorthData(
       return aggregateByDay(filteredData);
 
     case '1M':
-      // Daily bars (~30 bars)
-      return aggregateByDay(filteredData);
+      // Weekly bars (~4 bars, showing Sundays)
+      return aggregateByWeek(filteredData);
 
     case '3M':
-      // Weekly bars (~13 bars)
-      return aggregateByWeek(filteredData);
+      // Bi-weekly bars (~6 bars, every 2 weeks)
+      return aggregateByBiWeek(filteredData);
 
     case '6M':
       // Monthly bars (6 bars)
@@ -203,14 +204,20 @@ export function aggregateNetWorthData(
 }
 
 function aggregateByDay(data: NetWorthDataPoint[]): NetWorthDataPoint[] {
-  // Already in daily format, just return as is
-  return data;
+  // Add labels for daily data (format: "20 Apr")
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return data.map(point => {
+    const date = new Date(point.t);
+    const label = `${date.getDate()} ${monthNames[date.getMonth()]}`;
+    return { ...point, label };
+  });
 }
 
 function aggregateByWeek(data: NetWorthDataPoint[]): NetWorthDataPoint[] {
   if (!data.length) return [];
 
   const weeks: Map<string, NetWorthDataPoint[]> = new Map();
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   data.forEach(point => {
     const date = new Date(point.t);
@@ -230,9 +237,49 @@ function aggregateByWeek(data: NetWorthDataPoint[]): NetWorthDataPoint[] {
   const result: NetWorthDataPoint[] = [];
   Array.from(weeks.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([_, points]) => {
-      result.push(points[points.length - 1]);
+    .forEach(([weekKey, points]) => {
+      const lastPoint = points[points.length - 1];
+      const date = new Date(lastPoint.t);
+      const label = `${date.getDate()} ${monthNames[date.getMonth()]}`;
+      result.push({ ...lastPoint, label });
     });
+
+  return result;
+}
+
+function aggregateByBiWeek(data: NetWorthDataPoint[]): NetWorthDataPoint[] {
+  if (!data.length) return [];
+
+  const weeks: Map<string, NetWorthDataPoint[]> = new Map();
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  data.forEach(point => {
+    const date = new Date(point.t);
+    // Get the week start (Sunday)
+    const weekStart = new Date(date);
+    weekStart.setDate(date.getDate() - date.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    const weekKey = weekStart.toISOString().split('T')[0];
+
+    if (!weeks.has(weekKey)) {
+      weeks.set(weekKey, []);
+    }
+    weeks.get(weekKey)!.push(point);
+  });
+
+  // Take every other week (bi-weekly)
+  const result: NetWorthDataPoint[] = [];
+  const sortedWeeks = Array.from(weeks.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+  sortedWeeks.forEach(([weekKey, points], index) => {
+    // Show every other week (index 0, 2, 4, 6, etc.)
+    if (index % 2 === 0) {
+      const lastPoint = points[points.length - 1];
+      const date = new Date(lastPoint.t);
+      const label = `${date.getDate()} ${monthNames[date.getMonth()]}`;
+      result.push({ ...lastPoint, label });
+    }
+  });
 
   return result;
 }
@@ -254,10 +301,14 @@ function aggregateByMonth(data: NetWorthDataPoint[]): NetWorthDataPoint[] {
 
   // Take the last point of each month (end-of-month data)
   const result: NetWorthDataPoint[] = [];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   Array.from(months.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([_, points]) => {
-      result.push(points[points.length - 1]);
+    .forEach(([monthKey, points]) => {
+      const lastPoint = points[points.length - 1];
+      const date = new Date(lastPoint.t);
+      const label = `${date.getDate()} ${monthNames[date.getMonth()]}`;
+      result.push({ ...lastPoint, label });
     });
 
   return result;

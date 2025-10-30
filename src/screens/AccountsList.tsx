@@ -81,7 +81,7 @@ const CollapsibleSection: React.FC<{
   const rotateAnim = useSharedValue(defaultExpanded ? 1 : 0);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    maxHeight: heightAnim.value === 0 ? 0 : 2000,
+    maxHeight: heightAnim.value * 2000,
     opacity: heightAnim.value,
     overflow: 'hidden',
   }));
@@ -94,8 +94,8 @@ const CollapsibleSection: React.FC<{
     const newExpanded = !isExpanded;
     setIsExpanded(newExpanded);
 
-    heightAnim.value = withTiming(newExpanded ? 1 : 0, { duration: 300 });
-    rotateAnim.value = withSpring(newExpanded ? 1 : 0, { damping: 15, stiffness: 200 });
+    heightAnim.value = withTiming(newExpanded ? 1 : 0, { duration: 250 });
+    rotateAnim.value = withTiming(newExpanded ? 1 : 0, { duration: 250 });
   };
 
   if (count === 0) return null;
@@ -149,7 +149,7 @@ const CollapsibleSection: React.FC<{
 
       {/* Expandable Content - Account cards inside */}
       <Animated.View style={animatedStyle}>
-        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s4, paddingBottom: spacing.s12 }}>
+        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s4, paddingBottom: spacing.s8 }}>
           {children}
         </View>
       </Animated.View>
@@ -286,7 +286,7 @@ const AccountsList: React.FC = () => {
         <AnimatedPressable
           onPress={() => nav.navigate('AccountDetail', { id: account.id })}
           style={{
-            paddingVertical: spacing.s12,
+            paddingVertical: spacing.s8,
             opacity: excluded ? 0.7 : 1,
           }}
         >
@@ -353,61 +353,44 @@ const AccountsList: React.FC = () => {
             <Icon name="chevron-left" size={28} color={text} />
           </Pressable>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: muted, fontSize: 14, fontWeight: '600' }}>
-              Your Accounts
-            </Text>
-            <Text style={{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.8, marginTop: spacing.s2 }}>
+            <Text style={{ color: text, fontSize: 28, fontWeight: '800', letterSpacing: -0.8 }}>
               Cash Overview
-            </Text>
-            <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s4 }}>
-              Manage your accounts and balances
             </Text>
           </View>
         </View>
       </Animated.View>
 
-      {/* Summary Card */}
+      {/* Summary - Direct on Background */}
       <Animated.View style={fadeStyle}>
-        <Card
-          style={{
-            backgroundColor: withAlpha(accentPrimary, isDark ? 0.2 : 0.12),
-            padding: spacing.s20,
-            borderWidth: 2,
-            borderColor: withAlpha(accentPrimary, 0.3),
-          }}
-        >
-          <View style={{ gap: spacing.s16 }}>
-            <View>
-              <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>Total cash</Text>
-              <Text style={{ color: text, fontSize: 32, fontWeight: '800', marginTop: spacing.s6, letterSpacing: -0.8 }}>
-                {formatCurrency(totalCash)}
+        <View style={{ gap: spacing.s16 }}>
+          <View>
+            <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>Total cash</Text>
+            <Text style={{ color: text, fontSize: 36, fontWeight: '800', marginTop: spacing.s6, letterSpacing: -0.8 }}>
+              {formatCurrency(totalCash)}
+            </Text>
+          </View>
+
+          <View style={{ flexDirection: 'row', gap: spacing.s20 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: muted, fontSize: 12 }}>Spendable</Text>
+              <Text style={{ color: text, fontSize: 18, fontWeight: '700', marginTop: 4 }}>
+                {formatCurrency(spendable)}
               </Text>
             </View>
-
-            <View style={{ height: 1, backgroundColor: withAlpha(border, 0.3) }} />
-
-            <View style={{ flexDirection: 'row', gap: spacing.s20 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: muted, fontSize: 12 }}>Spendable</Text>
-                <Text style={{ color: onSurface, fontSize: 18, fontWeight: '700', marginTop: 4 }}>
-                  {formatCurrency(spendable)}
-                </Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: muted, fontSize: 12 }}>Runway</Text>
-                <Text style={{ color: onSurface, fontSize: 18, fontWeight: '700', marginTop: 4 }}>
-                  {runwayDays} days
-                </Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: muted, fontSize: 12 }}>Daily avg</Text>
-                <Text style={{ color: onSurface, fontSize: 18, fontWeight: '700', marginTop: 4 }}>
-                  {formatCurrency(avgDaily)}
-                </Text>
-              </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: muted, fontSize: 12 }}>Runway</Text>
+              <Text style={{ color: text, fontSize: 18, fontWeight: '700', marginTop: 4 }}>
+                {runwayDays} days
+              </Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: muted, fontSize: 12 }}>Daily avg</Text>
+              <Text style={{ color: text, fontSize: 18, fontWeight: '700', marginTop: 4 }}>
+                {formatCurrency(avgDaily)}
+              </Text>
             </View>
           </View>
-        </Card>
+        </View>
       </Animated.View>
 
       {/* No Accounts */}
@@ -445,8 +428,15 @@ const AccountsList: React.FC = () => {
         </Animated.View>
       ) : (
         <>
+          {/* Accounts Section */}
+          <Animated.View style={fadeStyle}>
+            <Text style={{ color: text, fontSize: 16, fontWeight: '700', marginBottom: 6 }}>
+              Accounts
+            </Text>
+          </Animated.View>
+
           {/* Collapsible Account Sections */}
-          <Animated.View style={[{ gap: spacing.s16 }, fadeStyle]}>
+          <Animated.View style={[{ gap: spacing.s12 }, fadeStyle]}>
             {/* Cash Accounts */}
             <CollapsibleSection
               title="Cash Accounts"
@@ -542,23 +532,64 @@ const AccountsList: React.FC = () => {
 
       {/* Quick Actions */}
       <Animated.View style={[{ gap: spacing.s12 }, fadeStyle]}>
-        <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>
-          Quick Actions
+        <Text style={{ color: text, fontSize: 16, fontWeight: '700' }}>
+          Quick access
         </Text>
-        <View style={{ gap: spacing.s8 }}>
-          <Button
-            title="Add account"
+        <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
+          <Pressable
             onPress={() => nav.navigate('AddAccount')}
-            variant="secondary"
-            icon="plus"
-          />
+            style={({ pressed }) => ({
+              flex: 1,
+              backgroundColor: cardBg,
+              borderRadius: radius.xl,
+              padding: spacing.s16,
+              gap: spacing.s12,
+              borderWidth: 1,
+              borderColor: withAlpha(border, isDark ? 0.5 : 1),
+              opacity: pressed ? 0.85 : 1
+            })}
+          >
+            <View style={{
+              width: 48,
+              height: 48,
+              borderRadius: radius.lg,
+              backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Icon name="plus" size={24} color={accentPrimary} />
+            </View>
+            <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>Add account</Text>
+            <Text style={{ color: muted, fontSize: 13 }}>Track a new account</Text>
+          </Pressable>
+
           {accountsList.length > 0 && (
-            <Button
-              title="View account settings"
+            <Pressable
               onPress={() => nav.navigate('AccountSettings')}
-              variant="secondary"
-              icon="settings"
-            />
+              style={({ pressed }) => ({
+                flex: 1,
+                backgroundColor: cardBg,
+                borderRadius: radius.xl,
+                padding: spacing.s16,
+                gap: spacing.s12,
+                borderWidth: 1,
+                borderColor: withAlpha(border, isDark ? 0.5 : 1),
+                opacity: pressed ? 0.85 : 1
+              })}
+            >
+              <View style={{
+                width: 48,
+                height: 48,
+                borderRadius: radius.lg,
+                backgroundColor: withAlpha(accentSecondary, isDark ? 0.25 : 0.15),
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Icon name="settings" size={24} color={accentSecondary} />
+              </View>
+              <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>Account settings</Text>
+              <Text style={{ color: muted, fontSize: 13 }}>Manage your accounts</Text>
+            </Pressable>
           )}
         </View>
       </Animated.View>

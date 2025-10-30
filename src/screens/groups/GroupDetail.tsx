@@ -879,13 +879,14 @@ export default function GroupDetail() {
             {billGroups.length === 0 ? (
               <Text style={{ color: textMuted, padding: spacing.s16 }}>No bills yet.</Text>
             ) : (
-              <View style={{ paddingHorizontal: spacing.s16, paddingBottom: spacing.s16 }}>
+              <View style={{ paddingBottom: spacing.s16 }}>
                 {billGroups.map((billGroup: any, groupIndex: number) => (
                   <View key={billGroup.title}>
                     <Text style={{
                       color: textMuted,
                       fontSize: 12,
-                      marginTop: spacing.s10
+                      marginTop: spacing.s10,
+                      paddingHorizontal: spacing.s16
                     }}>
                       {billGroup.title}
                     </Text>

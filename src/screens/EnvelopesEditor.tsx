@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useCallback, useState } from 'react';
-import { View, Text, Pressable, Alert } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useMemo, useCallback, useState, useRef } from 'react';
+import { View, Text, Pressable, Alert, Animated } from 'react-native';
+import Icon from '../components/Icon';
 import { ScreenScroll } from '../components/ScreenScroll';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
@@ -27,6 +27,25 @@ export default function EnvelopesEditor() {
 
   useEffect(() => { if (!ready) hydrate(); }, [ready]);
 
+  // Match CategoryInsights animation
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, []);
+
   // Build category list based on history (last 90d)
   const txAll = require('../store/transactions').useTxStore.getState().transactions || [];
   const today = new Date();
@@ -40,40 +59,19 @@ export default function EnvelopesEditor() {
 
   const textPrimary = get('text.primary') as string;
   const textMuted = get('text.muted') as string;
+  const surface1 = get('surface.level1') as string;
+  const surface2 = get('surface.level2') as string;
   const accentPrimary = get('accent.primary') as string;
   const accentSecondary = get('accent.secondary') as string;
   const successAccent = get('semantic.success') as string;
-
-  const heroGradient: [string, string] = isDark ? ['#141a2c', '#1f2640'] : [accentPrimary, accentSecondary];
-  const heroText = isDark ? '#eef3ff' : (get('text.onPrimary') as string);
-  const heroMuted = withAlpha(heroText, isDark ? 0.74 : 0.78);
+  const warningColor = get('semantic.warning') as string;
+  const dangerColor = get('semantic.danger') as string;
 
   const fmt = useCallback((val: number) => formatCurrency(val), []);
 
   const totalSpent = cats.reduce((sum, c) => sum + (byCat[c] || 0), 0);
   const manualCount = Object.values(overrides).filter(v => v !== null && v !== undefined).length;
   const autoCount = Math.max(0, cats.length - manualCount);
-
-  const pulseBubbles = useMemo(() => ([
-    {
-      label: `${cats.length} categories`,
-      bg: withAlpha(heroText, isDark ? 0.16 : 0.22),
-      border: withAlpha(heroText, isDark ? 0.38 : 0.3),
-      text: heroText
-    },
-    {
-      label: `${manualCount} manual · ${autoCount} auto`,
-      bg: withAlpha('#ffffff', isDark ? 0.12 : 0.24),
-      border: withAlpha('#ffffff', isDark ? 0.3 : 0.26),
-      text: heroText
-    },
-    {
-      label: `90d spend ${fmt(totalSpent)}`,
-      bg: withAlpha('#000000', isDark ? 0.26 : 0.1),
-      border: withAlpha('#000000', isDark ? 0.42 : 0.16),
-      text: heroText
-    }
-  ]), [autoCount, cats.length, fmt, heroText, isDark, manualCount, totalSpent]);
 
   const accentPalette = useMemo(() => ([
     {
@@ -165,141 +163,190 @@ export default function EnvelopesEditor() {
   }, [deleteEnvelope]);
 
   return (
-    <ScreenScroll contentStyle={{ paddingBottom: spacing.s32 }}>
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s16 }}>
-        <LinearGradient
-          colors={heroGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
-            borderRadius: radius.xl,
-            padding: spacing.s16,
-            gap: spacing.s12
-          }}
-        >
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <View style={{ gap: spacing.s4 }}>
-              <Text style={{ color: heroText, fontSize: 24, fontWeight: '800' }}>Envelope playground</Text>
-              <Text style={{ color: heroMuted }}>Shape your spending guardrails with a little personality.</Text>
-            </View>
-            <Pressable onPress={() => nav.goBack()} hitSlop={8}>
-              <Text style={{ color: heroMuted, fontWeight: '600' }}>Close</Text>
-            </Pressable>
+    <ScreenScroll inTab contentStyle={{ paddingBottom: spacing.s32 }}>
+      <Animated.View style={{
+        opacity: fadeAnim,
+        transform: [{ translateY: slideAnim }],
+        paddingHorizontal: spacing.s16,
+        paddingTop: spacing.s12,
+        gap: spacing.s20
+      }}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
+              Envelopes
+            </Text>
+            <Text style={{ color: textMuted, fontSize: 14, marginTop: spacing.s4 }}>
+              Set spending caps or let the app learn
+            </Text>
           </View>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
-            {pulseBubbles.map((bubble, idx) => (
-              <View
-                key={idx}
-                style={{
-                  paddingHorizontal: spacing.s12,
-                  paddingVertical: spacing.s6,
-                  borderRadius: radius.pill,
-                  backgroundColor: bubble.bg,
-                  borderWidth: 1,
-                  borderColor: bubble.border
-                }}
-              >
-                <Text style={{ color: bubble.text, fontWeight: '600' }}>{bubble.label}</Text>
-              </View>
-            ))}
+          <Pressable
+            onPress={() => nav.goBack()}
+            style={({ pressed }) => ({
+              padding: spacing.s8,
+              marginRight: -spacing.s8,
+              marginTop: -spacing.s4,
+              borderRadius: radius.md,
+              backgroundColor: pressed ? surface1 : 'transparent',
+            })}
+            hitSlop={8}
+          >
+            <Icon name="x" size={24} color={textPrimary} />
+          </Pressable>
+        </View>
+
+        {/* Summary Stats */}
+        <View style={{ flexDirection: 'row', gap: spacing.s10 }}>
+          <View style={{ flex: 1, padding: spacing.s12, borderRadius: radius.lg, backgroundColor: withAlpha(accentPrimary, isDark ? 0.15 : 0.08), borderWidth: 1, borderColor: withAlpha(accentPrimary, 0.25) }}>
+            <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>Categories</Text>
+            <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 20 }}>{cats.length}</Text>
           </View>
+          <View style={{ flex: 1, padding: spacing.s12, borderRadius: radius.lg, backgroundColor: withAlpha(successAccent, isDark ? 0.15 : 0.08), borderWidth: 1, borderColor: withAlpha(successAccent, 0.25) }}>
+            <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>Manual</Text>
+            <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 20 }}>{manualCount}</Text>
+          </View>
+          <View style={{ flex: 1, padding: spacing.s12, borderRadius: radius.lg, backgroundColor: withAlpha(warningColor, isDark ? 0.15 : 0.08), borderWidth: 1, borderColor: withAlpha(warningColor, 0.25) }}>
+            <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>90d Total</Text>
+            <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 16 }}>{fmt(totalSpent)}</Text>
+          </View>
+        </View>
+
+        {manualCount > 0 && (
           <Button title="Reset all to Auto" variant="secondary" onPress={resetAll} />
-        </LinearGradient>
+        )}
 
         {cats.length === 0 ? (
           <View style={emptyCardStyle}>
             <Text style={{ color: textMuted }}>
-              No history yet. Grab a latte, log a few expenses, and watch envelopes bloom.
+              No history yet. Start tracking expenses to see envelopes.
             </Text>
           </View>
         ) : (
-          <View style={{ gap: spacing.s12 }}>
+          <View style={{ gap: spacing.s16 }}>
             {cats.map((c, idx) => {
               const manualCap = overrides[c];
-              const accent = accentPalette[idx % accentPalette.length];
               const spent = byCat[c] || 0;
               const cap = manualCap ?? suggestedCaps[c] ?? 0;
               const pct = cap > 0 ? Math.min(100, Math.round((spent / cap) * 100)) : 0;
-              const remaining = cap > 0 ? Math.max(0, cap - spent) : null;
-              const share = totalSpent > 0 ? Math.round((spent / totalSpent) * 100) : 0;
+              const barColor = pct >= 100 ? dangerColor : pct >= 80 ? warningColor : successAccent;
               const isManualOnly = manualOnlyCats.includes(c);
 
               return (
                 <View
                   key={c}
                   style={{
-                    borderRadius: radius.xl,
                     padding: spacing.s16,
-                    gap: spacing.s12,
-                    backgroundColor: accent.card,
+                    gap: spacing.s14,
+                    backgroundColor: surface1,
+                    borderRadius: radius.xl,
                     borderWidth: 1,
-                    borderColor: accent.border
+                    borderColor: withAlpha(textMuted, isDark ? 0.2 : 0.1)
                   }}
                 >
+                  {/* Category Header */}
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ color: accent.title, fontSize: 18, fontWeight: '800' }}>{c}</Text>
+                    <Text style={{ color: textPrimary, fontSize: 17, fontWeight: '800' }}>{c}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
-                      <View style={{ paddingHorizontal: spacing.s10, paddingVertical: spacing.s4, borderRadius: radius.pill, backgroundColor: accent.chipBg }}>
-                        <Text style={{ color: accent.chipText, fontWeight: '600' }}>{manualCap !== undefined ? 'Manual' : 'Auto'}</Text>
+                      <View style={{
+                        paddingHorizontal: spacing.s10,
+                        paddingVertical: spacing.s4,
+                        borderRadius: radius.pill,
+                        backgroundColor: withAlpha(manualCap !== undefined ? accentPrimary : textMuted, isDark ? 0.2 : 0.12),
+                        borderWidth: 1,
+                        borderColor: withAlpha(manualCap !== undefined ? accentPrimary : textMuted, 0.3)
+                      }}>
+                        <Text style={{
+                          color: manualCap !== undefined ? accentPrimary : textMuted,
+                          fontWeight: '700',
+                          fontSize: 11
+                        }}>
+                          {manualCap !== undefined ? 'MANUAL' : 'AUTO'}
+                        </Text>
                       </View>
-                      <Pressable onPress={() => handlePeek(c)}>
-                        <Text style={{ color: accent.title, fontWeight: '600' }}>Peek history</Text>
+                      <Pressable onPress={() => handlePeek(c)} hitSlop={8}>
+                        <Icon name="info" size={18} color={textMuted} />
                       </Pressable>
                     </View>
                   </View>
 
-                  <Text style={{ color: accent.muted }}>
-                    {cap > 0
-                      ? `${fmt(spent)} spent · ${pct}% of ${manualCap !== undefined ? 'your cap' : 'auto cap'}${share ? ` · ${share}% of tracked spend` : ''}`
-                      : `We’re still learning how you spend on ${c}.`}
-                  </Text>
-
-                  <View style={{ height: 8, borderRadius: 4, overflow: 'hidden', backgroundColor: accent.progressTrack }}>
-                    <View style={{ height: '100%', width: `${pct}%`, backgroundColor: accent.progressFill }} />
+                  {/* Stats Row */}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={{ color: textMuted, fontSize: 14 }}>
+                      Spent: <Text style={{ color: textPrimary, fontWeight: '700' }}>{fmt(spent)}</Text>
+                    </Text>
+                    {cap > 0 && (
+                      <Text style={{ color: textMuted, fontSize: 14 }}>
+                        Cap: <Text style={{ color: textPrimary, fontWeight: '700' }}>{fmt(cap)}</Text>
+                      </Text>
+                    )}
                   </View>
 
-                  {remaining !== null ? (
-                    <Text style={{ color: accent.muted }}>{fmt(remaining)} safe to deploy this cycle.</Text>
-                  ) : null}
+                  {/* Progress Bar */}
+                  {cap > 0 && (
+                    <View style={{ gap: spacing.s6 }}>
+                      <View style={{
+                        height: 6,
+                        borderRadius: 3,
+                        backgroundColor: withAlpha(barColor, isDark ? 0.15 : 0.1),
+                        overflow: 'hidden'
+                      }}>
+                        <View style={{
+                          height: '100%',
+                          width: `${pct}%`,
+                          backgroundColor: barColor,
+                          borderRadius: 3
+                        }} />
+                      </View>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={{ color: textMuted, fontSize: 12 }}>
+                          {pct >= 100 ? `Over by ${fmt(spent - cap)}` : `${fmt(cap - spent)} remaining`}
+                        </Text>
+                        <Text style={{ color: barColor, fontSize: 13, fontWeight: '700' }}>{pct}%</Text>
+                      </View>
+                    </View>
+                  )}
 
+                  {/* Manual Cap Input */}
                   <Input
-                    label="Manual cap (S$)"
+                    label="Set manual cap"
                     keyboardType="numeric"
                     value={manualCap !== undefined ? String(manualCap) : ''}
-                    placeholder="Leave blank for Auto"
+                    placeholder="Auto"
                     onChangeText={(val: string) => handleCapChange(c, val)}
-                    style={{ marginTop: spacing.s4 }}
                   />
 
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
+                  {/* Action Buttons */}
+                  <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
+                    {manualCap !== undefined && (
+                      <Button
+                        title="Clear"
+                        size="sm"
+                        variant="secondary"
+                        onPress={() => setOverride(c, null)}
+                      />
+                    )}
                     <Button
-                      title="Reset to Auto"
-                      size="sm"
-                      variant="secondary"
-                      onPress={() => setOverride(c, null)}
-                      disabled={manualCap === undefined}
-                    />
-                    <Button
-                      title="Spark idea"
+                      title="Suggest"
                       size="sm"
                       variant="secondary"
                       onPress={() => handleSuggest(c)}
                     />
-                    {isManualOnly ? (
+                    {isManualOnly && (
                       <Button
-                        title="Delete envelope"
+                        title="Delete"
                         size="sm"
                         variant="secondary"
                         onPress={() => handleDeleteEnvelope(c)}
                       />
-                    ) : null}
+                    )}
                   </View>
                 </View>
               );
             })}
           </View>
         )}
-      </View>
+      </Animated.View>
     </ScreenScroll>
   );
 }

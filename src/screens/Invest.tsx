@@ -576,8 +576,7 @@ export const Invest = React.memo(() => {
             onOpenManager={() => setShowManager(true)}
             onOpenPortfolio={(id) => {
               console.log('🟢 [Invest] onOpenPortfolio callback called with id:', id);
-              setPortfolioDefaultTab('Holdings'); // Reset to Holdings when opening normally
-              setCurrentPortfolioId(id);
+              nav.navigate('PortfolioDetail', { portfolioId: id });
             }}
             onCreate={() => setShowCreateSheet(true)}
           />

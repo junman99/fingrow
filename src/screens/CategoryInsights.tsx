@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, Pressable, Animated } from 'react-native';
 import { ScreenScroll } from '../components/ScreenScroll';
 import Button from '../components/Button';
 import Icon from '../components/Icon';
@@ -34,6 +34,25 @@ export default function CategoryInsights() {
   const { overrides, hydrate: hydrateEnv, ready: readyEnv } = useEnvelopesStore();
 
   useEffect(()=>{ if(!readyEnv) hydrateEnv(); }, [readyEnv]);
+
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, []);
 
   const budget = monthlyBudget || 0;
   const today = new Date();
@@ -73,7 +92,11 @@ export default function CategoryInsights() {
   const textPrimary = get('text.primary') as string;
   const textMuted = get('text.muted') as string;
   const surface1 = get('surface.level1') as string;
+  const surface2 = get('surface.level2') as string;
   const borderSubtle = get('border.subtle') as string;
+  const successColor = get('semantic.success') as string;
+  const warningColor = get('semantic.warning') as string;
+  const dangerColor = get('semantic.danger') as string;
 
   const topCategory = cats[0];
   const trackedCategorySpend = cats.reduce((sum, c) => sum + c.spent, 0);
@@ -82,10 +105,16 @@ export default function CategoryInsights() {
   const categoryRemainingTotal = Math.max(0, totalCategoryCap - trackedCategorySpend);
 
   return (
-    <ScreenScroll contentStyle={{ paddingBottom: spacing.s24 }}>
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s16 }}>
+    <ScreenScroll inTab contentStyle={{ paddingBottom: spacing.s24 }}>
+      <Animated.View style={{
+        opacity: fadeAnim,
+        transform: [{ translateY: slideAnim }],
+        paddingHorizontal: spacing.s16,
+        paddingTop: spacing.s12,
+        gap: spacing.s20
+      }}>
         {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12, marginBottom: spacing.s8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12 }}>
           <Pressable
             onPress={() => nav.goBack()}
             style={({ pressed }) => ({
@@ -100,23 +129,10 @@ export default function CategoryInsights() {
             <Icon name="chevron-left" size={28} color={textPrimary} />
           </Pressable>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 }}>
-              Category Spotlight
+            <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 }}>
+              Categories
             </Text>
           </View>
-          <Pressable
-            onPress={() => nav.navigate('Envelopes')}
-            style={({ pressed }) => ({
-              padding: spacing.s8,
-              marginRight: -spacing.s8,
-              marginTop: -spacing.s4,
-              borderRadius: radius.md,
-              backgroundColor: pressed ? surface1 : 'transparent',
-            })}
-            hitSlop={8}
-          >
-            <Icon name="edit" size={24} color={accentPrimary} />
-          </Pressable>
         </View>
 
         {budget <= 0 ? (
@@ -131,110 +147,144 @@ export default function CategoryInsights() {
           </View>
         ) : (
           <>
-            {/* Overview Card */}
-            <View style={{
-              backgroundColor: withAlpha(accentSecondary, isDark ? 0.28 : 0.16),
-              borderRadius: radius.xl,
-              padding: spacing.s16,
-              gap: spacing.s12,
-              borderWidth: 1,
-              borderColor: withAlpha(borderSubtle, isDark ? 0.5 : 0.9)
-            }}>
-              <Text style={{ color: accentSecondary, fontWeight: '700', fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Overview
-              </Text>
-              <Text style={{ color: textPrimary, fontSize: 24, fontWeight: '800' }}>
-                {topCategory ? topCategory.name : 'Keep categorizing your spend'}
-              </Text>
-              <Text style={{ color: textMuted, fontSize: 15 }}>
-                {topCategory
-                  ? `${fmtMoney(topCategory.spent)} spent · ${topCategory.cap > 0 ? `${Math.round(Math.min(100, topCategory.ratio * 100))}% of cap` : 'No cap yet'}`
-                  : `We'll surface your most active envelope once you have more data.`}
-              </Text>
-              {categoryCoveragePct != null ? (
-                <Text style={{ color: textMuted, fontSize: 14 }}>
-                  {categoryCoveragePct}% of tracked caps used · {fmtMoney(categoryRemainingTotal)} remaining
+            {/* Top Summary - No Card */}
+            {topCategory && (
+              <View style={{ gap: spacing.s8 }}>
+                <Text style={{ color: textMuted, fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Top Spending
                 </Text>
-              ) : null}
-              <Text style={{ color: textMuted, fontSize: 14 }}>
-                {cats.length ? `${cats.length} tracked categories` : 'No categories tracked yet'}
-              </Text>
-            </View>
-
-            {/* Focus Category */}
-            {topCategory ? (
-              <View style={{
-                backgroundColor: withAlpha(accentPrimary, isDark ? 0.22 : 0.12),
-                borderRadius: radius.xl,
-                padding: spacing.s16,
-                gap: spacing.s8,
-                borderWidth: 1,
-                borderColor: withAlpha(accentPrimary, isDark ? 0.3 : 0.2)
-              }}>
-                <Text style={{ color: accentPrimary, fontWeight: '700', fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Focus category
+                <Text style={{ color: textPrimary, fontSize: 36, fontWeight: '900', letterSpacing: -1.2 }}>
+                  {topCategory.name}
                 </Text>
-                <Text style={{ color: textPrimary, fontSize: 22, fontWeight: '800' }}>{topCategory.name}</Text>
-                <Text style={{ color: textMuted }}>
-                  {fmtMoney(topCategory.spent)} spent · {topCategory.cap > 0 ? `${Math.round(Math.min(100, topCategory.ratio * 100))}% of cap` : 'No cap yet'}
-                </Text>
-                {topCategory.cap > 0 ? (
-                  <Text style={{ color: textMuted }}>
-                    Daily runway: {fmtMoney(Math.max(0, Math.floor((topCategory.cap - topCategory.spent) / Math.max(1, daysLeft))))}
-                  </Text>
-                ) : null}
-              </View>
-            ) : null}
-
-            {/* All Categories */}
-            <View style={{ gap: spacing.s10 }}>
-              {cats.map((c, idx) => {
-                const pct = c.cap > 0 ? Math.round(Math.min(100, (c.spent / c.cap) * 100)) : 0;
-                const barColor = idx % 2 === 0 ? accentPrimary : accentSecondary;
-                return (
-                  <View
-                    key={`${c.name}-${idx}`}
-                    style={{
-                      borderRadius: radius.xl,
-                      backgroundColor: surface1,
-                      borderWidth: 1,
-                      borderColor: withAlpha(borderSubtle, isDark ? 0.5 : 1),
-                      padding: spacing.s16,
-                      gap: spacing.s10
-                    }}
-                  >
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>{c.name}</Text>
-                      <Text style={{ color: textMuted, fontSize: 14 }}>{fmtMoney(c.spent)} / {fmtMoney(c.cap || 0)}</Text>
-                    </View>
-                    <View style={{
-                      height: 10,
-                      borderRadius: 5,
-                      backgroundColor: withAlpha(barColor, isDark ? 0.15 : 0.12),
-                      overflow: 'hidden'
-                    }}>
-                      <View style={{
-                        height: '100%',
-                        width: `${Math.min(100, c.cap > 0 ? (c.spent / c.cap) * 100 : 0)}%`,
-                        backgroundColor: barColor,
-                        borderRadius: 5
-                      }} />
-                    </View>
-                    <Text style={{ color: textMuted, fontSize: 14 }}>
-                      {c.cap > 0
-                        ? (c.spent <= c.cap ? `${fmtMoney(c.cap - c.spent)} remaining · ${pct}% used` : `Over by ${fmtMoney(c.spent - c.cap)}`)
-                        : 'Learning spend profile'}
+                <View style={{ flexDirection: 'row', gap: spacing.s16, marginTop: spacing.s4 }}>
+                  <View>
+                    <Text style={{ color: textMuted, fontSize: 13 }}>Spent</Text>
+                    <Text style={{ color: textPrimary, fontSize: 22, fontWeight: '800', marginTop: spacing.s2 }}>
+                      {fmtMoney(topCategory.spent)}
                     </Text>
                   </View>
+                  <View>
+                    <Text style={{ color: textMuted, fontSize: 13 }}>Cap</Text>
+                    <Text style={{ color: textPrimary, fontSize: 22, fontWeight: '800', marginTop: spacing.s2 }}>
+                      {topCategory.cap > 0 ? fmtMoney(topCategory.cap) : 'Auto'}
+                    </Text>
+                  </View>
+                  {topCategory.cap > 0 && (
+                    <View>
+                      <Text style={{ color: textMuted, fontSize: 13 }}>Used</Text>
+                      <Text style={{ color: textPrimary, fontSize: 22, fontWeight: '800', marginTop: spacing.s2 }}>
+                        {Math.round(Math.min(100, topCategory.ratio * 100))}%
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {/* All Categories - Visual Bars */}
+            <View style={{ gap: spacing.s6 }}>
+              {/* Hint */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.s2 }}>
+                <Text style={{ color: textMuted, fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  All Categories
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s10 }}>
+                  <Text style={{ color: textMuted, fontSize: 12, fontStyle: 'italic' }}>
+                    Tap to view transactions
+                  </Text>
+                  <Pressable
+                    onPress={() => nav.navigate('Envelopes')}
+                    style={({ pressed }) => ({
+                      width: 32,
+                      height: 32,
+                      borderRadius: 16,
+                      backgroundColor: pressed ? withAlpha(accentPrimary, 0.2) : withAlpha(accentPrimary, 0.15),
+                      borderWidth: 1,
+                      borderColor: withAlpha(accentPrimary, 0.3),
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    })}
+                    hitSlop={8}
+                  >
+                    <Icon name="edit" size={16} color={accentPrimary} />
+                  </Pressable>
+                </View>
+              </View>
+
+              {cats.map((c, idx) => {
+                const pct = c.cap > 0 ? Math.round(Math.min(100, (c.spent / c.cap) * 100)) : 0;
+                const barColor = pct >= 100 ? dangerColor : pct >= 80 ? warningColor : successColor;
+
+                // Animated progress width
+                const progressAnim = useRef(new Animated.Value(0)).current;
+                useEffect(() => {
+                  Animated.timing(progressAnim, {
+                    toValue: c.cap > 0 ? Math.min(100, (c.spent / c.cap) * 100) : 0,
+                    duration: 800,
+                    delay: idx * 100,
+                    useNativeDriver: false,
+                  }).start();
+                }, []);
+
+                return (
+                  <Pressable
+                    key={`${c.name}-${idx}`}
+                    onPress={() => nav.navigate('CategoryTransactions', { category: c.name })}
+                    style={({ pressed }) => ({
+                      paddingVertical: spacing.s12,
+                      paddingHorizontal: spacing.s2,
+                      gap: spacing.s8,
+                      opacity: pressed ? 0.6 : 1
+                    })}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>{c.name}</Text>
+                      <Text style={{ color: textMuted, fontSize: 14, fontWeight: '600' }}>
+                        {fmtMoney(c.spent)}{c.cap > 0 ? ` / ${fmtMoney(c.cap)}` : ''}
+                      </Text>
+                    </View>
+
+                    {/* Animated Progress Bar */}
+                    <View style={{
+                      height: 8,
+                      borderRadius: 4,
+                      backgroundColor: withAlpha(barColor, isDark ? 0.15 : 0.1),
+                      overflow: 'hidden'
+                    }}>
+                      <Animated.View style={{
+                        height: '100%',
+                        width: progressAnim.interpolate({
+                          inputRange: [0, 100],
+                          outputRange: ['0%', '100%']
+                        }),
+                        backgroundColor: barColor,
+                        borderRadius: 4
+                      }} />
+                    </View>
+
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ color: textMuted, fontSize: 12 }}>
+                        {c.cap > 0
+                          ? (c.spent <= c.cap ? `${fmtMoney(c.cap - c.spent)} left` : `Over by ${fmtMoney(c.spent - c.cap)}`)
+                          : 'Learning pattern'}
+                      </Text>
+                      {c.cap > 0 && (
+                        <Text style={{
+                          color: barColor,
+                          fontSize: 13,
+                          fontWeight: '700'
+                        }}>
+                          {pct}%
+                        </Text>
+                      )}
+                    </View>
+                  </Pressable>
                 );
               })}
             </View>
-
-            {/* Edit Button */}
-            <Button title="Edit envelope caps" onPress={() => nav.navigate('Envelopes')} />
           </>
         )}
-      </View>
+      </Animated.View>
     </ScreenScroll>
   );
 }

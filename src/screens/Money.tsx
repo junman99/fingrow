@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, withRepeat, Easing } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, withRepeat, Easing, FadeIn, runOnJS } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenScroll } from '../components/ScreenScroll';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
@@ -229,6 +230,70 @@ const MetricCard: React.FC<MetricCardProps> = ({ title, value, subtitle, icon, b
   );
 };
 
+const ChartBar: React.FC<{
+  height: number;
+  maxHeight: number;
+  color: string;
+  isSelected: boolean;
+  onPress: () => void;
+  delay: number;
+}> = ({ height, maxHeight, color, isSelected, onPress, delay }) => {
+  const scale = useSharedValue(1);
+  const animatedHeight = useSharedValue(0);
+
+  React.useEffect(() => {
+    animatedHeight.value = withTiming(height, { duration: 600 }, () => {});
+  }, [height]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    height: animatedHeight.value,
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => {
+        scale.value = withSpring(1.05, { damping: 12, stiffness: 200 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 12, stiffness: 200 });
+      }}
+      style={{
+        flex: 1,
+        height: maxHeight,
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        paddingHorizontal: 2,
+      }}
+    >
+      <Animated.View
+        entering={FadeIn.delay(delay)}
+        style={[
+          {
+            width: '100%',
+            borderTopLeftRadius: 6,
+            borderTopRightRadius: 6,
+            overflow: 'hidden',
+          },
+          animatedStyle,
+        ]}
+      >
+        <LinearGradient
+          colors={[color, withAlpha(color, 0.6)]}
+          style={{
+            flex: 1,
+            borderWidth: isSelected ? 2 : 0,
+            borderColor: 'white',
+            borderTopLeftRadius: 6,
+            borderTopRightRadius: 6,
+          }}
+        />
+      </Animated.View>
+    </Pressable>
+  );
+};
+
 const Money: React.FC = () => {
   const nav = useNavigation<any>();
   const { get, isDark } = useThemeTokens();
@@ -288,7 +353,12 @@ const Money: React.FC = () => {
 
   // Separate credit cards from regular accounts
   const cashAccounts = useMemo(
-    () => accountsList.filter(acc => acc.kind !== 'credit' && acc.includeInNetWorth !== false),
+    () => accountsList.filter(acc => acc.kind !== 'credit' && acc.kind !== 'investment' && acc.kind !== 'retirement' && acc.includeInNetWorth !== false),
+    [accountsList]
+  );
+
+  const investmentAccounts = useMemo(
+    () => accountsList.filter(acc => (acc.kind === 'investment' || acc.kind === 'retirement') && acc.includeInNetWorth !== false),
     [accountsList]
   );
 
@@ -354,7 +424,11 @@ const Money: React.FC = () => {
         cash = Number(portfolio.cash) || 0;
       }
     } catch {}
-    const totalUSD = rows.reduce((acc, row) => acc + row.value, 0) + cash;
+
+    // Add investment and retirement account balances
+    const investmentAccountBalance = investmentAccounts.reduce((s, a) => s + (a.balance || 0), 0);
+
+    const totalUSD = rows.reduce((acc, row) => acc + row.value, 0) + cash + investmentAccountBalance;
     const allocations =
       totalUSD > 0
         ? [
@@ -365,7 +439,7 @@ const Money: React.FC = () => {
             .slice(0, 3)
         : [];
     return { totalUSD, changeUSD, allocations };
-  }, [holdings, quotes]);
+  }, [holdings, quotes, investmentAccounts]);
 
   const upcoming = useMemo(() => sumUpcoming(recurring || [], new Date(), 30), [recurring]);
 
@@ -401,6 +475,7 @@ const Money: React.FC = () => {
   }, [accountsList, transactions, portfolioCalc.totalUSD]);
 
   const [netWorthTimeframe, setNetWorthTimeframe] = useState<'1W'|'1M'|'3M'|'6M'|'1Y'|'ALL'>('3M');
+  const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
 
   // Aggregate chart data based on timeframe
   const aggregatedChartData = useMemo(() => {
@@ -569,32 +644,128 @@ const Money: React.FC = () => {
           </View>
         </View>
 
-        {/* Compound Bar Chart with Segmented Control */}
+        {/* Bar Chart with Scroll Wheel Picker */}
         <View style={{ gap: spacing.s12 }}>
-          <CompoundBarChart
-            data={aggregatedChartData}
-            height={220}
-            showLabels={true}
-          />
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: spacing.s8 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: muted, fontSize: 13, fontWeight: '600', marginBottom: spacing.s6 }}>
+                Balance over time
+              </Text>
+              {selectedBarIndex !== null && aggregatedChartData[selectedBarIndex] ? (
+                <>
+                  <Text style={{ color: text, fontSize: 24, fontWeight: '800' }}>
+                    {formatCurrency(
+                      aggregatedChartData[selectedBarIndex].cash +
+                      aggregatedChartData[selectedBarIndex].investments -
+                      aggregatedChartData[selectedBarIndex].debt
+                    )}
+                  </Text>
+                  <Text style={{ color: muted, fontSize: 12, marginTop: spacing.s4 }}>
+                    {aggregatedChartData[selectedBarIndex].label}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={{ color: text, fontSize: 24, fontWeight: '800' }}>
+                    {formatCurrency(netWorth)}
+                  </Text>
+                  <Text style={{ color: muted, fontSize: 12, marginTop: spacing.s4 }}>Current</Text>
+                </>
+              )}
+            </View>
 
-          {/* Segmented Control for Timeframe */}
-          <SegmentedControl
-            options={[
-              { value: '1W' as const, label: '1W' },
-              { value: '1M' as const, label: '1M' },
-              { value: '3M' as const, label: '3M' },
-              { value: '6M' as const, label: '6M' },
-              { value: '1Y' as const, label: '1Y' },
-              { value: 'ALL' as const, label: 'ALL' },
-            ]}
-            value={netWorthTimeframe}
-            onChange={(val) => setNetWorthTimeframe(val as '1W'|'1M'|'3M'|'6M'|'1Y'|'ALL')}
-          />
+            {/* Scroll Wheel Timeframe Picker */}
+            <View style={{
+              height: 40,
+              width: 180,
+              overflow: 'hidden',
+              justifyContent: 'center',
+            }}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={60}
+                decelerationRate="fast"
+                contentContainerStyle={{
+                  paddingHorizontal: 60,
+                }}
+                onScroll={(e) => {
+                  const offsetX = e.nativeEvent.contentOffset.x;
+                  const index = Math.round(offsetX / 60);
+                  const options: ('1W'|'1M'|'3M'|'6M'|'1Y'|'ALL')[] = ['1W', '1M', '3M', '6M', '1Y', 'ALL'];
+                  if (index >= 0 && index < options.length && options[index] !== netWorthTimeframe) {
+                    setNetWorthTimeframe(options[index]);
+                    setSelectedBarIndex(null);
+                  }
+                }}
+                scrollEventThrottle={16}
+              >
+                {(['1W', '1M', '3M', '6M', '1Y', 'ALL'] as const).map((option, idx) => {
+                  const isSelected = option === netWorthTimeframe;
+                  return (
+                    <View
+                      key={option}
+                      style={{
+                        width: 60,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: isSelected ? accentPrimary : muted,
+                          fontSize: isSelected ? 16 : 13,
+                          fontWeight: isSelected ? '700' : '600',
+                          opacity: isSelected ? 1 : 0.5,
+                        }}
+                      >
+                        {option}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </View>
+
+          <View>
+            <View style={{ height: 130, flexDirection: 'row', alignItems: 'flex-end', gap: 4 }}>
+              {aggregatedChartData.map((point, index) => {
+                const netWorthValue = point.cash + point.investments - point.debt;
+                const maxNW = Math.max(...aggregatedChartData.map(p => p.cash + p.investments - p.debt), 1);
+                const barHeight = (netWorthValue / maxNW) * 120;
+                const isSelected = selectedBarIndex === index;
+
+                return (
+                  <ChartBar
+                    key={index}
+                    height={barHeight}
+                    maxHeight={130}
+                    color={accentPrimary}
+                    isSelected={isSelected}
+                    onPress={() => setSelectedBarIndex(isSelected ? null : index)}
+                    delay={index * 50}
+                  />
+                );
+              })}
+            </View>
+
+            {/* Labels below bars */}
+            <View style={{ flexDirection: 'row', marginTop: spacing.s4, gap: 4 }}>
+              {aggregatedChartData.map((point, index) => (
+                <View key={index} style={{ flex: 1, alignItems: 'center' }}>
+                  <Text style={{ color: muted, fontSize: 10, fontWeight: '600' }}>
+                    {point.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
         </View>
       </View>
 
       {/* Key Metrics Grid */}
-      <View style={{ gap: spacing.s12, paddingHorizontal: spacing.s16 }}>
+      <View style={{ gap: spacing.s12, paddingHorizontal: spacing.s16, marginTop: spacing.s8 }}>
         <Text style={{ color: text, fontSize: 16, fontWeight: '700' }}>Overview</Text>
         <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
           <MetricCard
@@ -705,55 +876,63 @@ const Money: React.FC = () => {
       </Card>
       </View>
 
-      {/* Insights */}
-      <View style={{ paddingHorizontal: spacing.s16 }}>
-      {insights.length > 0 && (
-        <View style={{ gap: spacing.s12 }}>
-          <Text style={{ color: text, fontSize: 16, fontWeight: '700' }}>Insights</Text>
-          {insights.slice(0, 3).map((insight, idx) => (
-            <Card key={idx} style={{ backgroundColor: cardBg, padding: spacing.s16 }}>
-              <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
-                <View
-                  style={{
-                    width: 6,
-                    borderRadius: 3,
-                    backgroundColor: accentPrimary,
-                  }}
-                />
-                <View style={{ flex: 1, gap: spacing.s12 }}>
-                  <Text style={{ color: onSurface, fontSize: 14, lineHeight: 20 }}>
-                    {insight.message}
-                  </Text>
-                  {insight.action && (
-                    <Button
-                      title={insight.action.label}
-                      onPress={insight.action.onPress}
-                      variant="secondary"
-                      size="sm"
-                    />
-                  )}
-                </View>
-              </View>
-            </Card>
-          ))}
-        </View>
-      )}
-      </View>
-
-      {/* Quick Actions */}
+      {/* Quick Access Cards */}
       <View style={{ gap: spacing.s12, paddingHorizontal: spacing.s16 }}>
-        <Text style={{ color: text, fontSize: 16, fontWeight: '700' }}>Quick actions</Text>
-        <View style={{ gap: spacing.s8 }}>
-          <Button
-            title="Add account"
+        <Text style={{ color: text, fontSize: 16, fontWeight: '700' }}>Quick access</Text>
+        <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
+          <Pressable
             onPress={() => nav.navigate('AddAccount')}
-            variant="secondary"
-          />
-          <Button
-            title="Plan auto-DCA"
-            onPress={() => nav.navigate('Invest', { screen: 'DCAPlanner', params: { suggest: Math.floor(spendable * 0.25) } })}
-            variant="secondary"
-          />
+            style={({ pressed }) => ({
+              flex: 1,
+              backgroundColor: cardBg,
+              borderRadius: radius.xl,
+              padding: spacing.s16,
+              gap: spacing.s12,
+              borderWidth: 1,
+              borderColor: withAlpha(border, isDark ? 0.5 : 1),
+              opacity: pressed ? 0.85 : 1
+            })}
+          >
+            <View style={{
+              width: 48,
+              height: 48,
+              borderRadius: radius.lg,
+              backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Icon name="plus" size={24} color={accentPrimary} />
+            </View>
+            <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>Add account</Text>
+            <Text style={{ color: muted, fontSize: 13 }}>Track a new account</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => nav.navigate('TransactionsModal')}
+            style={({ pressed }) => ({
+              flex: 1,
+              backgroundColor: cardBg,
+              borderRadius: radius.xl,
+              padding: spacing.s16,
+              gap: spacing.s12,
+              borderWidth: 1,
+              borderColor: withAlpha(border, isDark ? 0.5 : 1),
+              opacity: pressed ? 0.85 : 1
+            })}
+          >
+            <View style={{
+              width: 48,
+              height: 48,
+              borderRadius: radius.lg,
+              backgroundColor: withAlpha(accentSecondary, isDark ? 0.25 : 0.15),
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Icon name="receipt" size={24} color={accentSecondary} />
+            </View>
+            <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>Transactions</Text>
+            <Text style={{ color: muted, fontSize: 13 }}>View all activity</Text>
+          </Pressable>
         </View>
       </View>
 
