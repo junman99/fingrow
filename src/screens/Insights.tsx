@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, Pressable, Linking, ScrollView, Animated } from 'react-native';
+import { View, Text, Pressable, Linking, ScrollView, Animated, Modal, TouchableWithoutFeedback } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenScroll } from '../components/ScreenScroll';
@@ -81,7 +81,9 @@ export const Insights: React.FC = () => {
   const { transactions, hydrate } = useTxStore();
   const { monthlyBudget } = useBudgetsStore();
   const [offset, setOffset] = useState(0); // 0 = current month
-  const [granularity, setGranularity] = useState<'daily' | 'monthly'>('monthly');
+  const [monthPickerOpen, setMonthPickerOpen] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(new Date());
+  const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
 
   // Fade animation
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -229,7 +231,7 @@ export const Insights: React.FC = () => {
   return (
     <ScreenScroll inTab>
       <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
-        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s16 }}>
+        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, paddingBottom: spacing.s24, gap: spacing.s16 }}>
           {/* Header with back button */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12, marginBottom: spacing.s8 }}>
             <Pressable
@@ -256,130 +258,106 @@ export const Insights: React.FC = () => {
                 Insights
               </Text>
             </View>
-          </View>
 
-          {/* Month selector */}
-          <View style={{ gap: spacing.s12 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{
-                  color: textMuted,
-                  fontSize: 12,
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.6,
-                  fontWeight: '700'
-                }}>
-                  Deep Dive
-                </Text>
-                <Text style={{
-                  color: textPrimary,
-                fontSize: 32,
-                fontWeight: '800',
-                letterSpacing: -0.5,
-                marginTop: spacing.s4
-              }}>
-                {monthLabel}
-              </Text>
-            </View>
-            <Pressable onPress={handleEmailCSV} hitSlop={12} style={{ paddingTop: spacing.s4 }}>
-              <Icon name="share" size={20} colorToken="text.primary" />
-            </Pressable>
-          </View>
-
-          {/* Navigation Buttons */}
-          <View style={{ flexDirection: 'row', gap: spacing.s6 }}>
             <Pressable
-              onPress={() => setOffset(offset - 1)}
-              hitSlop={12}
-              style={{
-                paddingVertical: spacing.s8,
-                paddingHorizontal: spacing.s16,
-                borderRadius: radius.pill,
-                backgroundColor: surface2,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: spacing.s6
-              }}
+              onPress={handleEmailCSV}
+              style={({ pressed }) => ({
+                padding: spacing.s8,
+                marginRight: -spacing.s8,
+                marginTop: -spacing.s4,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? surface1 : 'transparent',
+              })}
+              hitSlop={8}
             >
-              <Icon name="chevron-left" size={16} colorToken="text.primary" />
-              <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 13 }}>Previous</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => { if (offset < 0) setOffset(offset + 1); }}
-              disabled={offset === 0}
-              hitSlop={12}
-              style={{
-                paddingVertical: spacing.s8,
-                paddingHorizontal: spacing.s16,
-                borderRadius: radius.pill,
-                backgroundColor: surface2,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: spacing.s6,
-                opacity: offset === 0 ? 0.5 : 1
-              }}
-            >
-              <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 13 }}>Next</Text>
-              <Icon name="chevron-right" size={16} colorToken="text.primary" />
+              <Icon name="share" size={24} color={textPrimary} />
             </Pressable>
           </View>
-        </View>
 
-        {/* Key Stats - No Cards */}
-        <View style={{ gap: spacing.s16, marginTop: spacing.s8 }}>
+
+        {/* Overview Section */}
+        <View style={{ gap: spacing.s16 }}>
           {/* Spending */}
           <View>
             <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600', marginBottom: spacing.s6 }}>
               TOTAL SPENDING
             </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s8 }}>
-              <Text style={{ color: textPrimary, fontSize: 48, fontWeight: '800', letterSpacing: -1.5 }}>
-                ${totals.spend.toFixed(0)}
-              </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
-                <Icon
-                  name={deltaAbs >= 0 ? 'arrow-up' : 'arrow-down'}
-                  size={16}
-                  color={deltaAbs >= 0 ? dangerColor : successColor}
-                />
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s6 }}>
+                <Text style={{ color: textPrimary, fontSize: 36, fontWeight: '800', letterSpacing: -1 }}>
+                  ${totals.spend.toFixed(0)}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
+                  <Icon
+                    name={deltaAbs >= 0 ? 'arrow-up' : 'arrow-down'}
+                    size={16}
+                    color={deltaAbs >= 0 ? dangerColor : successColor}
+                  />
+                  <Text style={{
+                    color: deltaAbs >= 0 ? dangerColor : successColor,
+                    fontSize: 16,
+                    fontWeight: '700'
+                  }}>
+                    {Math.abs(deltaPct).toFixed(1)}%
+                  </Text>
+                </View>
+              </View>
+
+              {/* Month Selector Pill */}
+              <Pressable
+                onPress={() => {
+                  setPickerYear(selectedMonth.getFullYear());
+                  setMonthPickerOpen(true);
+                }}
+                hitSlop={8}
+                style={({ pressed }) => ({
+                  paddingHorizontal: spacing.s10,
+                  paddingVertical: spacing.s6,
+                  borderRadius: radius.pill,
+                  backgroundColor: surface2,
+                  opacity: pressed ? 0.85 : 1
+                })}
+              >
                 <Text style={{
-                  color: deltaAbs >= 0 ? dangerColor : successColor,
-                  fontSize: 16,
+                  color: textPrimary,
                   fontWeight: '700'
                 }}>
-                  {Math.abs(deltaPct).toFixed(1)}%
+                  {selectedMonth.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
                 </Text>
-              </View>
+              </Pressable>
             </View>
           </View>
 
-          {/* Income & Net Row */}
-          <View style={{ flexDirection: 'row', gap: spacing.s20 }}>
-            <View>
-              <Text style={{ color: textMuted, fontSize: 11, fontWeight: '600', marginBottom: spacing.s4 }}>
-                INCOME
+          {/* Income, Net & Budget Status Row */}
+          <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
+            <View style={{ flex: 1, padding: spacing.s12, borderRadius: radius.lg, backgroundColor: surface1, borderWidth: 1, borderColor: borderSubtle }}>
+              <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>
+                Income
               </Text>
-              <Text style={{ color: textPrimary, fontSize: 24, fontWeight: '800' }}>
+              <Text style={{ color: textPrimary, fontSize: 18, fontWeight: '800' }}>
                 ${totals.income.toFixed(0)}
               </Text>
             </View>
-            <View>
-              <Text style={{ color: textMuted, fontSize: 11, fontWeight: '600', marginBottom: spacing.s4 }}>
-                NET
+            <View style={{ flex: 1, padding: spacing.s12, borderRadius: radius.lg, backgroundColor: surface1, borderWidth: 1, borderColor: borderSubtle }}>
+              <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>
+                Net
               </Text>
               <Text style={{
                 color: totals.net >= 0 ? successColor : dangerColor,
-                fontSize: 24,
+                fontSize: 18,
                 fontWeight: '800'
               }}>
                 {totals.net >= 0 ? '+' : ''}${totals.net.toFixed(0)}
               </Text>
             </View>
             {budgetData && (
-              <View style={{ flex: 1, alignItems: 'flex-end', justifyContent: 'flex-end' }}>
+              <View style={{ flex: 1, padding: spacing.s12, borderRadius: radius.lg, backgroundColor: surface1, borderWidth: 1, borderColor: borderSubtle, justifyContent: 'space-between' }}>
+                <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>
+                  Budget
+                </Text>
                 <View style={{
-                  paddingHorizontal: spacing.s12,
-                  paddingVertical: spacing.s6,
+                  paddingHorizontal: spacing.s10,
+                  paddingVertical: spacing.s4,
                   borderRadius: radius.pill,
                   backgroundColor: budgetData.paceStatus === 'on-track'
                     ? withAlpha(successColor, isDark ? 0.25 : 0.15)
@@ -387,7 +365,8 @@ export const Insights: React.FC = () => {
                   borderWidth: 1,
                   borderColor: budgetData.paceStatus === 'on-track'
                     ? withAlpha(successColor, 0.4)
-                    : withAlpha(warningColor, 0.4)
+                    : withAlpha(warningColor, 0.4),
+                  alignSelf: 'flex-start'
                 }}>
                   <Text style={{
                     color: budgetData.paceStatus === 'on-track' ? successColor : warningColor,
@@ -399,45 +378,6 @@ export const Insights: React.FC = () => {
                 </View>
               </View>
             )}
-          </View>
-        </View>
-
-        {/* Section: View Toggle */}
-        <View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, marginBottom: spacing.s12 }}>
-            <Icon name="bar-chart-2" size={18} color={accentPrimary} />
-            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15, letterSpacing: -0.3 }}>
-              View Mode
-            </Text>
-          </View>
-          <View style={{
-            flexDirection: 'row',
-            backgroundColor: surface2,
-            borderRadius: radius.pill,
-            padding: spacing.s4,
-            gap: spacing.s4
-          }}>
-            {(['daily', 'monthly'] as const).map(g => (
-              <Pressable
-                key={g}
-                onPress={() => setGranularity(g)}
-                style={{
-                  flex: 1,
-                  paddingVertical: spacing.s10,
-                  borderRadius: radius.pill,
-                  backgroundColor: granularity === g ? accentPrimary : 'transparent',
-                  alignItems: 'center'
-                }}
-              >
-                <Text style={{
-                  color: granularity === g ? get('text.onPrimary') as string : textMuted,
-                  fontWeight: '700',
-                  fontSize: 14
-                }}>
-                  {g === 'daily' ? 'Daily' : 'Monthly'}
-                </Text>
-              </Pressable>
-            ))}
           </View>
         </View>
 
@@ -454,273 +394,91 @@ export const Insights: React.FC = () => {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: spacing.s12 }}
           >
-          {/* Total Spending Card */}
-          <View style={{
-            width: 180,
-            backgroundColor: withAlpha(accentPrimary, isDark ? 0.2 : 0.15),
-            borderRadius: radius.xl,
-            padding: spacing.s16,
-            borderWidth: 1,
-            borderColor: withAlpha(accentPrimary, 0.3)
-          }}>
-            <Icon name="trending-up" size={24} color={accentPrimary} />
-            <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600', marginTop: spacing.s12 }}>
-              Total Spent
-            </Text>
-            <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', marginTop: spacing.s4 }}>
-              ${totals.spend.toFixed(0)}
-            </Text>
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: spacing.s4,
-              marginTop: spacing.s6
-            }}>
-              <Icon
-                name={deltaAbs >= 0 ? 'arrow-up' : 'arrow-down'}
-                size={14}
-                color={deltaAbs >= 0 ? dangerColor : successColor}
-              />
-              <Text style={{ color: deltaAbs >= 0 ? dangerColor : successColor, fontSize: 12, fontWeight: '600' }}>
-                {Math.abs(deltaPct).toFixed(1)}% vs last
-              </Text>
-            </View>
-          </View>
-
-          {/* Income Card */}
-          <View style={{
-            width: 180,
-            backgroundColor: withAlpha(successColor, isDark ? 0.2 : 0.15),
-            borderRadius: radius.xl,
-            padding: spacing.s16,
-            borderWidth: 1,
-            borderColor: withAlpha(successColor, 0.3)
-          }}>
-            <Icon name="trending-down" size={24} color={successColor} />
-            <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600', marginTop: spacing.s12 }}>
-              Income
-            </Text>
-            <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', marginTop: spacing.s4 }}>
-              ${totals.income.toFixed(0)}
-            </Text>
-            <Text style={{ color: textMuted, fontSize: 12, marginTop: spacing.s6 }}>
-              Net: {totals.net >= 0 ? '+' : ''}${totals.net.toFixed(0)}
-            </Text>
-          </View>
 
           {/* Average Per Day Card */}
           <View style={{
-            width: 180,
-            backgroundColor: withAlpha(accentSecondary, isDark ? 0.2 : 0.15),
+            width: 168,
+            backgroundColor: surface1,
             borderRadius: radius.xl,
             padding: spacing.s16,
             borderWidth: 1,
-            borderColor: withAlpha(accentSecondary, 0.3)
+            borderColor: borderSubtle,
+            gap: spacing.s8
           }}>
-            <Icon name="calendar" size={24} color={accentSecondary} />
-            <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600', marginTop: spacing.s12 }}>
-              Avg per day
-            </Text>
-            <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', marginTop: spacing.s4 }}>
+            <View style={{
+              alignSelf: 'flex-start',
+              backgroundColor: withAlpha(accentPrimary, isDark ? 0.2 : 0.14),
+              paddingHorizontal: spacing.s10,
+              paddingVertical: spacing.s4,
+              borderRadius: radius.pill
+            }}>
+              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 12 }}>Avg per day</Text>
+            </View>
+            <Text style={{ color: textPrimary, fontSize: 24, fontWeight: '800' }}>
               ${avgPerDay.toFixed(0)}
             </Text>
-            <Text style={{ color: textMuted, fontSize: 12, marginTop: spacing.s6 }}>
+            <Text style={{ color: textMuted, fontSize: 12 }}>
               {daysPassed} of {days} days
             </Text>
           </View>
 
           {/* Transaction Count Card */}
           <View style={{
-            width: 180,
-            backgroundColor: withAlpha(warningColor, isDark ? 0.2 : 0.15),
+            width: 168,
+            backgroundColor: surface1,
             borderRadius: radius.xl,
             padding: spacing.s16,
             borderWidth: 1,
-            borderColor: withAlpha(warningColor, 0.3)
+            borderColor: borderSubtle,
+            gap: spacing.s8
           }}>
-            <Icon name="receipt" size={24} color={warningColor} />
-            <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600', marginTop: spacing.s12 }}>
-              Transactions
-            </Text>
-            <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', marginTop: spacing.s4 }}>
+            <View style={{
+              alignSelf: 'flex-start',
+              backgroundColor: withAlpha(accentSecondary, isDark ? 0.2 : 0.14),
+              paddingHorizontal: spacing.s10,
+              paddingVertical: spacing.s4,
+              borderRadius: radius.pill
+            }}>
+              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 12 }}>Transactions</Text>
+            </View>
+            <Text style={{ color: textPrimary, fontSize: 24, fontWeight: '800' }}>
               {monthTx.filter(t => t.type === 'expense').length}
             </Text>
-            <Text style={{ color: textMuted, fontSize: 12, marginTop: spacing.s6 }}>
+            <Text style={{ color: textMuted, fontSize: 12 }}>
               expenses logged
             </Text>
           </View>
-        </ScrollView>
-        </View>
 
-        {/* Section: Budget Tracker (if budget exists) */}
-        {budgetData && (
-          <View style={{
-            backgroundColor: surface1,
-            borderRadius: radius.xl,
-            padding: spacing.s16,
-            gap: spacing.s14,
-            borderWidth: 1,
-            borderColor: borderSubtle
-          }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
-                <View style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 16,
-                  backgroundColor: withAlpha(warningColor, isDark ? 0.2 : 0.15),
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <Icon name="target" size={16} color={warningColor} />
-                </View>
-                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16, letterSpacing: -0.3 }}>
-                  Budget Tracker
-                </Text>
-              </View>
+          {/* Top Category Card */}
+          {byCategory.length > 0 && (
+            <View style={{
+              width: 168,
+              backgroundColor: surface1,
+              borderRadius: radius.xl,
+              padding: spacing.s16,
+              borderWidth: 1,
+              borderColor: borderSubtle,
+              gap: spacing.s8
+            }}>
               <View style={{
+                alignSelf: 'flex-start',
+                backgroundColor: withAlpha(warningColor, isDark ? 0.2 : 0.14),
                 paddingHorizontal: spacing.s10,
                 paddingVertical: spacing.s4,
-                borderRadius: radius.pill,
-                backgroundColor: budgetData.paceStatus === 'on-track'
-                  ? withAlpha(successColor, isDark ? 0.2 : 0.15)
-                  : withAlpha(warningColor, isDark ? 0.2 : 0.15)
+                borderRadius: radius.pill
               }}>
-                <Text style={{
-                  color: budgetData.paceStatus === 'on-track' ? successColor : warningColor,
-                  fontSize: 11,
-                  fontWeight: '700'
-                }}>
-                  {budgetData.paceStatus === 'on-track' ? 'On Track' : 'Over Pace'}
-                </Text>
+                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 12 }}>Top category</Text>
               </View>
-            </View>
-
-            <View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.s6 }}>
-                <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800' }}>
-                  ${budgetData.spent.toFixed(0)} / ${budgetData.budget.toFixed(0)}
-                </Text>
-                <Text style={{ color: textMuted, fontSize: 14 }}>
-                  {budgetData.usedPct.toFixed(1)}% used
-                </Text>
-              </View>
-              <View style={{
-                height: 12,
-                borderRadius: radius.lg,
-                backgroundColor: surface2,
-                overflow: 'hidden'
-              }}>
-                <View style={{
-                  width: `${Math.min(100, budgetData.usedPct)}%`,
-                  height: '100%',
-                  backgroundColor: budgetData.usedPct >= 100 ? dangerColor : budgetData.usedPct >= 80 ? warningColor : accentPrimary,
-                  borderRadius: radius.lg
-                }} />
-              </View>
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: textMuted, fontSize: 12 }}>Remaining</Text>
-                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16, marginTop: spacing.s2 }}>
-                  ${budgetData.remaining.toFixed(0)}
-                </Text>
-              </View>
-              {offset === 0 && budgetData.projectedOver > 0 && (
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: textMuted, fontSize: 12 }}>Projected Over</Text>
-                  <Text style={{ color: dangerColor, fontWeight: '700', fontSize: 16, marginTop: spacing.s2 }}>
-                    ${budgetData.projectedOver.toFixed(0)}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        )}
-
-        {/* Section: Daily Breakdown (if daily granularity selected) */}
-        {granularity === 'daily' && (
-          <View style={{
-            backgroundColor: surface1,
-            borderRadius: radius.xl,
-            padding: spacing.s16,
-            gap: spacing.s14,
-            borderWidth: 1,
-            borderColor: borderSubtle
-          }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
-              <View style={{
-                width: 32,
-                height: 32,
-                borderRadius: 16,
-                backgroundColor: withAlpha(accentPrimary, isDark ? 0.2 : 0.15),
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Icon name="calendar" size={16} color={accentPrimary} />
-              </View>
-              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16, letterSpacing: -0.3 }}>
-                Daily Breakdown
+              <Text style={{ color: textPrimary, fontSize: 24, fontWeight: '800' }}>
+                ${byCategory[0].value.toFixed(0)}
+              </Text>
+              <Text style={{ color: textMuted, fontSize: 12 }}>
+                {byCategory[0].name} • {byCategory[0].pct.toFixed(0)}%
               </Text>
             </View>
-            <View style={{ gap: spacing.s8 }}>
-              {byDay.map((amt, idx) => {
-                const date = new Date(Y, M, idx + 1);
-                const dayName = date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
-                const isToday = offset === 0 && idx + 1 === now.getDate();
-                const pct = totals.spend > 0 ? (amt / totals.spend) * 100 : 0;
-
-                if (amt === 0) return null;
-
-                return (
-                  <View key={idx} style={{ gap: spacing.s4 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
-                        <Text style={{ color: isToday ? accentPrimary : textPrimary, fontWeight: isToday ? '700' : '600' }}>
-                          {dayName}
-                        </Text>
-                        {isToday && (
-                          <View style={{
-                            paddingHorizontal: spacing.s6,
-                            paddingVertical: spacing.s2,
-                            borderRadius: radius.sm,
-                            backgroundColor: withAlpha(accentPrimary, isDark ? 0.2 : 0.15)
-                          }}>
-                            <Text style={{ color: accentPrimary, fontSize: 9, fontWeight: '700' }}>TODAY</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={{ color: textMuted, fontSize: 14 }}>${amt.toFixed(0)}</Text>
-                    </View>
-                    <View style={{ height: 6, borderRadius: radius.sm, backgroundColor: surface2, overflow: 'hidden' }}>
-                      <View style={{
-                        width: `${Math.min(100, pct)}%`,
-                        height: '100%',
-                        backgroundColor: isToday ? accentPrimary : withAlpha(accentPrimary, 0.6),
-                        borderRadius: radius.sm
-                      }} />
-                    </View>
-                  </View>
-                );
-              }).filter(Boolean)}
-            </View>
-
-            {/* Biggest Day Highlight */}
-            <View style={{
-              backgroundColor: withAlpha(accentSecondary, isDark ? 0.15 : 0.1),
-              borderRadius: radius.lg,
-              padding: spacing.s12,
-              marginTop: spacing.s4
-            }}>
-              <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>Biggest spending day</Text>
-              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>
-                {new Date(Y, M, biggestDayIdx + 1).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                {' '} • ${biggestDayAmt.toFixed(0)}
-              </Text>
-            </View>
-          </View>
-        )}
+          )}
+        </ScrollView>
+        </View>
 
         {/* Section: Category Breakdown */}
         <View style={{
@@ -930,57 +688,124 @@ export const Insights: React.FC = () => {
           </View>
         )}
 
-        {/* Section: Summary Stats */}
-        <View style={{
-          backgroundColor: withAlpha(isDark ? accentPrimary : accentSecondary, isDark ? 0.15 : 0.1),
-          borderRadius: radius.xl,
-          padding: spacing.s16,
-          gap: spacing.s14,
-          borderWidth: 1,
-          borderColor: withAlpha(isDark ? accentPrimary : accentSecondary, 0.2)
-        }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
-            <View style={{
-              width: 32,
-              height: 32,
-              borderRadius: 16,
-              backgroundColor: withAlpha(isDark ? accentPrimary : accentSecondary, isDark ? 0.3 : 0.25),
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Icon name="info" size={16} color={isDark ? accentPrimary : accentSecondary} />
-            </View>
-            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16, letterSpacing: -0.3 }}>
-              Monthly Summary
-            </Text>
+        {/* Generate Report Button */}
+        <Pressable
+          onPress={() => nav.navigate('Report' as never, { selectedMonth } as never)}
+          style={({ pressed }) => ({
+            backgroundColor: withAlpha(accentPrimary, isDark ? 0.15 : 0.1),
+            borderRadius: radius.xl,
+            padding: spacing.s20,
+            borderWidth: 2,
+            borderColor: withAlpha(accentPrimary, 0.3),
+            alignItems: 'center',
+            opacity: pressed ? 0.8 : 1
+          })}
+        >
+          <View style={{
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+            backgroundColor: accentPrimary,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: spacing.s12
+          }}>
+            <Icon name="file-text" size={24} color={get('text.onPrimary') as string} />
           </View>
-          <View style={{ gap: spacing.s10 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ color: textMuted }}>Days in month</Text>
-              <Text style={{ color: textPrimary, fontWeight: '600' }}>{days} days</Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ color: textMuted }}>Days elapsed</Text>
-              <Text style={{ color: textPrimary, fontWeight: '600' }}>{daysPassed} days</Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ color: textMuted }}>Average daily spend</Text>
-              <Text style={{ color: textPrimary, fontWeight: '600' }}>${avgPerDay.toFixed(2)}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ color: textMuted }}>Total categories</Text>
-              <Text style={{ color: textPrimary, fontWeight: '600' }}>{byCategory.length}</Text>
-            </View>
-            {offset === 0 && daysLeft > 0 && (
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={{ color: textMuted }}>Days remaining</Text>
-                <Text style={{ color: textPrimary, fontWeight: '600' }}>{daysLeft} days</Text>
-              </View>
-            )}
-          </View>
-        </View>
+          <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 18, marginBottom: spacing.s4 }}>
+            Generate Financial Report
+          </Text>
+          <Text style={{ color: textMuted, fontSize: 14, textAlign: 'center' }}>
+            Get a comprehensive overview of your finances
+          </Text>
+        </Pressable>
         </View>
       </Animated.View>
+
+      {/* Month Picker Modal */}
+      <Modal visible={monthPickerOpen} transparent animationType="fade" onRequestClose={() => setMonthPickerOpen(false)}>
+        <TouchableWithoutFeedback onPress={() => setMonthPickerOpen(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(8,10,18,0.72)', justifyContent: 'center', alignItems: 'center', padding: spacing.s16 }}>
+            <TouchableWithoutFeedback>
+              <View style={{
+                width: '100%',
+                maxWidth: 360,
+                backgroundColor: surface1,
+                borderRadius: radius.xl,
+                padding: spacing.s16,
+                shadowColor: '#000',
+                shadowOpacity: 0.18,
+                shadowRadius: 18,
+                shadowOffset: { width: 0, height: 10 },
+                elevation: 10
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
+                  <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Select month</Text>
+                  <Pressable onPress={() => setMonthPickerOpen(false)} hitSlop={8}>
+                    <Text style={{ color: textMuted, fontSize: 16 }}>Close</Text>
+                  </Pressable>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
+                  <Pressable
+                    onPress={() => setPickerYear(prev => prev - 1)}
+                    hitSlop={8}
+                    style={{ padding: spacing.s8 }}
+                  >
+                    <Text style={{ color: textPrimary, fontSize: 20 }}>‹</Text>
+                  </Pressable>
+                  <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 18 }}>{pickerYear}</Text>
+                  <Pressable
+                    onPress={() => setPickerYear(prev => (prev >= now.getFullYear() ? prev : prev + 1))}
+                    hitSlop={8}
+                    style={{ padding: spacing.s8, opacity: pickerYear >= now.getFullYear() ? 0.4 : 1 }}
+                    disabled={pickerYear >= now.getFullYear()}
+                  >
+                    <Text style={{ color: textPrimary, fontSize: 20 }}>›</Text>
+                  </Pressable>
+                </View>
+
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
+                  {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((lbl, idx) => {
+                    const afterNow = (pickerYear > now.getFullYear()) || (pickerYear === now.getFullYear() && idx > now.getMonth());
+                    const disabled = afterNow;
+                    const isSelected = (pickerYear === selectedMonth.getFullYear() && idx === selectedMonth.getMonth());
+                    return (
+                      <Pressable
+                        key={lbl}
+                        onPress={() => {
+                          if (!disabled) {
+                            const newDate = new Date(pickerYear, idx, 1);
+                            setSelectedMonth(newDate);
+                            // Calculate offset from current month
+                            const currentDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                            const monthsDiff = (newDate.getFullYear() - currentDate.getFullYear()) * 12 + (newDate.getMonth() - currentDate.getMonth());
+                            setOffset(monthsDiff);
+                            setMonthPickerOpen(false);
+                          }
+                        }}
+                        disabled={disabled}
+                        style={{
+                          width: '23%',
+                          paddingVertical: spacing.s10,
+                          borderRadius: radius.lg,
+                          alignItems: 'center',
+                          backgroundColor: isSelected ? surface2 : surface1,
+                          borderWidth: isSelected ? 2 : 1,
+                          borderColor: isSelected ? accentPrimary : borderSubtle,
+                          opacity: disabled ? 0.35 : 1
+                        }}
+                      >
+                        <Text style={{ color: textPrimary, fontWeight: isSelected ? '700' : '500' }}>{lbl}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </ScreenScroll>
   );
 };

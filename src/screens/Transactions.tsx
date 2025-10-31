@@ -9,6 +9,7 @@ import PopoverMenu from '../components/PopoverMenu';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
 import { useTxStore } from '../store/transactions';
+import { useAccountsStore } from '../store/accounts';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -232,10 +233,12 @@ function groupByDate(items: Tx[]): Section[] {
 export const Transactions: React.FC = () => {
   const { get } = useThemeTokens();
   const { transactions, remove } = useTxStore();
+  const { accounts } = useAccountsStore();
   const insets = useSafeAreaInsets();
   const nav = useNavigation();
   const [filter, setFilter] = useState<'all'|'income'|'expense'>('all');
   const [range, setRange] = useState<'ALL'|'7D'|'30D'|'MONTH'|'CUSTOM'>('MONTH');
+  const [accountFilter, setAccountFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [searchOn, setSearchOn] = useState(false);
   const [totalMode, setTotalMode] = useState<'SPENT'|'NET'>('SPENT');
@@ -244,8 +247,11 @@ export const Transactions: React.FC = () => {
   const [typeAnchor, setTypeAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [rangeMenuVisible, setRangeMenuVisible] = useState(false);
   const [rangeAnchor, setRangeAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [accountMenuVisible, setAccountMenuVisible] = useState(false);
+  const [accountAnchor, setAccountAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const typeButtonRef = useRef<View>(null);
   const rangeButtonRef = useRef<View>(null);
+  const accountButtonRef = useRef<View>(null);
   const normalizedSearch = search.trim().toLowerCase();
 
   // Fade animation
@@ -261,23 +267,15 @@ export const Transactions: React.FC = () => {
 
   // Animation for search bar
   const searchHeightAnim = useRef(new Animated.Value(0)).current;
-  const searchOpacityAnim = useRef(new Animated.Value(0)).current;
 
   // Animate search bar when toggled
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(searchHeightAnim, {
-        toValue: searchOn ? 1 : 0,
-        duration: 250,
-        useNativeDriver: false,
-      }),
-      Animated.timing(searchOpacityAnim, {
-        toValue: searchOn ? 1 : 0,
-        duration: 250,
-        useNativeDriver: false,
-      }),
-    ]).start();
-  }, [searchOn, searchHeightAnim, searchOpacityAnim]);
+    Animated.timing(searchHeightAnim, {
+      toValue: searchOn ? 1 : 0,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+  }, [searchOn]);
 
   const openTypeMenu = useCallback(() => {
     const ref: any = typeButtonRef.current;
@@ -309,16 +307,34 @@ export const Transactions: React.FC = () => {
     }
   }, [rangeAnchor]);
 
+  const openAccountMenu = useCallback(() => {
+    const ref: any = accountButtonRef.current;
+    if (ref && typeof ref.measureInWindow === 'function') {
+      ref.measureInWindow((x: number, y: number, w: number, h: number) => {
+        setAccountAnchor({ x, y, w, h });
+        setAccountMenuVisible(true);
+      });
+    } else if (accountAnchor) {
+      setAccountMenuVisible(true);
+    } else {
+      setAccountAnchor({ x: 240, y: 80, w: 1, h: 1 });
+      setAccountMenuVisible(true);
+    }
+  }, [accountAnchor]);
+
   // Reset filters whenever this modal/screen gains focus
   useFocusEffect(useCallback(() => {
     setFilter('all');
     setRange('MONTH');
+    setAccountFilter('all');
     setSearch('');
     setSearchOn(false);
     setTypeMenuVisible(false);
     setRangeMenuVisible(false);
+    setAccountMenuVisible(false);
     setTypeAnchor(null);
     setRangeAnchor(null);
+    setAccountAnchor(null);
     return undefined;
   }, []));
 
@@ -351,12 +367,16 @@ export const Transactions: React.FC = () => {
 
     if (fromTs) base = base.filter(t => new Date(t.date).getTime() >= fromTs);
 
+    if (accountFilter !== 'all') {
+      base = base.filter(t => t.accountId === accountFilter);
+    }
+
     if (normalizedSearch.length > 0) {
       base = base.filter(t => (t.note || '').toLowerCase().includes(normalizedSearch) || (t.category || '').toLowerCase().includes(normalizedSearch));
     }
 
     return base;
-  }, [transactions, filter, range, normalizedSearch]);
+  }, [transactions, filter, range, accountFilter, normalizedSearch]);
 
   const sectionsRaw = useMemo(() => groupByDate(filtered), [filtered]);
 
@@ -449,6 +469,26 @@ export const Transactions: React.FC = () => {
   const searchContainerBg = withOpacity(heroForeground, 0.1);
   const typeLabel = filter === 'all' ? 'All activity' : filter === 'income' ? 'Income only' : 'Spending only';
   const rangeLabel = RANGE_LABELS[range];
+
+  // Account filter options
+  const accountOptions = useMemo(() => {
+    const options = [{ label: 'All accounts', value: 'all', description: 'Show all transactions' }];
+    if (Array.isArray(accounts)) {
+      for (const acc of accounts) {
+        options.push({
+          label: acc.name || 'Unnamed Account',
+          value: acc.id,
+          description: acc.type || 'Account'
+        });
+      }
+    }
+    return options;
+  }, [accounts]);
+
+  const accountLabel = accountFilter === 'all'
+    ? 'All accounts'
+    : (accounts?.find(a => a.id === accountFilter)?.name || 'Account');
+
   const totalLabel = totalMode === 'SPENT' ? 'Spending' : 'Net movement';
   const listPaddingBottom = Math.max(insets.bottom, spacing.s4);
 
@@ -470,6 +510,7 @@ export const Transactions: React.FC = () => {
           paddingHorizontal: spacing.s16,
           paddingTop: spacing.s12,
           paddingBottom: spacing.s8,
+          marginBottom: spacing.s8,
         }}>
           <Pressable
             onPress={() => nav.goBack()}
@@ -551,12 +592,8 @@ export const Transactions: React.FC = () => {
             <View style={styles.headerContainer}>
               {/* Page Header with Stats */}
               <View style={{ marginBottom: spacing.s16 }}>
-                <Text style={{ color: muted, fontSize: 14 }}>
-                  {rangeLabel} • {filtered.length} transaction{filtered.length !== 1 ? 's' : ''}
-                </Text>
-
                 {/* Overview Stats - Direct on Background */}
-                <View style={{ marginTop: spacing.s16, gap: spacing.s12 }}>
+                <View style={{ gap: spacing.s12 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s12 }}>
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: muted, fontSize: 12, fontWeight: '600', marginBottom: spacing.s4 }}>
@@ -604,7 +641,7 @@ export const Transactions: React.FC = () => {
               </View>
 
               {/* Filters Row */}
-              <View style={{ flexDirection: 'row', gap: spacing.s8, marginBottom: searchOn ? spacing.s4 : spacing.s0, alignItems: 'center' }}>
+              <View style={{ flexDirection: 'row', gap: spacing.s8, marginBottom: spacing.s4, alignItems: 'center' }}>
                 <View ref={typeButtonRef} collapsable={false}>
                   <AnimatedPressable onPress={openTypeMenu}>
                     <View
@@ -612,16 +649,13 @@ export const Transactions: React.FC = () => {
                         paddingVertical: spacing.s8,
                         paddingHorizontal: spacing.s12,
                         borderRadius: radius.pill,
-                        backgroundColor: filter === 'all' ? (get('accent.primary') as string) : surface1,
+                        backgroundColor: filter !== 'all' ? (get('accent.primary') as string) : surface1,
                         flexDirection: 'row',
                         alignItems: 'center',
                         gap: spacing.s6
                       }}
                     >
-                      <Icon name="filter" size={16} color={filter === 'all' ? textOnPrimary : textPrimary} />
-                      <Text style={{ color: filter === 'all' ? textOnPrimary : textPrimary, fontWeight: '600', fontSize: 13 }}>
-                        {typeLabel}
-                      </Text>
+                      <Icon name="filter" size={16} color={filter !== 'all' ? textOnPrimary : textPrimary} />
                     </View>
                   </AnimatedPressable>
                 </View>
@@ -633,16 +667,31 @@ export const Transactions: React.FC = () => {
                         paddingVertical: spacing.s8,
                         paddingHorizontal: spacing.s12,
                         borderRadius: radius.pill,
-                        backgroundColor: range === 'MONTH' ? (get('accent.primary') as string) : surface1,
+                        backgroundColor: range !== 'ALL' ? (get('accent.primary') as string) : surface1,
                         flexDirection: 'row',
                         alignItems: 'center',
                         gap: spacing.s6
                       }}
                     >
-                      <Icon name="calendar" size={16} color={range === 'MONTH' ? textOnPrimary : textPrimary} />
-                      <Text style={{ color: range === 'MONTH' ? textOnPrimary : textPrimary, fontWeight: '600', fontSize: 13 }}>
-                        {rangeLabel}
-                      </Text>
+                      <Icon name="calendar" size={16} color={range !== 'ALL' ? textOnPrimary : textPrimary} />
+                    </View>
+                  </AnimatedPressable>
+                </View>
+
+                <View ref={accountButtonRef} collapsable={false}>
+                  <AnimatedPressable onPress={openAccountMenu}>
+                    <View
+                      style={{
+                        paddingVertical: spacing.s8,
+                        paddingHorizontal: spacing.s12,
+                        borderRadius: radius.pill,
+                        backgroundColor: accountFilter !== 'all' ? (get('accent.primary') as string) : surface1,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: spacing.s6
+                      }}
+                    >
+                      <Icon name="credit-card" size={16} color={accountFilter !== 'all' ? textOnPrimary : textPrimary} />
                     </View>
                   </AnimatedPressable>
                 </View>
@@ -671,13 +720,13 @@ export const Transactions: React.FC = () => {
                 style={{
                   height: searchHeightAnim.interpolate({
                     inputRange: [0, 1],
-                    outputRange: [0, 44],
+                    outputRange: [0, 52],
                   }),
-                  opacity: searchOpacityAnim,
+                  opacity: searchHeightAnim,
                   overflow: 'hidden',
                 }}
               >
-                <View>
+                <View style={{ marginTop: spacing.s8 }}>
                   <Input
                     value={search}
                     onChangeText={setSearch}
@@ -820,6 +869,19 @@ export const Transactions: React.FC = () => {
           onPress: () => setRange(opt.value),
         }))}
       />
+
+      <PopoverMenu
+        visible={accountMenuVisible}
+        onClose={() => {
+          setAccountMenuVisible(false);
+        }}
+        anchor={accountAnchor}
+        items={accountOptions.map((opt) => ({
+          key: opt.value,
+          label: opt.value === accountFilter ? `${opt.label} ✓` : opt.label,
+          onPress: () => setAccountFilter(opt.value),
+        }))}
+      />
     </Screen>
   );
 };
@@ -828,7 +890,7 @@ const styles = StyleSheet.create({
   headerContainer: {
     paddingHorizontal: spacing.s16,
     paddingTop: spacing.s12,
-    paddingBottom: spacing.s16,
+    paddingBottom: spacing.s4,
     gap: spacing.s16,
   },
   heroCard: {

@@ -395,9 +395,9 @@ export const Budgets: React.FC = () => {
   return (
     <ScreenScroll inTab contentStyle={{ paddingBottom: spacing.s24 }}>
       <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
-        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: 0 }}>
+        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s16 }}>
           {/* Header with back button */}
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12, marginBottom: spacing.s8 }}>
             <Pressable
               onPress={() => nav.goBack()}
               style={({ pressed }) => ({
@@ -415,60 +415,60 @@ export const Budgets: React.FC = () => {
               <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 }}>Budget</Text>
             </View>
 
-            <View style={{ alignItems: 'flex-end', gap: spacing.s6 }}>
-              <Pressable
-                onPress={() => nav.navigate('BudgetSettings')}
-                style={({ pressed }) => ({
-                  padding: spacing.s8,
-                  marginRight: -spacing.s8,
-                  marginTop: -spacing.s4,
-                  borderRadius: radius.md,
-                  backgroundColor: pressed ? surface1 : 'transparent',
-                })}
-                hitSlop={8}
-              >
-                <Icon name="settings" size={24} color={textPrimary} />
-              </Pressable>
-
-              {/* Month Selector Pill */}
-              <Pressable
-                onPress={openMonthPicker}
-                hitSlop={8}
-                style={({ pressed }) => ({
-                  paddingHorizontal: spacing.s10,
-                  paddingVertical: spacing.s6,
-                  borderRadius: radius.pill,
-                  backgroundColor: surface2,
-                  opacity: pressed ? 0.85 : 1
-                })}
-              >
-                <Text style={{
-                  color: textPrimary,
-                  fontSize: 12,
-                  fontWeight: '700',
-                  letterSpacing: 0.3
-                }}>
-                  {selectedMonth.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
-                </Text>
-              </Pressable>
-            </View>
+            <Pressable
+              onPress={() => nav.navigate('BudgetSettings')}
+              style={({ pressed }) => ({
+                padding: spacing.s8,
+                marginRight: -spacing.s8,
+                marginTop: -spacing.s4,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? surface1 : 'transparent',
+              })}
+              hitSlop={8}
+            >
+              <Icon name="settings" size={24} color={textPrimary} />
+            </Pressable>
           </View>
 
         {/* Budget Overview - Cleaner, More Visual */}
-        <View style={{ gap: spacing.s16, marginTop: -spacing.s8 }}>
+        <View style={{ gap: spacing.s16 }}>
           {/* Main Budget Display with Progress */}
           <View style={{ gap: spacing.s12 }}>
             {/* Amount Display */}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s6 }}>
-                <Text style={{ color: textPrimary, fontSize: 38, fontWeight: '900', letterSpacing: -1.2 }}>
-                  {fmtMoney(spent)}
-                </Text>
-                <Text style={{ color: textMuted, fontSize: 20, fontWeight: '600' }}>
-                  / {fmtMoney(budget)}
-                </Text>
+            <View>
+              <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600', marginBottom: spacing.s6 }}>
+                AMOUNT SPENT
+              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s6 }}>
+                  <Text style={{ color: textPrimary, fontSize: 36, fontWeight: '800', letterSpacing: -1 }}>
+                    {fmtMoney(spent)}
+                  </Text>
+                  <Text style={{ color: textMuted, fontSize: 20, fontWeight: '600' }}>
+                    / {fmtMoney(budget)}
+                  </Text>
+                </View>
+
+                {/* Month Selector Pill */}
+                <Pressable
+                  onPress={openMonthPicker}
+                  hitSlop={8}
+                  style={({ pressed }) => ({
+                    paddingHorizontal: spacing.s10,
+                    paddingVertical: spacing.s6,
+                    borderRadius: radius.pill,
+                    backgroundColor: surface2,
+                    opacity: pressed ? 0.85 : 1
+                  })}
+                >
+                  <Text style={{
+                    color: textPrimary,
+                    fontWeight: '700'
+                  }}>
+                    {selectedMonth.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+                  </Text>
+                </Pressable>
               </View>
-              <Text style={{ color: progressColor, fontSize: 24, fontWeight: '800' }}>{usedPct}%</Text>
             </View>
 
             {/* Progress Bar - Dynamic Color */}
@@ -498,7 +498,7 @@ export const Budgets: React.FC = () => {
                   borderRadius: 4,
                   backgroundColor: riskColor
                 }} />
-                <Text style={{ color: riskColor, fontSize: 14, fontWeight: '700' }}>{riskLabel}</Text>
+                <Text style={{ color: riskColor, fontSize: 14, fontWeight: '700' }}>{riskLabel} {usedPct}%</Text>
               </View>
             </View>
           </View>

@@ -498,9 +498,6 @@ export default function Add() {
             paddingHorizontal: spacing.s8,
             alignItems: 'center',
             justifyContent: 'center',
-            borderRightWidth: isRightEdge ? 0 : 1,
-            borderBottomWidth: isBottomEdge ? 0 : 1,
-            borderColor: borderSubtle,
             backgroundColor: selected ? withAlpha(categoryColor, isDark ? 0.15 : 0.08) : 'transparent',
           }}
         >

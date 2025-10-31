@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Home } from '../screens/Home';
 import { Budgets } from '../screens/Budgets';
 import { Insights } from '../screens/Insights';
+import { Report } from '../screens/Report';
 import { Transactions } from '../screens/Transactions';
 import BudgetSettings from '../screens/BudgetSettings';
 import CategoryInsights from '../screens/CategoryInsights';
@@ -27,6 +28,7 @@ export type HomeStackParamList = {
   CategoryTransactions: { category: string };
   UpcomingBills: undefined;
   InsightsRoot: undefined;
+  Report: { selectedMonth: Date };
   HistoryRoot: undefined;
   GroupsRoot: undefined;
   GroupDetail: { groupId: string };
@@ -47,6 +49,7 @@ export default function HomeNavigator() {
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
+        contentStyle: { backgroundColor: 'transparent' },
       }}
     >
       <Stack.Screen name="HomeRoot" component={Home} />
@@ -90,6 +93,14 @@ export default function HomeNavigator() {
         component={Insights}
         options={{
           animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="Report"
+        component={Report}
+        options={{
+          animation: 'slide_from_right',
+          contentStyle: { backgroundColor: 'transparent' },
         }}
       />
       <Stack.Screen

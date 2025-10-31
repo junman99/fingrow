@@ -71,20 +71,31 @@ export const RecentTransactionsCard: React.FC = () => {
       backgroundColor: get('surface.level1') as string,
       ...elevation.level1 as any
     }}>
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s12, backgroundColor: get('surface.level1') as string, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Pressable
+        onPress={() => nav.navigate('TransactionsModal')}
+        style={({ pressed }) => ({
+          paddingHorizontal: spacing.s16,
+          paddingTop: spacing.s16,
+          paddingBottom: spacing.s12,
+          backgroundColor: get('surface.level1') as string,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          opacity: pressed ? 0.7 : 1
+        })}
+      >
         <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 16 }}>Recent Activity</Text>
-        <Pressable onPress={() => nav.navigate('TransactionsModal')} style={({ pressed }) => ({
+        <View style={{
           width: 36,
           height: 36,
           borderRadius: radius.md,
           backgroundColor: get('surface.level2') as string,
           alignItems: 'center',
-          justifyContent: 'center',
-          opacity: pressed ? 0.85 : 1
-        })}>
+          justifyContent: 'center'
+        }}>
           <Icon name="arrow-bold-right" size={18} colorToken="icon.muted" />
-        </Pressable>
-      </View>
+        </View>
+      </Pressable>
 
       {items.length === 0 ? (
         <Text style={{ color: get('text.muted') as string, padding: spacing.s16 }}>No transactions yet.</Text>
