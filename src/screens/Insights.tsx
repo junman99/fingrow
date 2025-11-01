@@ -687,38 +687,6 @@ export const Insights: React.FC = () => {
             ))}
           </View>
         )}
-
-        {/* Generate Report Button */}
-        <Pressable
-          onPress={() => nav.navigate('Report' as never, { selectedMonth } as never)}
-          style={({ pressed }) => ({
-            backgroundColor: withAlpha(accentPrimary, isDark ? 0.15 : 0.1),
-            borderRadius: radius.xl,
-            padding: spacing.s20,
-            borderWidth: 2,
-            borderColor: withAlpha(accentPrimary, 0.3),
-            alignItems: 'center',
-            opacity: pressed ? 0.8 : 1
-          })}
-        >
-          <View style={{
-            width: 48,
-            height: 48,
-            borderRadius: 24,
-            backgroundColor: accentPrimary,
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: spacing.s12
-          }}>
-            <Icon name="file-text" size={24} color={get('text.onPrimary') as string} />
-          </View>
-          <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 18, marginBottom: spacing.s4 }}>
-            Generate Financial Report
-          </Text>
-          <Text style={{ color: textMuted, fontSize: 14, textAlign: 'center' }}>
-            Get a comprehensive overview of your finances
-          </Text>
-        </Pressable>
         </View>
       </Animated.View>
 

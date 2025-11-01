@@ -712,7 +712,7 @@ export default function GroupDetail() {
               <Icon name="chevron-left" size={28} color={textPrimary} />
             </Pressable>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.8, marginTop: spacing.s2 }}>{group.name}</Text>
+              <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 }}>{group.name}</Text>
             </View>
             <Pressable
               onPress={() => setShowSettingsMenu(true)}

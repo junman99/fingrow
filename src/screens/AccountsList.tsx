@@ -42,16 +42,16 @@ const AnimatedPressable: React.FC<{
     transform: [{ scale: scale.value }],
   }));
 
+  const handlePressIn = () => {
+    scale.value = withSpring(0.97, { damping: 15, stiffness: 300 });
+  };
+
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+  };
+
   return (
-    <Pressable
-      onPress={onPress}
-      onPressIn={() => {
-        scale.value = withSpring(0.97, { damping: 15, stiffness: 300 });
-      }}
-      onPressOut={() => {
-        scale.value = withSpring(1, { damping: 15, stiffness: 300 });
-      }}
-    >
+    <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
       <Animated.View style={[style, animatedStyle]}>
         {children}
       </Animated.View>
@@ -77,25 +77,8 @@ const CollapsibleSection: React.FC<{
   const cardBg = get('surface.level1') as string;
   const border = get('border.subtle') as string;
 
-  const heightAnim = useSharedValue(defaultExpanded ? 1 : 0);
-  const rotateAnim = useSharedValue(defaultExpanded ? 1 : 0);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    maxHeight: heightAnim.value * 2000,
-    opacity: heightAnim.value,
-    overflow: 'hidden',
-  }));
-
-  const rotateStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotateAnim.value * 180}deg` }],
-  }));
-
   const toggleExpand = () => {
-    const newExpanded = !isExpanded;
-    setIsExpanded(newExpanded);
-
-    heightAnim.value = withTiming(newExpanded ? 1 : 0, { duration: 250 });
-    rotateAnim.value = withTiming(newExpanded ? 1 : 0, { duration: 250 });
+    setIsExpanded(!isExpanded);
   };
 
   if (count === 0) return null;
@@ -111,48 +94,47 @@ const CollapsibleSection: React.FC<{
       }}
     >
       {/* Header - Always visible */}
-      <Pressable onPress={toggleExpand}>
-        <View
-          style={{
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            backgroundColor: withAlpha(color, isDark ? 0.15 : 0.1),
-            padding: spacing.s16,
-          }}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12, flex: 1 }}>
-            <View
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: radius.md,
-                backgroundColor: withAlpha(color, isDark ? 0.3 : 0.2),
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Icon name={icon as any} size={20} color={color} />
+      <View style={{ backgroundColor: withAlpha(color, isDark ? 0.15 : 0.1), overflow: 'hidden' }}>
+        <AnimatedPressable onPress={toggleExpand}>
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: spacing.s16,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12, flex: 1 }}>
+              <View
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: radius.md,
+                  backgroundColor: withAlpha(color, isDark ? 0.3 : 0.2),
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Icon name={icon as any} size={20} color={color} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: text, fontSize: 16, fontWeight: '700' }}>{title}</Text>
+                <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
+                  {count} account{count === 1 ? '' : 's'} • {formatCurrency(total)}
+                </Text>
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: text, fontSize: 16, fontWeight: '700' }}>{title}</Text>
-              <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
-                {count} account{count === 1 ? '' : 's'} • {formatCurrency(total)}
-              </Text>
-            </View>
+            <Icon name={isExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={muted} />
           </View>
-          <Animated.View style={rotateStyle}>
-            <Icon name="chevron-down" size={20} color={muted} />
-          </Animated.View>
-        </View>
-      </Pressable>
+        </AnimatedPressable>
+      </View>
 
       {/* Expandable Content - Account cards inside */}
-      <Animated.View style={animatedStyle}>
+      {isExpanded && (
         <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s4, paddingBottom: spacing.s8 }}>
           {children}
         </View>
-      </Animated.View>
+      )}
     </Card>
   );
 };
@@ -251,16 +233,13 @@ const AccountsList: React.FC = () => {
 
   // Animations
   const fadeAnim = useSharedValue(0);
-  const slideAnim = useSharedValue(50);
 
   useEffect(() => {
-    fadeAnim.value = withTiming(1, { duration: 600 });
-    slideAnim.value = withSpring(0, { damping: 18, stiffness: 150 });
+    fadeAnim.value = withTiming(1, { duration: 400 });
   }, []);
 
   const fadeStyle = useAnimatedStyle(() => ({
     opacity: fadeAnim.value,
-    transform: [{ translateY: slideAnim.value }],
   }));
 
   const getAccountIcon = (kind?: string) => {

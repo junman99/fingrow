@@ -22,22 +22,46 @@ const Stack = createNativeStackNavigator();
 
 export default function MoneyNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }}>
       <Stack.Screen name="MoneyHome" component={Money} />
       <Stack.Screen name="AddAccount" component={AddAccount} />
       <Stack.Screen name="AccountDetail" component={AccountDetail} />
       <Stack.Screen name="AccountSettings" component={AccountSettings} />
-      <Stack.Screen name="AccountsList" component={AccountsList} />
+      <Stack.Screen
+        name="AccountsList"
+        component={AccountsList}
+        options={{
+          animation: 'default',
+        }}
+      />
       <Stack.Screen name="AddDebt" component={AddDebt} />
       <Stack.Screen name="DebtDetail" component={DebtDetail} />
-      <Stack.Screen name="DebtsList" component={DebtsList} />
+      <Stack.Screen
+        name="DebtsList"
+        component={DebtsList}
+        options={{
+          animation: 'default',
+        }}
+      />
       <Stack.Screen name="PayoffSimulator" component={PayoffSimulator} />
       <Stack.Screen name="PaycheckBreakdown" component={PaycheckBreakdown} />
       <Stack.Screen name="PaycheckSetup" component={PaycheckSetup} />
       <Stack.Screen name="PaycheckSettings" component={PaycheckSettings} />
       <Stack.Screen name="PaycheckHistory" component={PaycheckHistory} />
-      <Stack.Screen name="BillsList" component={BillsList} />
-      <Stack.Screen name="PortfolioList" component={PortfolioList} />
+      <Stack.Screen
+        name="BillsList"
+        component={BillsList}
+        options={{
+          animation: 'default',
+        }}
+      />
+      <Stack.Screen
+        name="PortfolioList"
+        component={PortfolioList}
+        options={{
+          animation: 'default',
+        }}
+      />
       <Stack.Screen name="SelectInstitution" component={SelectInstitution} />
       <Stack.Screen name="SelectAccountType" component={SelectAccountType} />
     </Stack.Navigator>

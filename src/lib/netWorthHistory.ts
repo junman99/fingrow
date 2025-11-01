@@ -126,80 +126,31 @@ export function calculateHistoricalNetWorth(
 }
 
 /**
- * Aggregate data points based on timeframe
+ * Aggregate data points based on timeframe - returns ALL available data
  */
 export function aggregateNetWorthData(
   data: NetWorthDataPoint[],
-  timeframe: '1W' | '1M' | '3M' | '6M' | '1Y' | 'ALL'
+  timeframe: 'D' | 'W' | 'M',
+  offset: number = 0 // Kept for backwards compatibility but not used
 ): NetWorthDataPoint[] {
   if (!data.length) return [];
 
-  const now = data[data.length - 1]?.t || Date.now();
-  const msDay = 24 * 60 * 60 * 1000;
-
-  // Determine time range
-  let startTime: number;
+  // Return all available data, aggregated by timeframe
   switch (timeframe) {
-    case '1W':
-      startTime = now - 7 * msDay;
-      break;
-    case '1M':
-      const oneMonthAgo = new Date(now);
-      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-      startTime = oneMonthAgo.getTime();
-      break;
-    case '3M':
-      const threeMonthsAgo = new Date(now);
-      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-      startTime = threeMonthsAgo.getTime();
-      break;
-    case '6M':
-      const sixMonthsAgo = new Date(now);
-      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-      startTime = sixMonthsAgo.getTime();
-      break;
-    case '1Y':
-      const oneYearAgo = new Date(now);
-      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      startTime = oneYearAgo.getTime();
-      break;
-    case 'ALL':
-    default:
-      startTime = 0;
-  }
+    case 'D':
+      // All daily bars
+      return aggregateByDay(data);
 
-  // Filter data to timeframe
-  const filteredData = data.filter(d => d.t >= startTime);
-  if (!filteredData.length) return data;
+    case 'W':
+      // All weekly bars
+      return aggregateByWeek(data);
 
-  // Aggregate based on timeframe
-  switch (timeframe) {
-    case '1W':
-      // Daily bars (7 bars)
-      return aggregateByDay(filteredData);
-
-    case '1M':
-      // Weekly bars (~4 bars, showing Sundays)
-      return aggregateByWeek(filteredData);
-
-    case '3M':
-      // Bi-weekly bars (~6 bars, every 2 weeks)
-      return aggregateByBiWeek(filteredData);
-
-    case '6M':
-      // Monthly bars (6 bars)
-      return aggregateByMonth(filteredData);
-
-    case '1Y':
-      // Monthly bars (12 bars)
-      return aggregateByMonth(filteredData);
-
-    case 'ALL':
-      // Monthly bars (all time)
-      return aggregateByMonth(filteredData);
+    case 'M':
+      // All monthly bars
+      return aggregateByMonth(data);
 
     default:
-      return filteredData;
+      return data;
   }
 }
 
@@ -216,33 +167,41 @@ function aggregateByDay(data: NetWorthDataPoint[]): NetWorthDataPoint[] {
 function aggregateByWeek(data: NetWorthDataPoint[]): NetWorthDataPoint[] {
   if (!data.length) return [];
 
-  const weeks: Map<string, NetWorthDataPoint[]> = new Map();
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-  data.forEach(point => {
-    const date = new Date(point.t);
-    // Get the week start (Sunday)
-    const weekStart = new Date(date);
-    weekStart.setDate(date.getDate() - date.getDay());
-    weekStart.setHours(0, 0, 0, 0);
-    const weekKey = weekStart.toISOString().split('T')[0];
-
-    if (!weeks.has(weekKey)) {
-      weeks.set(weekKey, []);
-    }
-    weeks.get(weekKey)!.push(point);
-  });
-
-  // Take the last point of each week (end-of-week data)
   const result: NetWorthDataPoint[] = [];
-  Array.from(weeks.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([weekKey, points]) => {
-      const lastPoint = points[points.length - 1];
-      const date = new Date(lastPoint.t);
-      const label = `${date.getDate()} ${monthNames[date.getMonth()]}`;
-      result.push({ ...lastPoint, label });
-    });
+
+  const now = new Date();
+
+  // Find the most recent Sunday (same logic as AccountDetail)
+  const dayOfWeek = now.getDay();
+  const mostRecentSunday = new Date(now);
+  mostRecentSunday.setDate(now.getDate() - dayOfWeek);
+  mostRecentSunday.setHours(0, 0, 0, 0);
+
+  // Go back and find data for each Sunday
+  for (let weeksBack = 0; weeksBack < 26; weeksBack++) { // Get up to 26 weeks of data
+    const weekEnd = new Date(mostRecentSunday);
+    weekEnd.setDate(mostRecentSunday.getDate() - (weeksBack * 7));
+
+    // Find the data point closest to this Sunday
+    const weekEndTime = weekEnd.getTime();
+    let closestPoint = data[0];
+    let minDiff = Math.abs(data[0].t - weekEndTime);
+
+    for (const point of data) {
+      const diff = Math.abs(point.t - weekEndTime);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestPoint = point;
+      }
+    }
+
+    // Only include if we found data within 7 days of this Sunday
+    if (minDiff <= 7 * 24 * 60 * 60 * 1000) {
+      const label = `${weekEnd.getDate()} ${monthNames[weekEnd.getMonth()]}`;
+      result.unshift({ ...closestPoint, label, t: weekEndTime });
+    }
+  }
 
   return result;
 }
@@ -307,7 +266,8 @@ function aggregateByMonth(data: NetWorthDataPoint[]): NetWorthDataPoint[] {
     .forEach(([monthKey, points]) => {
       const lastPoint = points[points.length - 1];
       const date = new Date(lastPoint.t);
-      const label = `${date.getDate()} ${monthNames[date.getMonth()]}`;
+      // Label format: "MMM YY" (e.g., "Oct 24")
+      const label = `${monthNames[date.getMonth()]} ${String(date.getFullYear()).slice(-2)}`;
       result.push({ ...lastPoint, label });
     });
 

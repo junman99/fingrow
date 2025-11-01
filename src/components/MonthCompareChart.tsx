@@ -458,8 +458,12 @@ export const MonthCompareChart: React.FC = () => {
           paddingHorizontal: spacing.s10,
           borderRadius: radius.pill,
           backgroundColor: surface2,
-          opacity: pressed ? 0.85 : 1
+          opacity: pressed ? 0.85 : 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: spacing.s4
         })}>
+          <Icon name="bar-chart-2" size={14} colorToken="accent.primary" />
           <Text style={{ color: accentPrimary, fontWeight: '700' }}>See insights</Text>
         </Pressable>
       </View>
@@ -885,7 +889,8 @@ export const MonthCompareChartClassic: React.FC = () => {
           </View>
         </View>
 
-        <Pressable onPress={() => nav.navigate('InsightsModal')} hitSlop={12} style={{ paddingVertical: 6, paddingHorizontal: spacing.s8 }}>
+        <Pressable onPress={() => nav.navigate('InsightsModal')} hitSlop={12} style={{ paddingVertical: 6, paddingHorizontal: spacing.s8, flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
+          <Icon name="bar-chart-2" size={14} colorToken="accent.primary" />
           <Text style={{ color: get('accent.primary') as string, fontWeight: '700' }}>See insights</Text>
         </Pressable>
       </View>

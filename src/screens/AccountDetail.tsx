@@ -145,13 +145,14 @@ export default function AccountDetail() {
   const outline = get('border.subtle') as string;
   const successColor = get('semantic.success') as string;
   const errorColor = get('semantic.error') as string;
+  const dangerColor = get('semantic.danger') as string;
   const bgDefault = get('background.default') as string;
 
   const { accounts } = useAccountsStore();
   const { transactions } = useTxStore();
   const acc = useMemo(() => (accounts || []).find(a => a.id === (route.params as RouteParams)?.id), [accounts, route.params]);
 
-  const [chartPeriod, setChartPeriod] = useState<'week' | 'month'>('month');
+  const [chartPeriod, setChartPeriod] = useState<'week' | 'month'>('week');
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
   const [chartOffset, setChartOffset] = useState(0); // 0 = current period, 1 = previous period, etc.
 
@@ -297,6 +298,14 @@ export default function AccountDetail() {
       monthlyChangePercent,
     };
   }, [acc, transactions, chartPeriod]);
+
+  // Get recent transactions for this account
+  const recentAccountTransactions = useMemo(() => {
+    return transactions
+      .filter(tx => tx.account === acc?.name)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 5);
+  }, [transactions, acc?.name]);
 
   if (!acc) {
     return (
@@ -691,16 +700,65 @@ export default function AccountDetail() {
         </Card>
       </View>
 
-      {/* Quick Actions */}
-      <View style={{ gap: spacing.s12 }}>
-        <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>Quick Actions</Text>
-        <Button
-          title="Account Settings"
-          onPress={() => nav.navigate('AccountSettings', { id: acc.id })}
-          variant="secondary"
-          icon="settings"
-        />
-      </View>
+      {/* Recent Transactions */}
+      {recentAccountTransactions.length > 0 && (
+        <View style={{ gap: spacing.s12 }}>
+          <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>Recent Activity</Text>
+          <Card style={{ padding: spacing.s16, gap: spacing.s14 }}>
+            {recentAccountTransactions.map((tx, idx) => (
+              <View
+                key={tx.id}
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  paddingVertical: spacing.s8,
+                  borderBottomWidth: idx < recentAccountTransactions.length - 1 ? 1 : 0,
+                  borderBottomColor: outline,
+                }}
+              >
+                <View style={{ flex: 1, gap: spacing.s2 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+                    <View
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 12,
+                        backgroundColor: withAlpha(tx.type === 'income' ? successColor : dangerColor, 0.15),
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Icon
+                        name={tx.type === 'income' ? 'arrow-down' : 'arrow-up'}
+                        size={12}
+                        color={tx.type === 'income' ? successColor : dangerColor}
+                      />
+                    </View>
+                    <Text style={{ color: text, fontWeight: '600', flex: 1 }} numberOfLines={1}>
+                      {tx.note || tx.category || 'Transaction'}
+                    </Text>
+                  </View>
+                  <Text style={{ color: muted, fontSize: 12, marginLeft: 32 }}>
+                    {new Date(tx.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    {tx.category && ` • ${tx.category}`}
+                  </Text>
+                </View>
+                <Text
+                  style={{
+                    color: tx.type === 'income' ? successColor : dangerColor,
+                    fontWeight: '800',
+                    fontSize: 16,
+                    marginLeft: spacing.s12,
+                  }}
+                >
+                  {tx.type === 'income' ? '+' : '-'}{formatCurrency(Math.abs(tx.amount))}
+                </Text>
+              </View>
+            ))}
+          </Card>
+        </View>
+      )}
     </ScreenScroll>
   );
 }

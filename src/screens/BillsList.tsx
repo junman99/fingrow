@@ -101,16 +101,13 @@ const BillsList: React.FC = () => {
 
   // Animations
   const fadeAnim = useSharedValue(0);
-  const slideAnim = useSharedValue(50);
 
   useEffect(() => {
-    fadeAnim.value = withTiming(1, { duration: 600 });
-    slideAnim.value = withSpring(0, { damping: 18, stiffness: 150 });
+    fadeAnim.value = withTiming(1, { duration: 400 });
   }, []);
 
   const fadeStyle = useAnimatedStyle(() => ({
     opacity: fadeAnim.value,
-    transform: [{ translateY: slideAnim.value }],
   }));
 
   const getDaysUntil = (date: Date) => {

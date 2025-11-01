@@ -379,6 +379,7 @@ const Money: React.FC = () => {
   const onSurface = get('text.onSurface') as string;
   const textOnPrimary = get('text.onPrimary') as string;
   const cardBg = get('surface.level1') as string;
+  const surface2 = get('surface.level2') as string;
   const border = get('border.subtle') as string;
   const accentPrimary = get('accent.primary') as string;
   const accentSecondary = get('accent.secondary') as string;
@@ -474,13 +475,51 @@ const Money: React.FC = () => {
     );
   }, [accountsList, transactions, portfolioCalc.totalUSD]);
 
-  const [netWorthTimeframe, setNetWorthTimeframe] = useState<'1W'|'1M'|'3M'|'6M'|'1Y'|'ALL'>('3M');
+  const [netWorthTimeframe, setNetWorthTimeframe] = useState<'D'|'W'|'M'>('D');
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
+  const [scrollOffset, setScrollOffset] = useState(0); // Pixel offset scrolled (persisted)
+  const [tempDragOffset, setTempDragOffset] = useState(0); // Real-time drag offset
+  const gestureStart = useRef({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const screenWidth = 360; // Approximate, could use Dimensions.get('window').width
 
-  // Aggregate chart data based on timeframe
-  const aggregatedChartData = useMemo(() => {
-    return aggregateNetWorthData(netWorthHistoryData, netWorthTimeframe);
+  // Get ALL aggregated data based on timeframe (all available history)
+  const allChartData = useMemo(() => {
+    // Get all data without filtering by offset
+    if (!netWorthHistoryData.length) return [];
+
+    const msDay = 24 * 60 * 60 * 1000;
+
+    // For Day view: get daily data for last 180 days
+    if (netWorthTimeframe === 'D') {
+      return aggregateNetWorthData(netWorthHistoryData, 'D', 0);
+    }
+    // For Week view: get weekly data for last ~26 weeks
+    else if (netWorthTimeframe === 'W') {
+      return aggregateNetWorthData(netWorthHistoryData, 'W', 0);
+    }
+    // For Month view: get monthly data for last 6 months
+    else {
+      return aggregateNetWorthData(netWorthHistoryData, 'M', 0);
+    }
   }, [netWorthHistoryData, netWorthTimeframe]);
+
+  // Number of visible bars based on timeframe
+  const visibleBars = netWorthTimeframe === 'D' ? 10 : netWorthTimeframe === 'W' ? 7 : 6;
+  const barWidth = screenWidth / visibleBars;
+
+  // Get the visible window of data - show only exact number of bars
+  const aggregatedChartData = useMemo(() => {
+    // Calculate which bars to show based on scroll offset + temp drag
+    const totalOffset = scrollOffset + tempDragOffset; // Right drag (positive tempDragOffset) = older data
+    const scrolledBars = totalOffset / barWidth;
+
+    // Show exactly visibleBars number of bars
+    const endIdx = Math.max(visibleBars, Math.min(allChartData.length, Math.ceil(allChartData.length - scrolledBars)));
+    const startIdx = Math.max(0, endIdx - visibleBars);
+
+    return allChartData.slice(startIdx, endIdx);
+  }, [allChartData, scrollOffset, tempDragOffset, visibleBars, barWidth]);
 
   // Calculate net worth change
   const netWorthChange = useMemo(() => {
@@ -622,119 +661,131 @@ const Money: React.FC = () => {
 
         {/* Net Worth Display with subtle label */}
         <View>
-          <Text style={{ color: muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '600', marginBottom: spacing.s4 }}>
-            Net Worth
-          </Text>
-          <Text style={{ color: text, fontSize: 36, fontWeight: '800', letterSpacing: -1 }}>
-            {formatCurrency(netWorth)}
-          </Text>
-          {/* Change indicator */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6, marginTop: spacing.s6 }}>
-            <Text style={{
-              color: netWorthChange >= 0 ? successColor : warningColor,
-              fontSize: 13,
-              fontWeight: '600'
-            }}>
-              {netWorthChange >= 0 ? '+' : ''}{formatCurrency(Math.abs(netWorthChange))} ({netWorthChange >= 0 ? '+' : ''}{netWorthChangePercent.toFixed(1)}%)
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s4 }}>
+            <Text style={{ color: muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '600' }}>
+              Net Worth
             </Text>
-            <Text style={{ color: muted, fontSize: 13 }}>•</Text>
-            <Text style={{ color: muted, fontSize: 13 }}>
-              {motivationalMsg.emoji} {motivationalMsg.message}
-            </Text>
-          </View>
-        </View>
 
-        {/* Bar Chart with Scroll Wheel Picker */}
-        <View style={{ gap: spacing.s12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: spacing.s8 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: muted, fontSize: 13, fontWeight: '600', marginBottom: spacing.s6 }}>
-                Balance over time
-              </Text>
-              {selectedBarIndex !== null && aggregatedChartData[selectedBarIndex] ? (
-                <>
-                  <Text style={{ color: text, fontSize: 24, fontWeight: '800' }}>
-                    {formatCurrency(
-                      aggregatedChartData[selectedBarIndex].cash +
-                      aggregatedChartData[selectedBarIndex].investments -
-                      aggregatedChartData[selectedBarIndex].debt
-                    )}
-                  </Text>
-                  <Text style={{ color: muted, fontSize: 12, marginTop: spacing.s4 }}>
-                    {aggregatedChartData[selectedBarIndex].label}
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <Text style={{ color: text, fontSize: 24, fontWeight: '800' }}>
-                    {formatCurrency(netWorth)}
-                  </Text>
-                  <Text style={{ color: muted, fontSize: 12, marginTop: spacing.s4 }}>Current</Text>
-                </>
-              )}
-            </View>
-
-            {/* Scroll Wheel Timeframe Picker */}
+            {/* Timeframe Selector (D, W, M) */}
             <View style={{
-              height: 40,
-              width: 180,
-              overflow: 'hidden',
-              justifyContent: 'center',
+              flexDirection: 'row',
+              backgroundColor: surface2,
+              borderRadius: radius.pill,
+              padding: 2,
             }}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                snapToInterval={60}
-                decelerationRate="fast"
-                contentContainerStyle={{
-                  paddingHorizontal: 60,
-                }}
-                onScroll={(e) => {
-                  const offsetX = e.nativeEvent.contentOffset.x;
-                  const index = Math.round(offsetX / 60);
-                  const options: ('1W'|'1M'|'3M'|'6M'|'1Y'|'ALL')[] = ['1W', '1M', '3M', '6M', '1Y', 'ALL'];
-                  if (index >= 0 && index < options.length && options[index] !== netWorthTimeframe) {
-                    setNetWorthTimeframe(options[index]);
-                    setSelectedBarIndex(null);
-                  }
-                }}
-                scrollEventThrottle={16}
-              >
-                {(['1W', '1M', '3M', '6M', '1Y', 'ALL'] as const).map((option, idx) => {
-                  const isSelected = option === netWorthTimeframe;
-                  return (
-                    <View
-                      key={option}
+              {(['D', 'W', 'M'] as const).map((option) => {
+                const isSelected = option === netWorthTimeframe;
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => {
+                      setNetWorthTimeframe(option);
+                      setSelectedBarIndex(null);
+                      setScrollOffset(0); // Reset offset when changing timeframe
+                    }}
+                    style={{
+                      paddingHorizontal: spacing.s12,
+                      paddingVertical: spacing.s6,
+                      borderRadius: radius.pill,
+                      backgroundColor: isSelected ? accentPrimary : 'transparent',
+                    }}
+                  >
+                    <Text
                       style={{
-                        width: 60,
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                        color: isSelected ? textOnPrimary : muted,
+                        fontSize: 13,
+                        fontWeight: '700',
                       }}
                     >
-                      <Text
-                        style={{
-                          color: isSelected ? accentPrimary : muted,
-                          fontSize: isSelected ? 16 : 13,
-                          fontWeight: isSelected ? '700' : '600',
-                          opacity: isSelected ? 1 : 0.5,
-                        }}
-                      >
-                        {option}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </ScrollView>
+                      {option}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
 
-          <View>
+          {/* Net Worth Value - changes based on selected bar */}
+          {selectedBarIndex !== null && aggregatedChartData[selectedBarIndex] ? (
+            <>
+              <Text style={{ color: text, fontSize: 36, fontWeight: '800', letterSpacing: -1 }}>
+                {formatCurrency(
+                  aggregatedChartData[selectedBarIndex].cash +
+                  aggregatedChartData[selectedBarIndex].investments -
+                  aggregatedChartData[selectedBarIndex].debt
+                )}
+              </Text>
+              <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s4 }}>
+                {aggregatedChartData[selectedBarIndex].label}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={{ color: text, fontSize: 36, fontWeight: '800', letterSpacing: -1 }}>
+                {formatCurrency(netWorth)}
+              </Text>
+              {/* Change indicator */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6, marginTop: spacing.s6 }}>
+                <Text style={{
+                  color: netWorthChange >= 0 ? successColor : warningColor,
+                  fontSize: 13,
+                  fontWeight: '600'
+                }}>
+                  {netWorthChange >= 0 ? '+' : ''}{formatCurrency(Math.abs(netWorthChange))} ({netWorthChange >= 0 ? '+' : ''}{netWorthChangePercent.toFixed(1)}%)
+                </Text>
+                <Text style={{ color: muted, fontSize: 13 }}>•</Text>
+                <Text style={{ color: muted, fontSize: 13 }}>
+                  {motivationalMsg.emoji} {motivationalMsg.message}
+                </Text>
+              </View>
+            </>
+          )}
+
+          {/* Bar Chart with Swipe Gesture */}
+          <View
+            style={{ marginTop: spacing.s12, overflow: 'hidden' }}
+            onStartShouldSetResponder={() => true}
+            onStartShouldSetResponderCapture={() => false}
+            onMoveShouldSetResponder={(e) => {
+              // Only capture if horizontal movement is significant
+              const dx = Math.abs(e.nativeEvent.pageX - gestureStart.current.x);
+              const dy = Math.abs(e.nativeEvent.pageY - gestureStart.current.y);
+              return dx > 10 && dx > dy;
+            }}
+            onResponderGrant={(e) => {
+              gestureStart.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY };
+              setIsDragging(true);
+              setTempDragOffset(0);
+            }}
+            onResponderMove={(e) => {
+              if (isDragging) {
+                const dx = e.nativeEvent.pageX - gestureStart.current.x;
+
+                // Update temp drag offset for real-time data updates
+                // Positive dx (right swipe) = see older data
+                setTempDragOffset(dx);
+              }
+            }}
+            onResponderRelease={(e) => {
+              setIsDragging(false);
+              const dx = e.nativeEvent.pageX - gestureStart.current.x;
+
+              // Commit temp drag to scroll offset
+              // Positive dx (right swipe) = see older data (increase scrollOffset)
+              const maxScrollOffset = (allChartData.length - visibleBars) * barWidth;
+              const newScrollOffset = scrollOffset + dx; // Right drag = older data
+              setScrollOffset(Math.max(0, Math.min(maxScrollOffset, newScrollOffset)));
+              setTempDragOffset(0);
+              setSelectedBarIndex(null);
+            }}
+            onResponderTerminationRequest={() => false}
+          >
             <View style={{ height: 130, flexDirection: 'row', alignItems: 'flex-end', gap: 4 }}>
               {aggregatedChartData.map((point, index) => {
                 const netWorthValue = point.cash + point.investments - point.debt;
                 const maxNW = Math.max(...aggregatedChartData.map(p => p.cash + p.investments - p.debt), 1);
                 const barHeight = (netWorthValue / maxNW) * 120;
-                const isSelected = selectedBarIndex === index;
+                const isSelected = selectedBarIndex === index && !isDragging;
 
                 return (
                   <ChartBar
@@ -744,7 +795,7 @@ const Money: React.FC = () => {
                     color={accentPrimary}
                     isSelected={isSelected}
                     onPress={() => setSelectedBarIndex(isSelected ? null : index)}
-                    delay={index * 50}
+                    delay={0}
                   />
                 );
               })}
@@ -760,6 +811,29 @@ const Money: React.FC = () => {
                 </View>
               ))}
             </View>
+
+            {/* Swipe Indicator */}
+            {scrollOffset !== 0 && (
+              <View style={{ alignItems: 'center', marginTop: spacing.s8 }}>
+                <Pressable
+                  onPress={() => {
+                    setScrollOffset(0);
+                    setSelectedBarIndex(null);
+                  }}
+                  style={({ pressed }) => ({
+                    paddingHorizontal: spacing.s10,
+                    paddingVertical: spacing.s4,
+                    borderRadius: radius.pill,
+                    backgroundColor: surface2,
+                    opacity: pressed ? 0.7 : 1
+                  })}
+                >
+                  <Text style={{ color: accentPrimary, fontSize: 11, fontWeight: '600' }}>
+                    Back to current
+                  </Text>
+                </Pressable>
+              </View>
+            )}
           </View>
         </View>
       </View>
@@ -840,40 +914,38 @@ const Money: React.FC = () => {
         </View>
       </View>
 
-      {/* Spendable Cash Highlight */}
+      {/* Generate Financial Report */}
       <View style={{ paddingHorizontal: spacing.s16 }}>
-      <Card
-        style={{
-          backgroundColor: cardBg,
-          padding: spacing.s16,
-          borderWidth: 2,
-          borderColor: withAlpha(accentPrimary, 0.3),
-        }}
-      >
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <View>
-            <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>Available to spend</Text>
-            <Text style={{ color: text, fontSize: 28, fontWeight: '800', marginTop: spacing.s4 }}>
-              {formatCurrency(spendable)}
-            </Text>
-            <Text style={{ color: muted, fontSize: 12, marginTop: spacing.s6 }}>
-              After bills & debt payments
-            </Text>
+        <Pressable
+          onPress={() => nav.navigate('Report')}
+          style={({ pressed }) => ({
+            backgroundColor: withAlpha(accentPrimary, isDark ? 0.15 : 0.1),
+            borderRadius: radius.xl,
+            padding: spacing.s20,
+            borderWidth: 2,
+            borderColor: withAlpha(accentPrimary, 0.3),
+            alignItems: 'center',
+            opacity: pressed ? 0.8 : 1
+          })}
+        >
+          <View style={{
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            backgroundColor: accentPrimary,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: spacing.s12
+          }}>
+            <Icon name="receipt" size={28} colorToken="text.onPrimary" />
           </View>
-          <View
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: radius.lg,
-              backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Icon name="wallet" size={28} colorToken="accent.primary" />
-          </View>
-        </View>
-      </Card>
+          <Text style={{ color: text, fontWeight: '800', fontSize: 18, marginBottom: spacing.s4 }}>
+            Generate Financial Report
+          </Text>
+          <Text style={{ color: muted, fontSize: 14, textAlign: 'center' }}>
+            Get a comprehensive overview of your finances
+          </Text>
+        </Pressable>
       </View>
 
       {/* Quick Access Cards */}

@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, Pressable, Switch } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenScroll } from '../components/ScreenScroll';
 import Input from '../components/Input';
 import Button from '../components/Button';
@@ -13,15 +12,14 @@ import { formatCurrency } from '../lib/format';
 
 type AccountKind = 'checking' | 'savings' | 'cash' | 'credit' | 'investment';
 
-const kinds: { key: AccountKind; title: string; caption: string }[] = [
-  { key: 'checking', title: 'Daily spend', caption: 'Salary, current, multi-use funds' },
-  { key: 'savings', title: 'Savings', caption: 'Emergency, reserves, fixed deposits' },
-  { key: 'cash', title: 'Cash & wallets', caption: 'Physical cash, GrabPay, prepaid' },
-  { key: 'credit', title: 'Credit & charge', caption: 'Cards that need monthly payoff' },
-  { key: 'investment', title: 'Investment cash', caption: 'Brokerage or robo cash buckets' },
+const kinds: { key: AccountKind; title: string; caption: string; icon: string }[] = [
+  { key: 'checking', title: 'Daily spend', caption: 'Salary, current, multi-use funds', icon: 'building-2' },
+  { key: 'savings', title: 'Savings', caption: 'Emergency, reserves, fixed deposits', icon: 'piggy-bank' },
+  { key: 'cash', title: 'Cash & wallets', caption: 'Physical cash, GrabPay, prepaid', icon: 'wallet' },
+  { key: 'credit', title: 'Credit & charge', caption: 'Cards that need monthly payoff', icon: 'credit-card' },
+  { key: 'investment', title: 'Investment cash', caption: 'Brokerage or robo cash buckets', icon: 'trending-up' },
 ];
 
-const quickInstitutions = ['Manual', 'DBS', 'OCBC', 'UOB', 'HSBC', 'Maybank', 'Standard Chartered'];
 const quickBalances = ['0', '250', '500', '1000', '5000'];
 
 function withAlpha(color: string, alpha: number) {
@@ -49,7 +47,7 @@ const AddAccount: React.FC = () => {
   const nav = useNavigation<any>();
   const { addAccount } = useAccountsStore();
   const { get, isDark } = useThemeTokens();
-  const [name, setName] = useState('Everyday account');
+  const [name, setName] = useState('');
   const [institution, setInstitution] = useState('Manual');
   const [balance, setBalance] = useState('0');
   const [kind, setKind] = useState<AccountKind>('checking');
@@ -62,12 +60,7 @@ const AddAccount: React.FC = () => {
   const textPrimary = get('text.primary') as string;
   const muted = get('text.muted') as string;
   const cardBg = get('surface.level1') as string;
-  const heroColors: [string, string] = isDark
-    ? [withAlpha(accentPrimary, 0.38), withAlpha(accentSecondary, 0.50)]
-    : [accentPrimary, accentSecondary];
-  const heroText = isDark ? textPrimary : (get('text.onPrimary') as string);
-  const heroMuted = withAlpha(heroText, isDark ? 0.72 : 0.82);
-  const heroChipBg = withAlpha(heroText, isDark ? 0.22 : 0.28);
+  const border = get('border.subtle') as string;
 
   const balanceNumber = useMemo(() => {
     const parsed = parseFloat(balance || '0');
@@ -75,7 +68,6 @@ const AddAccount: React.FC = () => {
   }, [balance]);
 
   const canSave = name.trim().length > 0 && Number.isFinite(balanceNumber);
-  const previewImpact = balanceNumber >= 0 ? 'adds to' : 'reduces';
 
   async function onSave() {
     if (!canSave) return;
@@ -93,99 +85,94 @@ const AddAccount: React.FC = () => {
     nav.goBack();
   }
 
+  const selectedKind = kinds.find(k => k.key === kind);
+
   return (
     <ScreenScroll
-      contentStyle={{ padding: spacing.s16, gap: spacing.s16 }}
+      inTab
+      contentStyle={{ padding: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s32, gap: spacing.s20 }}
       allowBounce={false}
     >
-      <View
-        style={{
-          borderRadius: radius.xl,
-          backgroundColor: cardBg,
-          borderWidth: 2,
-          borderColor: withAlpha(accentPrimary, 0.2),
-          overflow: 'hidden',
-        }}
-      >
-        <LinearGradient
-          colors={heroColors}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
-            padding: spacing.s20,
-            paddingBottom: spacing.s16,
-          }}
+      {/* Header */}
+      <View style={{ gap: spacing.s8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8 }}>
+          <Pressable
+            onPress={() => nav.goBack()}
+            style={({ pressed }) => ({
+              padding: spacing.s8,
+              marginLeft: -spacing.s8,
+              marginTop: -spacing.s4,
+              borderRadius: radius.md,
+              backgroundColor: pressed ? cardBg : 'transparent',
+            })}
+            hitSlop={8}
+          >
+            <Icon name="chevron-left" size={28} color={textPrimary} />
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.8 }}>
+              Add account
+            </Text>
+          </View>
+        </View>
+        <Text style={{ color: muted, fontSize: 15, lineHeight: 22 }}>
+          Track your cash, investments, and credit in one place
+        </Text>
+      </View>
+
+      {/* Account Type Selector */}
+      <View style={{ gap: spacing.s12 }}>
+        <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>Account type</Text>
+        <Pressable
+          onPress={() => nav.navigate('SelectAccountType', {
+            currentType: kind,
+            onSelect: (selected: AccountKind) => setKind(selected),
+          })}
+          style={({ pressed }) => ({
+            padding: spacing.s16,
+            borderRadius: radius.xl,
+            backgroundColor: cardBg,
+            borderWidth: 1,
+            borderColor: border,
+            opacity: pressed ? 0.8 : 1,
+          })}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12, marginBottom: spacing.s12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
             <View
               style={{
-                width: 56,
-                height: 56,
-                borderRadius: radius.lg,
-                backgroundColor: heroChipBg,
+                width: 48,
+                height: 48,
+                borderRadius: radius.md,
+                backgroundColor: withAlpha(accentPrimary, isDark ? 0.2 : 0.15),
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <Icon name="plus-circle" size={28} color={heroText} />
+              <Icon name={selectedKind?.icon as any} size={24} color={accentPrimary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: heroMuted, fontWeight: '700', fontSize: 11, letterSpacing: 0.8 }}>
-                NEW ACCOUNT
+              <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>
+                {selectedKind?.title || 'Select type'}
               </Text>
-              <Text style={{ color: heroText, fontSize: 22, fontWeight: '800', marginTop: 2 }}>
-                Add an account
+              <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
+                {selectedKind?.caption || ''}
               </Text>
             </View>
+            <Icon name="chevron-right" size={20} color={muted} />
           </View>
-          <Text style={{ color: heroMuted, fontSize: 14, lineHeight: 20 }}>
-            Track your cash, investments, and credit in one place. Build your complete financial picture.
-          </Text>
-        </LinearGradient>
-
-        <View
-          style={{
-            backgroundColor: withAlpha(textPrimary, isDark ? 0.08 : 0.04),
-            padding: spacing.s16,
-            flexDirection: 'row',
-            gap: spacing.s12,
-          }}
-        >
-          <View
-            style={{
-              paddingVertical: spacing.s8,
-              paddingHorizontal: spacing.s14,
-              borderRadius: radius.lg,
-              backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
-              flex: 1,
-            }}
-          >
-            <Text style={{ color: muted, fontSize: 11, fontWeight: '600', marginBottom: 2 }}>TYPE</Text>
-            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 14 }}>
-              {kinds.find(k => k.key === kind)?.title || 'Checking'}
-            </Text>
-          </View>
-          <View
-            style={{
-              paddingVertical: spacing.s8,
-              paddingHorizontal: spacing.s14,
-              borderRadius: radius.lg,
-              backgroundColor: withAlpha(accentSecondary, isDark ? 0.25 : 0.15),
-              flex: 1,
-            }}
-          >
-            <Text style={{ color: muted, fontSize: 11, fontWeight: '600', marginBottom: 2 }}>BALANCE</Text>
-            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 14 }}>
-              {balanceNumber >= 0 ? '+' : '-'}
-              {formatCurrency(Math.abs(balanceNumber))}
-            </Text>
-          </View>
-        </View>
+        </Pressable>
       </View>
 
+      {/* Account Details */}
       <View style={{ gap: spacing.s12 }}>
-        <Text style={{ color: textPrimary, fontSize: 18, fontWeight: '700' }}>Account basics</Text>
-        <Input label="Account name" value={name} onChangeText={setName} placeholder="e.g. DBS Multiplier" />
+        <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>Account details</Text>
+
+        <Input
+          label="Account name"
+          value={name}
+          onChangeText={setName}
+          placeholder="e.g. DBS Multiplier"
+        />
 
         {/* Institution Selector */}
         <View style={{ gap: spacing.s8 }}>
@@ -200,136 +187,127 @@ const AddAccount: React.FC = () => {
               paddingHorizontal: spacing.s16,
               borderRadius: radius.lg,
               borderWidth: 1.5,
-              borderColor: withAlpha(textPrimary, 0.12),
-              backgroundColor: withAlpha(textPrimary, 0.02),
+              borderColor: withAlpha(border, isDark ? 1 : 0.5),
+              backgroundColor: cardBg,
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'space-between',
               opacity: pressed ? 0.8 : 1,
             })}
           >
-            <Text style={{ color: textPrimary, fontSize: 16, fontWeight: institution === 'Manual' ? '400' : '700' }}>
+            <Text style={{ color: textPrimary, fontSize: 16, fontWeight: institution === 'Manual' ? '400' : '600' }}>
               {institution || 'Select institution'}
             </Text>
-            <Text style={{ color: muted, fontSize: 18 }}>&rsaquo;</Text>
+            <Icon name="chevron-right" size={20} color={muted} />
           </Pressable>
         </View>
-      </View>
 
-      {/* Account Type Selector */}
-      <View style={{ gap: spacing.s12 }}>
-        <Text style={{ color: textPrimary, fontSize: 18, fontWeight: '700' }}>Account type</Text>
-        <Pressable
-          onPress={() => nav.navigate('SelectAccountType', {
-            currentType: kind,
-            onSelect: (selected: AccountKind) => setKind(selected),
-          })}
-          style={({ pressed }) => ({
-            paddingVertical: spacing.s14,
-            paddingHorizontal: spacing.s16,
-            borderRadius: radius.lg,
-            borderWidth: 1.5,
-            borderColor: withAlpha(textPrimary, 0.12),
-            backgroundColor: withAlpha(textPrimary, 0.02),
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            opacity: pressed ? 0.8 : 1,
-          })}
-        >
-          <View>
-            <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>
-              {kinds.find(k => k.key === kind)?.title || 'Select type'}
-            </Text>
-            <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
-              {kinds.find(k => k.key === kind)?.caption || ''}
-            </Text>
-          </View>
-          <Text style={{ color: muted, fontSize: 18 }}>&rsaquo;</Text>
-        </Pressable>
-      </View>
-
-      <View style={{ gap: spacing.s12 }}>
-        <Text style={{ color: textPrimary, fontSize: 18, fontWeight: '700' }}>Balance & details</Text>
         <Input
-          label="Starting balance"
+          label="Account hint (last 4-6 digits)"
+          value={mask}
+          onChangeText={value => setMask(value.replace(/\D/g, '').slice(0, 6))}
+          keyboardType="number-pad"
+          placeholder="Optional"
+        />
+      </View>
+
+      {/* Balance */}
+      <View style={{ gap: spacing.s12 }}>
+        <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>Starting balance</Text>
+
+        <Input
           value={balance}
           onChangeText={setBalance}
           keyboardType="decimal-pad"
           placeholder="0"
         />
+
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
           {quickBalances.map(amount => (
             <Pressable
               key={amount}
               onPress={() => setBalance(amount)}
               style={({ pressed }) => ({
-                paddingVertical: spacing.s6,
-                paddingHorizontal: spacing.s12,
+                paddingVertical: spacing.s8,
+                paddingHorizontal: spacing.s14,
                 borderRadius: radius.pill,
-                backgroundColor: withAlpha(textPrimary, 0.05),
+                backgroundColor: balance === amount
+                  ? withAlpha(accentPrimary, isDark ? 0.3 : 0.15)
+                  : withAlpha(textPrimary, isDark ? 0.1 : 0.05),
+                borderWidth: balance === amount ? 1.5 : 0,
+                borderColor: balance === amount ? withAlpha(accentPrimary, 0.5) : 'transparent',
                 opacity: pressed ? 0.8 : 1,
               })}
             >
-              <Text style={{ color: textPrimary, fontWeight: '600' }}>
+              <Text style={{
+                color: balance === amount ? accentPrimary : textPrimary,
+                fontWeight: balance === amount ? '700' : '600',
+                fontSize: 14,
+              }}>
                 {formatCurrency(Number(amount))}
               </Text>
             </Pressable>
           ))}
         </View>
+
+        {balanceNumber !== 0 && (
+          <View
+            style={{
+              padding: spacing.s12,
+              borderRadius: radius.lg,
+              backgroundColor: withAlpha(accentPrimary, isDark ? 0.15 : 0.08),
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.s10,
+            }}
+          >
+            <Icon name="info" size={18} color={accentPrimary} />
+            <Text style={{ color: muted, fontSize: 13, flex: 1 }}>
+              This will {balanceNumber >= 0 ? 'add' : 'subtract'} {formatCurrency(Math.abs(balanceNumber))} {balanceNumber >= 0 ? 'to' : 'from'} your net worth
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Additional Options */}
+      <View style={{ gap: spacing.s12 }}>
+        <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>Additional options</Text>
+
         <Input
-          label="Account hint (last 4-6 digits)"
-          value={mask}
-          onChangeText={value => setMask(value.replace(/\D/g, '').slice(0, 6))}
-          keyboardType="number-pad"
-          placeholder="1234"
-        />
-        <Input
-          label="Notes"
+          label="Notes (optional)"
           value={note}
           onChangeText={setNote}
           multiline
-          placeholder="Optional: e.g. When to top up, goals, reminders"
+          placeholder="e.g. When to top up, goals, reminders"
         />
+
         <View
           style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingVertical: spacing.s8,
+            padding: spacing.s16,
+            borderRadius: radius.lg,
+            backgroundColor: cardBg,
+            borderWidth: 1,
+            borderColor: border,
           }}
         >
-          <View style={{ flex: 1, paddingRight: spacing.s12 }}>
-            <Text style={{ color: textPrimary, fontWeight: '600' }}>Include in net worth & runway</Text>
-            <Text style={{ color: muted }}>Turn off if this account shouldn&apos;t affect totals.</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flex: 1, paddingRight: spacing.s12 }}>
+              <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 15 }}>
+                Include in net worth
+              </Text>
+              <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
+                Affects your total net worth and runway calculations
+              </Text>
+            </View>
+            <Switch value={includeInNetWorth} onValueChange={setIncludeInNetWorth} />
           </View>
-          <Switch value={includeInNetWorth} onValueChange={setIncludeInNetWorth} />
         </View>
       </View>
 
-      <View
-        style={{
-          padding: spacing.s16,
-          borderRadius: radius.lg,
-          backgroundColor: withAlpha(textPrimary, isDark ? 0.22 : 0.06),
-          gap: spacing.s8,
-        }}
-      >
-        <Text style={{ color: textPrimary, fontWeight: '700' }}>Preview</Text>
-        <Text style={{ color: muted }}>
-          {name.trim() || 'This account'} {previewImpact} your totals by {formatCurrency(Math.abs(balanceNumber))}.
-        </Text>
-        <Text style={{ color: muted }}>
-          You can edit the balance any time from the account detail screen.
-        </Text>
-      </View>
-
-      <View style={{ gap: spacing.s10 }}>
+      {/* Actions */}
+      <View style={{ gap: spacing.s10, marginTop: spacing.s8 }}>
         <Button title="Save account" onPress={onSave} disabled={!canSave} />
         <Button title="Cancel" variant="secondary" onPress={() => nav.goBack()} />
-        <Text style={{ color: muted, textAlign: 'center', marginTop: spacing.s4 }}>
-          Fingrow keeps everything offline-first. No bank connection is made when you add a manual account.
-        </Text>
       </View>
     </ScreenScroll>
   );

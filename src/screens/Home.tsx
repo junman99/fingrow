@@ -235,7 +235,7 @@ export const Home: React.FC = () => {
     },
     {
       key: 'insights',
-      icon: 'bar-chart-3' as const,
+      icon: 'bar-chart-2' as const,
       label: 'Insights',
       onPress: () => navigateWhenIdle(() => nav.navigate('InsightsRoot')),
       accent: accentPrimary

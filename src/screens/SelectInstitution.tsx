@@ -70,13 +70,31 @@ const SelectInstitution: React.FC = () => {
 
   return (
     <ScreenScroll
-      contentStyle={{ padding: spacing.s16, gap: spacing.s16 }}
+      inTab
+      contentStyle={{ padding: spacing.s16, paddingBottom: spacing.s32, gap: spacing.s16 }}
     >
       {/* Header */}
       <View style={{ gap: spacing.s8 }}>
-        <Text style={{ color: text, fontSize: 24, fontWeight: '800' }}>
-          Select institution
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8 }}>
+          <Pressable
+            onPress={() => nav.goBack()}
+            style={({ pressed }) => ({
+              padding: spacing.s8,
+              marginLeft: -spacing.s8,
+              marginTop: -spacing.s4,
+              borderRadius: radius.md,
+              backgroundColor: pressed ? cardBg : 'transparent',
+            })}
+            hitSlop={8}
+          >
+            <Icon name="chevron-left" size={28} color={text} />
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: text, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
+              Select institution
+            </Text>
+          </View>
+        </View>
         <Text style={{ color: muted, fontSize: 14 }}>
           Choose your bank or financial institution
         </Text>
