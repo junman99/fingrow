@@ -43,7 +43,7 @@ export default function HoldingsSortSheet({ visible, onClose, valueKey, valueDir
   );
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} height={320}>
+    <BottomSheet visible={visible} onClose={onClose} height={380}>
       <View style={{ gap: spacing.s12 }}>
         <Text style={{ color: text, fontWeight: '800', fontSize: 18 }}>Sort holdings</Text>
 

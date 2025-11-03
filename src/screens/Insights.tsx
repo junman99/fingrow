@@ -285,7 +285,7 @@ export const Insights: React.FC = () => {
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
               <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s6 }}>
                 <Text style={{ color: textPrimary, fontSize: 36, fontWeight: '800', letterSpacing: -1 }}>
-                  ${totals.spend.toFixed(0)}
+                  ${totals.spend.toFixed(2)}
                 </Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
                   <Icon
@@ -335,7 +335,7 @@ export const Insights: React.FC = () => {
                 Income
               </Text>
               <Text style={{ color: textPrimary, fontSize: 18, fontWeight: '800' }}>
-                ${totals.income.toFixed(0)}
+                ${totals.income.toFixed(2)}
               </Text>
             </View>
             <View style={{ flex: 1, padding: spacing.s12, borderRadius: radius.lg, backgroundColor: surface1, borderWidth: 1, borderColor: borderSubtle }}>
@@ -347,7 +347,7 @@ export const Insights: React.FC = () => {
                 fontSize: 18,
                 fontWeight: '800'
               }}>
-                {totals.net >= 0 ? '+' : ''}${totals.net.toFixed(0)}
+                {totals.net >= 0 ? '+' : ''}${totals.net.toFixed(2)}
               </Text>
             </View>
             {budgetData && (
@@ -415,7 +415,7 @@ export const Insights: React.FC = () => {
               <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 12 }}>Avg per day</Text>
             </View>
             <Text style={{ color: textPrimary, fontSize: 24, fontWeight: '800' }}>
-              ${avgPerDay.toFixed(0)}
+              ${avgPerDay.toFixed(2)}
             </Text>
             <Text style={{ color: textMuted, fontSize: 12 }}>
               {daysPassed} of {days} days
@@ -470,10 +470,10 @@ export const Insights: React.FC = () => {
                 <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 12 }}>Top category</Text>
               </View>
               <Text style={{ color: textPrimary, fontSize: 24, fontWeight: '800' }}>
-                ${byCategory[0].value.toFixed(0)}
+                ${byCategory[0].value.toFixed(2)}
               </Text>
               <Text style={{ color: textMuted, fontSize: 12 }}>
-                {byCategory[0].name} • {byCategory[0].pct.toFixed(0)}%
+                {byCategory[0].name} • {byCategory[0].pct.toFixed(2)}%
               </Text>
             </View>
           )}
@@ -541,7 +541,7 @@ export const Insights: React.FC = () => {
                       </Text>
                     </View>
                     <View style={{ alignItems: 'flex-end', marginLeft: spacing.s8 }}>
-                      <Text style={{ color: textPrimary, fontWeight: '700' }}>${c.value.toFixed(0)}</Text>
+                      <Text style={{ color: textPrimary, fontWeight: '700' }}>${c.value.toFixed(2)}</Text>
                       <Text style={{ color: textMuted, fontSize: 11 }}>{c.pct.toFixed(1)}%</Text>
                     </View>
                   </View>
@@ -604,7 +604,7 @@ export const Insights: React.FC = () => {
                         {wd.count} tx
                       </Text>
                     </View>
-                    <Text style={{ color: textMuted, fontSize: 14 }}>${wd.total.toFixed(0)}</Text>
+                    <Text style={{ color: textMuted, fontSize: 14 }}>${wd.total.toFixed(2)}</Text>
                   </View>
                   <View style={{ height: 6, borderRadius: radius.sm, backgroundColor: surface2, overflow: 'hidden' }}>
                     <View style={{
@@ -681,7 +681,7 @@ export const Insights: React.FC = () => {
                   </Text>
                 </View>
                 <Text style={{ color: dangerColor, fontWeight: '800', fontSize: 16, marginLeft: spacing.s12 }}>
-                  ${tx.amount.toFixed(0)}
+                  ${tx.amount.toFixed(2)}
                 </Text>
               </View>
             ))}

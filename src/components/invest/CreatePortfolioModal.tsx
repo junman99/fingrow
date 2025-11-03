@@ -87,126 +87,92 @@ export default function CreatePortfolioModal({ visible, onClose, defaultCurrency
 
   return (
     <CenterModal visible={visible} onClose={onClose}>
-      <ScrollView contentContainerStyle={{ padding: spacing.s16, gap: spacing.s16 }}>
-        <View
-          style={{
-            backgroundColor: withAlpha(accentPrimary, 0.12),
-            borderRadius: radius.lg,
-            padding: spacing.s16,
-            borderWidth: 1,
-            borderColor: withAlpha(accentPrimary, 0.3),
-            gap: spacing.s4,
-          }}
-        >
-          <Text style={{ color: text, fontWeight: '800', fontSize: 20 }}>New portfolio</Text>
-          <Text style={{ color: withAlpha(text, 0.74) }}>
-            Name it, pick a base currency, and you’ll be ready to add positions.
+      <ScrollView contentContainerStyle={{ padding: spacing.s20, gap: spacing.s20 }}>
+        <View style={{ gap: spacing.s8 }}>
+          <Text style={{ color: text, fontWeight: '800', fontSize: 28, letterSpacing: -0.5 }}>New Portfolio</Text>
+          <Text style={{ color: muted, fontSize: 15 }}>
+            Create a new portfolio to track your investments
           </Text>
         </View>
 
-        <View style={{ gap: spacing.s12 }}>
-          <View style={sectionStyle}>
-            <Text style={{ color: muted, fontWeight: '700' }}>Portfolio name</Text>
+        <View style={{ gap: spacing.s16 }}>
+          <View style={{ gap: spacing.s8 }}>
+            <Text style={{ color: text, fontWeight: '700', fontSize: 14 }}>Portfolio name</Text>
             <TextInput
               placeholder="e.g. Long-term growth"
-              placeholderTextColor={withAlpha(muted, 0.7)}
+              placeholderTextColor={withAlpha(muted, 0.6)}
               value={name}
               onChangeText={setName}
               style={{
                 color: text,
                 borderWidth: 1,
-                borderColor: withAlpha(border, 0.7),
-                borderRadius: radius.md,
-                paddingHorizontal: spacing.s12,
-                paddingVertical: spacing.s10,
+                borderColor: border,
+                borderRadius: radius.lg,
+                paddingHorizontal: spacing.s16,
+                paddingVertical: spacing.s14,
                 fontSize: 16,
+                backgroundColor: surface1,
               }}
               accessibilityLabel="Portfolio name"
+              autoFocus
             />
           </View>
 
-          <View style={sectionStyle}>
+          <View style={{ gap: spacing.s8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ color: muted, fontWeight: '700' }}>Base currency</Text>
+              <Text style={{ color: text, fontWeight: '700', fontSize: 14 }}>Base currency</Text>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Open currency picker"
                 onPress={() => setShowCurrencySheet(true)}
                 style={({ pressed }) => ({
-                  paddingHorizontal: spacing.s10,
+                  paddingHorizontal: spacing.s12,
                   paddingVertical: spacing.s6,
                   borderRadius: radius.pill,
-                  backgroundColor: withAlpha(accentPrimary, pressed ? 0.28 : 0.18),
+                  backgroundColor: pressed ? withAlpha(accentPrimary, 0.2) : 'transparent',
                 })}
               >
-                <Text style={{ color: onPrimary, fontWeight: '700', fontSize: 12 }}>Browse all</Text>
+                <Text style={{ color: accentPrimary, fontWeight: '700', fontSize: 13 }}>View all</Text>
               </Pressable>
             </View>
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Open currency picker"
-              onPress={() => setShowCurrencySheet(true)}
-              style={({ pressed }) => ({
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: spacing.s10,
-                paddingVertical: spacing.s6,
-                paddingHorizontal: spacing.s10,
-                borderRadius: radius.md,
-                backgroundColor: withAlpha(surface1, pressed ? 0.9 : 0.7),
-              })}
-            >
-              <View style={{
-                width: 44,
-                height: 44,
-                borderRadius: 22,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: withAlpha(accentPrimary, 0.22),
-              }}>
-                <Text style={{ color: text, fontWeight: '800', fontSize: 18 }}>
-                  {selectedCurrency?.symbol || selectedCurrency?.code.slice(0, 1) || '?'}
-                </Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>
-                  {selectedCurrency ? selectedCurrency.code : 'Select currency'}
-                </Text>
-                <Text style={{ color: withAlpha(muted, 0.85), fontSize: 12 }}>
-                  {selectedCurrency ? selectedCurrency.name : 'Quick picks below or browse all'}
-                </Text>
-              </View>
-              <Icon name="chevron-right" size={18} colorToken="icon.default" />
-            </Pressable>
-
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s6 }}>
-              {recommendedCurrencies.slice(0, 6).map((meta) => {
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
+              {recommendedCurrencies.map((meta) => {
                 const active = selectedCurrency?.code === meta.code;
                 return (
                   <Pressable
                     key={meta.code}
                     accessibilityRole="button"
-                    accessibilityLabel={`Quick select ${meta.name}`}
+                    accessibilityLabel={`Select ${meta.name}`}
                     onPress={() => handleQuickSelect(meta.code)}
                     style={({ pressed }) => ({
-                      paddingVertical: spacing.s6,
-                      paddingHorizontal: spacing.s10,
-                      borderRadius: radius.pill,
-                      backgroundColor: active ? withAlpha(accentSecondary, 0.28) : withAlpha(accentPrimary, pressed ? 0.22 : 0.12),
+                      flex: 1,
+                      minWidth: '30%',
+                      paddingVertical: spacing.s12,
+                      paddingHorizontal: spacing.s12,
+                      borderRadius: radius.lg,
+                      backgroundColor: active ? accentPrimary : surface1,
                       borderWidth: 1,
-                      borderColor: active ? withAlpha(accentSecondary, 0.7) : withAlpha(accentPrimary, 0.5),
+                      borderColor: active ? accentPrimary : border,
+                      opacity: pressed ? 0.8 : 1,
+                      alignItems: 'center',
+                      gap: spacing.s4,
                     })}
                   >
-                    <Text style={{ color: active ? onPrimary : text, fontSize: 12, fontWeight: '700' }}>{meta.code}</Text>
+                    <Text style={{ color: active ? onPrimary : text, fontSize: 18, fontWeight: '800' }}>
+                      {meta.symbol}
+                    </Text>
+                    <Text style={{ color: active ? onPrimary : text, fontSize: 13, fontWeight: '700' }}>
+                      {meta.code}
+                    </Text>
                   </Pressable>
                 );
               })}
             </View>
           </View>
 
-          <View style={sectionStyle}>
-            <Text style={{ color: muted, fontWeight: '700' }}>Portfolio type</Text>
+          <View style={{ gap: spacing.s8 }}>
+            <Text style={{ color: text, fontWeight: '700', fontSize: 14 }}>Portfolio type</Text>
             <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
               {(['Live', 'Paper'] as const).map((k) => {
                 const active = type === k;
@@ -218,32 +184,28 @@ export default function CreatePortfolioModal({ visible, onClose, defaultCurrency
                     accessibilityLabel={`Select ${k} portfolio`}
                     style={({ pressed }) => ({
                       flex: 1,
-                      paddingVertical: spacing.s8,
-                      borderRadius: radius.pill,
+                      paddingVertical: spacing.s14,
+                      borderRadius: radius.lg,
                       alignItems: 'center',
-                      backgroundColor: active ? accentPrimary : withAlpha(surface1, pressed ? 0.6 : 0.4),
+                      backgroundColor: active ? accentPrimary : surface1,
                       borderWidth: 1,
-                      borderColor: active ? accentPrimary : withAlpha(border, 0.6),
+                      borderColor: active ? accentPrimary : border,
+                      opacity: pressed ? 0.8 : 1,
                     })}
                   >
-                    <Text style={{ color: active ? onPrimary : text, fontWeight: '700' }}>{k}</Text>
+                    <Text style={{ color: active ? onPrimary : text, fontWeight: '700', fontSize: 15 }}>{k}</Text>
                   </Pressable>
                 );
               })}
             </View>
-            <Text style={{ color: withAlpha(muted, 0.85), fontSize: 12 }}>
-              Live tracks real holdings; Paper is for ideas or experiments.
+            <Text style={{ color: muted, fontSize: 13 }}>
+              Live tracks real holdings, Paper for experiments
             </Text>
           </View>
 
-          <View style={sectionStyle}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ color: muted, fontWeight: '700' }}>Benchmark <Text style={{ color: withAlpha(muted, 0.6) }}>(optional)</Text></Text>
-              <Text style={{ color: withAlpha(muted, 0.65), fontSize: 12 }}>
-                {bench === 'NONE' ? 'Off' : bench}
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s6 }}>
+          <View style={{ gap: spacing.s8 }}>
+            <Text style={{ color: text, fontWeight: '700', fontSize: 14 }}>Benchmark <Text style={{ color: muted, fontWeight: '400' }}>(optional)</Text></Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
               {['SPY', 'QQQ', 'STI', 'NONE'].map((b) => {
                 const active = bench === b;
                 return (
@@ -253,36 +215,59 @@ export default function CreatePortfolioModal({ visible, onClose, defaultCurrency
                     accessibilityRole="button"
                     accessibilityLabel={`Select benchmark ${b}`}
                     style={({ pressed }) => ({
-                      paddingVertical: spacing.s6,
-                      paddingHorizontal: spacing.s10,
+                      paddingVertical: spacing.s10,
+                      paddingHorizontal: spacing.s16,
                       borderRadius: radius.pill,
                       borderWidth: 1,
-                      borderColor: active ? withAlpha(accentSecondary, 0.7) : withAlpha(border, pressed ? 0.9 : 0.6),
-                      backgroundColor: active ? withAlpha(accentSecondary, 0.22) : withAlpha(surface1, pressed ? 0.5 : 0.2),
+                      borderColor: active ? accentPrimary : border,
+                      backgroundColor: active ? accentPrimary : surface1,
+                      opacity: pressed ? 0.8 : 1,
                     })}
                   >
-                    <Text style={{ color: text, fontWeight: '700' }}>{b === 'NONE' ? 'No benchmark' : b}</Text>
+                    <Text style={{ color: active ? onPrimary : text, fontWeight: '700', fontSize: 14 }}>
+                      {b === 'NONE' ? 'None' : b}
+                    </Text>
                   </Pressable>
                 );
               })}
             </View>
-            <Text style={{ color: withAlpha(muted, 0.85), fontSize: 12 }}>
-              Compare against an index, or leave it off for a clean slate.
-            </Text>
           </View>
         </View>
 
-        <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-          <View style={{ flex: 1 }}>
-            <Button variant="secondary" onPress={onClose} accessibilityLabel="Cancel create portfolio">
-              Cancel
-            </Button>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Button variant="primary" disabled={!canCreate} onPress={handleConfirm} accessibilityLabel="Create portfolio">
-              Create
-            </Button>
-          </View>
+        <View style={{ flexDirection: 'row', gap: spacing.s12, marginTop: spacing.s8 }}>
+          <Pressable
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel create portfolio"
+            style={({ pressed }) => ({
+              flex: 1,
+              paddingVertical: spacing.s16,
+              borderRadius: radius.lg,
+              alignItems: 'center',
+              backgroundColor: surface1,
+              borderWidth: 1,
+              borderColor: border,
+              opacity: pressed ? 0.8 : 1,
+            })}
+          >
+            <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>Cancel</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleConfirm}
+            disabled={!canCreate}
+            accessibilityRole="button"
+            accessibilityLabel="Create portfolio"
+            style={({ pressed }) => ({
+              flex: 1,
+              paddingVertical: spacing.s16,
+              borderRadius: radius.lg,
+              alignItems: 'center',
+              backgroundColor: canCreate ? accentPrimary : withAlpha(accentPrimary, 0.3),
+              opacity: pressed && canCreate ? 0.9 : 1,
+            })}
+          >
+            <Text style={{ color: onPrimary, fontWeight: '700', fontSize: 16 }}>Create Portfolio</Text>
+          </Pressable>
         </View>
       </ScrollView>
       <CurrencyPickerSheet

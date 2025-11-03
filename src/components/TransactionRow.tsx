@@ -81,7 +81,7 @@ export const TransactionRow: React.FC<{
               </Text>
             </View>
             <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>
-              {`${tx.type === 'income' ? '+' : '-'}$${Math.abs(Number(tx.amount) || 0).toFixed(0)}`}
+              {`${tx.type === 'income' ? '+' : '-'}$${Math.abs(Number(tx.amount) || 0).toFixed(2)}`}
             </Text>
           </Pressable>
         </Animated.View>

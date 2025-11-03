@@ -185,10 +185,17 @@ export const Settings: React.FC = () => {
 
   const [currencySheet, setCurrencySheet] = useState(false);
   const [currencyQuery, setCurrencyQuery] = useState('');
+  const [investCurrencySheet, setInvestCurrencySheet] = useState(false);
+  const [investCurrencyQuery, setInvestCurrencyQuery] = useState('');
 
   const selectedCurrency = useMemo(
     () => findCurrency(profile.currency || 'USD'),
     [profile.currency],
+  );
+
+  const selectedInvestCurrency = useMemo(
+    () => findCurrency(profile.investCurrency || profile.currency || 'USD'),
+    [profile.investCurrency, profile.currency],
   );
 
   const filteredCurrencies = useMemo(() => {
@@ -201,6 +208,17 @@ export const Settings: React.FC = () => {
         (c.regions || []).some(r => r.toLowerCase().includes(q)),
     );
   }, [currencyQuery]);
+
+  const filteredInvestCurrencies = useMemo(() => {
+    const q = investCurrencyQuery.trim().toLowerCase();
+    if (!q.length) return currencies;
+    return currencies.filter(
+      c =>
+        c.code.toLowerCase().includes(q) ||
+        c.name.toLowerCase().includes(q) ||
+        (c.regions || []).some(r => r.toLowerCase().includes(q)),
+    );
+  }, [investCurrencyQuery]);
 
   const handleThemeChange = async (value: ThemeMode) => {
     setMode(value);
@@ -228,6 +246,20 @@ export const Settings: React.FC = () => {
     update({ currency: code.toUpperCase() });
     setCurrencySheet(false);
     setCurrencyQuery('');
+    try {
+      await Promise.all([
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
+        refreshFx(),
+      ]);
+    } catch {
+      try { await refreshFx(); } catch {}
+    }
+  };
+
+  const handleInvestCurrencyChange = async (code: string) => {
+    update({ investCurrency: code.toUpperCase() });
+    setInvestCurrencySheet(false);
+    setInvestCurrencyQuery('');
     try {
       await Promise.all([
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
@@ -429,7 +461,7 @@ export const Settings: React.FC = () => {
             </AnimatedPressable>
 
             <AnimatedPressable
-              onPress={() => nav.navigate('Budgets')}
+              onPress={() => nav.navigate('Home' as never, { screen: 'BudgetsRoot' } as never)}
               style={{ flex: 1 }}
             >
               <View
@@ -541,6 +573,127 @@ export const Settings: React.FC = () => {
           </View>
         </SettingsSection>
 
+        {/* AI Assistant Tier Selection */}
+        <SettingsSection title="AI Assistant" description="Testing: Switch between Free and Premium tiers" icon="bot">
+          <View style={{ gap: spacing.s8 }}>
+            {[
+              {
+                value: 'free' as const,
+                label: 'Free Tier',
+                icon: 'zap',
+                features: ['10 messages/day', 'Basic insights', 'Transaction logging', '2-message memory']
+              },
+              {
+                value: 'premium' as const,
+                label: 'Premium Tier',
+                icon: 'crown',
+                features: ['50 messages/day', 'Advanced analysis', 'Trend predictions', '5-message memory']
+              }
+            ].map(option => {
+              const selected = profile.aiTier === option.value;
+              return (
+                <AnimatedPressable
+                  key={option.value}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    updateProfile({ aiTier: option.value });
+                  }}
+                >
+                  <View
+                    style={{
+                      borderRadius: radius.lg,
+                      borderWidth: 2,
+                      borderColor: selected ? (get('accent.primary') as string) : (get('border.subtle') as string),
+                      padding: spacing.s16,
+                      backgroundColor: selected
+                        ? withAlpha(get('accent.primary') as string, 0.08)
+                        : (get('surface.level1') as string),
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12 }}>
+                      <View
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: radius.md,
+                          backgroundColor: selected
+                            ? (get('accent.primary') as string)
+                            : (get('surface.level2') as string),
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Icon
+                          name={option.icon as any}
+                          size={22}
+                          color={selected ? (get('text.onPrimary') as string) : (get('text.primary') as string)}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Text
+                            style={{
+                              color: get('text.primary') as string,
+                              fontWeight: '700',
+                              fontSize: 16,
+                            }}
+                          >
+                            {option.label}
+                          </Text>
+                          {selected && (
+                            <View
+                              style={{
+                                width: 24,
+                                height: 24,
+                                borderRadius: radius.pill,
+                                backgroundColor: get('accent.primary') as string,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              <Icon name="check" size={14} color={get('text.onPrimary') as string} />
+                            </View>
+                          )}
+                        </View>
+                        <View style={{ marginTop: spacing.s8, gap: spacing.s4 }}>
+                          {option.features.map((feature, idx) => (
+                            <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6 }}>
+                              <View style={{
+                                width: 4,
+                                height: 4,
+                                borderRadius: 2,
+                                backgroundColor: get('text.muted') as string
+                              }} />
+                              <Text style={{ color: get('text.muted') as string, fontSize: 12 }}>
+                                {feature}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                        {option.value === 'free' && (
+                          <Pressable
+                            onPress={() => nav.navigate('AIPrivacyInfo')}
+                            style={{ marginTop: spacing.s8 }}
+                          >
+                            <Text style={{
+                              color: get('accent.primary') as string,
+                              fontSize: 12,
+                              fontWeight: '600',
+                              textDecorationLine: 'underline'
+                            }}>
+                              See how your data is handled →
+                            </Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                </AnimatedPressable>
+              );
+            })}
+          </View>
+        </SettingsSection>
+
         {/* Language Selection */}
         <SettingsSection title={t('settings.language.title')} description={t('settings.language.description')} icon="languages">
           <View style={{ gap: spacing.s8 }}>
@@ -622,9 +775,16 @@ export const Settings: React.FC = () => {
         <SettingsSection title="Money settings" description="Currency and budget cycles" icon="dollar-sign">
           <SettingRow
             title="Primary currency"
-            subtitle={`${selectedCurrency?.name || 'USD'} • ${selectedCurrency?.symbol || '$'}`}
+            subtitle={`${selectedCurrency?.name || 'USD'} • ${selectedCurrency?.symbol || '$'} • Used for spending & budgets`}
             onPress={() => setCurrencySheet(true)}
             icon="banknote"
+          />
+
+          <SettingRow
+            title="Investment currency"
+            subtitle={`${selectedInvestCurrency?.name || 'USD'} • ${selectedInvestCurrency?.symbol || '$'} • Used for portfolio values`}
+            onPress={() => setInvestCurrencySheet(true)}
+            icon="trending-up"
           />
 
           <View
@@ -1066,7 +1226,7 @@ export const Settings: React.FC = () => {
         </Text>
       </ScreenScroll>
 
-      {/* Currency Picker Bottom Sheet */}
+      {/* Primary Currency Picker Bottom Sheet */}
       <BottomSheet
         visible={currencySheet}
         onClose={() => setCurrencySheet(false)}
@@ -1075,10 +1235,10 @@ export const Settings: React.FC = () => {
         <View style={{ gap: spacing.s16, flex: 1 }}>
           <View>
             <Text style={{ fontSize: 24, fontWeight: '800', color: get('text.primary') as string, letterSpacing: -0.5 }}>
-              Choose currency
+              Choose primary currency
             </Text>
             <Text style={{ color: get('text.muted') as string, marginTop: spacing.s4 }}>
-              Used for conversions and reports
+              Used for spending, budgets, and reports
             </Text>
           </View>
 
@@ -1119,6 +1279,119 @@ export const Settings: React.FC = () => {
                 <AnimatedPressable
                   key={cur.code}
                   onPress={() => handleCurrencyChange(cur.code)}
+                >
+                  <View
+                    style={{
+                      paddingVertical: spacing.s12,
+                      paddingHorizontal: spacing.s16,
+                      borderRadius: radius.lg,
+                      backgroundColor: active
+                        ? withAlpha(get('accent.primary') as string, 0.12)
+                        : (get('surface.level1') as string),
+                      borderWidth: 1,
+                      borderColor: active
+                        ? (get('accent.primary') as string)
+                        : (get('border.subtle') as string),
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: spacing.s12,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: radius.md,
+                        backgroundColor: get('surface.level2') as string,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text style={{ fontSize: 18, fontWeight: '700' }}>{cur.symbol}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 15 }}>
+                        {cur.code} · {cur.name}
+                      </Text>
+                      <Text style={{ color: get('text.muted') as string, marginTop: spacing.s2, fontSize: 13 }}>
+                        {cur.regions?.join(', ') || 'International'}
+                      </Text>
+                    </View>
+                    {active && (
+                      <View
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: radius.pill,
+                          backgroundColor: get('accent.primary') as string,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Icon name="check" size={14} color={get('text.onPrimary') as string} />
+                      </View>
+                    )}
+                  </View>
+                </AnimatedPressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </BottomSheet>
+
+      {/* Investment Currency Picker Bottom Sheet */}
+      <BottomSheet
+        visible={investCurrencySheet}
+        onClose={() => setInvestCurrencySheet(false)}
+        fullHeight
+      >
+        <View style={{ gap: spacing.s16, flex: 1 }}>
+          <View>
+            <Text style={{ fontSize: 24, fontWeight: '800', color: get('text.primary') as string, letterSpacing: -0.5 }}>
+              Choose investment currency
+            </Text>
+            <Text style={{ color: get('text.muted') as string, marginTop: spacing.s4 }}>
+              Used for portfolio values and holdings
+            </Text>
+          </View>
+
+          <View
+            style={{
+              borderRadius: radius.lg,
+              borderWidth: 1,
+              borderColor: get('border.subtle') as string,
+              paddingHorizontal: spacing.s12,
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: get('surface.level1') as string,
+            }}
+          >
+            <Icon name="search" size={18} color={get('text.muted') as string} />
+            <TextInput
+              value={investCurrencyQuery}
+              onChangeText={setInvestCurrencyQuery}
+              placeholder="Search currencies..."
+              placeholderTextColor={get('text.muted') as string}
+              style={{
+                flex: 1,
+                height: 48,
+                color: get('text.primary') as string,
+                paddingHorizontal: spacing.s12,
+              }}
+            />
+          </View>
+
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: spacing.s16, gap: spacing.s6 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {filteredInvestCurrencies.map(cur => {
+              const active = (profile.investCurrency || profile.currency)?.toUpperCase() === cur.code;
+              return (
+                <AnimatedPressable
+                  key={cur.code}
+                  onPress={() => handleInvestCurrencyChange(cur.code)}
                 >
                   <View
                     style={{

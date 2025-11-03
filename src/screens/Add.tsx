@@ -741,27 +741,43 @@ export default function Add() {
   return (
     <Screen style={{ paddingBottom: 0, backgroundColor: backgroundDefault }} inTab>
       <View style={{ flex: 1 }}>
-        <View style={{ flex: 1, paddingTop: spacing.s10, paddingBottom: keypadReserve + spacing.s12 }}>
+        <View style={{ flex: 1, paddingTop: spacing.s12, paddingBottom: keypadReserve + spacing.s12 }}>
           <View style={{ marginBottom: spacing.s8 }}>
-            <View style={{ marginBottom: spacing.s12, paddingHorizontal: containerPad }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ marginBottom: spacing.s16, paddingHorizontal: containerPad }}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12 }}>
+                <Pressable
+                  onPress={() => nav.goBack()}
+                  style={({ pressed }) => ({
+                    padding: spacing.s8,
+                    marginLeft: -spacing.s8,
+                    marginTop: -spacing.s4,
+                    borderRadius: radius.md,
+                    backgroundColor: pressed ? surface1 : 'transparent',
+                  })}
+                  hitSlop={8}
+                >
+                  <Icon name="x" size={28} color={textPrimary} />
+                </Pressable>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 20, letterSpacing: -0.5 }}>
+                  <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 28, letterSpacing: -0.5, marginTop: spacing.s2 }}>
                     Choose category
                   </Text>
-                  <Text style={{ color: textMuted, marginTop: spacing.s4, fontSize: 13 }}>
-                    {deleteMode ? 'Tap ✕ to delete custom categories' : 'Tag your transaction for better insights'}
-                  </Text>
+                  {deleteMode && (
+                    <Text style={{ color: textMuted, marginTop: spacing.s4, fontSize: 13 }}>
+                      Tap ✕ to delete custom categories
+                    </Text>
+                  )}
                 </View>
                 {deleteMode && (
                   <Pressable
                     onPress={() => setDeleteMode(false)}
                     style={({ pressed }) => ({
                       paddingHorizontal: spacing.s12,
-                      paddingVertical: spacing.s6,
+                      paddingVertical: spacing.s8,
                       borderRadius: radius.pill,
                       backgroundColor: accentPrimary,
                       opacity: pressed ? 0.85 : 1,
+                      marginTop: spacing.s2,
                     })}
                   >
                     <Text style={{ color: textOnPrimary, fontWeight: '700', fontSize: 14 }}>Done</Text>

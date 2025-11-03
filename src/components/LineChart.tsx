@@ -6,6 +6,7 @@ import { useThemeTokens } from '../theme/ThemeProvider';
 import { ScrollContext } from './ScrollContext';
 
 type Point = { t: number; v: number };
+type CashEvent = { date: string; amount: number };
 
 type Props = {
   data: Point[];
@@ -19,6 +20,7 @@ type Props = {
   currency?: string;     // for label symbol (narrow)
   enableTooltip?: boolean;
   showCurrentLabel?: boolean; // show a small tag with latest value
+  cashEvents?: CashEvent[]; // cash deposit/withdrawal markers
 };
 
 // Compact "1k / 2m" style without decimals and with a narrow currency symbol
@@ -105,6 +107,7 @@ export default function LineChart({
   currency = 'USD',
   enableTooltip = true,
   showCurrentLabel = true,
+  cashEvents = [],
 }: Props) {
   const { get } = useThemeTokens();
   const { setScrollEnabled } = React.useContext(ScrollContext);
@@ -240,6 +243,9 @@ export default function LineChart({
   const hasHover = enableTooltip && hoverIdx !== null && visibleData[hoverIdx];
   const touchXRef = React.useRef(0);
 
+  // Cash event marker interaction
+  const [selectedCashEvent, setSelectedCashEvent] = React.useState<number | null>(null);
+
   const handleTouch = React.useCallback((xPix: number) => {
     if (!enableTooltip || !visibleData.length) return;
     const svgX = (xPix / Math.max(1, w)) * w;
@@ -253,6 +259,8 @@ export default function LineChart({
     let idx = lo;
     if (idx > 0 && (idx >= times.length || Math.abs(times[idx-1] - t) < Math.abs(times[idx] - t))) idx = idx - 1;
     setHoverIdx(idx);
+    // Close cash event tooltip when touching chart
+    setSelectedCashEvent(null);
   }, [enableTooltip, visibleData, w, plotLeft, plotRight, tmin, plotWidth, trange, times]);
 
   const hoverX = hasHover ? xFor(visibleData[hoverIdx!].t) : 0;
@@ -485,13 +493,93 @@ export default function LineChart({
             </G>
           ) : null}
 
-          {/* current value tag (always on) */}
-          {showCurrentLabel && visibleData.length ? (
-            <G>
-              <Rect x={curX} y={curY} width={curBoxW} height={22} rx={8} fill={tipBg} />
-              <SvgText x={curX + 8} y={curY + 15} fill={tipText} fontSize="11">{curValue}</SvgText>
-            </G>
-          ) : null}
+          {/* Cash event markers */}
+          {cashEvents.map((event, idx) => {
+            const eventTime = new Date(event.date).getTime();
+            // Only show markers within visible time range
+            if (eventTime < tmin || eventTime > tmax) return null;
+
+            const eventX = xFor(eventTime);
+            const eventY = plotTop + 20; // Position near top of chart
+            const isDeposit = event.amount > 0;
+            const markerColor = isDeposit ? (get('semantic.success') as string) : (get('semantic.danger') as string);
+            const isSelected = selectedCashEvent === idx;
+            const markerSize = isSelected ? 10 : 7;
+
+            // Cash event tooltip
+            const cashLabel = `${isDeposit ? '+' : ''}${formatExact(event.amount, currency)}`;
+            const cashDate = new Date(event.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            const cashBoxW = Math.max(100, cashLabel.length * 7 + 16);
+            const cashBoxH = 36;
+
+            // Center tooltip above marker
+            let cashBoxX = eventX - cashBoxW / 2;
+            let cashBoxY = eventY - cashBoxH - 12;
+
+            // Keep tooltip within horizontal bounds
+            if (cashBoxX < plotLeft + 4) cashBoxX = plotLeft + 4;
+            if (cashBoxX + cashBoxW > plotRight - 4) cashBoxX = plotRight - cashBoxW - 4;
+
+            // Keep tooltip within vertical bounds (if too close to top, show below marker instead)
+            if (cashBoxY < plotTop + 4) {
+              cashBoxY = eventY + markerSize + 12;
+            }
+
+            return (
+              <G key={`cash-${idx}`}>
+                {/* Vertical dashed line */}
+                <Line
+                  x1={eventX}
+                  x2={eventX}
+                  y1={eventY + markerSize + 2}
+                  y2={plotBottom}
+                  stroke={markerColor}
+                  strokeWidth={1}
+                  strokeDasharray="3 3"
+                  opacity={0.5}
+                />
+
+                {/* Marker icon - dollar sign in circle */}
+                <Circle
+                  cx={eventX}
+                  cy={eventY}
+                  r={markerSize}
+                  fill={markerColor}
+                  onPress={() => setSelectedCashEvent(isSelected ? null : idx)}
+                />
+                <SvgText
+                  x={eventX}
+                  y={eventY + 4}
+                  fill="#FFFFFF"
+                  fontSize="9"
+                  fontWeight="700"
+                  textAnchor="middle"
+                >
+                  $
+                </SvgText>
+
+                {/* Tooltip when selected */}
+                {isSelected ? (
+                  <G>
+                    <Rect
+                      x={cashBoxX}
+                      y={cashBoxY}
+                      width={cashBoxW}
+                      height={cashBoxH}
+                      rx={8}
+                      fill={tipBg}
+                    />
+                    <SvgText x={cashBoxX + 8} y={cashBoxY + 17} fill={markerColor} fontSize="12" fontWeight="700">
+                      {cashLabel}
+                    </SvgText>
+                    <SvgText x={cashBoxX + 8} y={cashBoxY + 30} fill={label} fontSize="10">
+                      {cashDate}
+                    </SvgText>
+                  </G>
+                ) : null}
+              </G>
+            );
+          })}
         </G>
       </Svg>
     </View>

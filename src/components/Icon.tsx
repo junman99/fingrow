@@ -114,7 +114,8 @@ export type IconName =
   | 'user'
   | 'help-circle'
   | 'log-out'
-  | 'database';
+  | 'database'
+  | 'cpu';
 
 type Props = {
   name: IconName;
@@ -209,6 +210,7 @@ const featherMap: Record<Exclude<IconName, 'arrow-bold-left' | 'arrow-bold-right
   'help-circle': 'help-circle',
   'log-out': 'log-out',
   'database': 'database',
+  'cpu': 'cpu',
 };
 
 const Icon: React.FC<Props> = ({ name, size = 24, colorToken = 'icon.default', color: colorProp }) => {

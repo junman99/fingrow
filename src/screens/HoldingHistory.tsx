@@ -24,7 +24,23 @@ export default function HoldingHistory() {
   const { portfolios = {}, holdings = {} } = store;
   const p = portfolioId ? portfolios[portfolioId] : null;
   const holding = portfolioId ? (p?.holdings?.[symbol]) : (holdings?.[symbol]);
-  const cur = (p?.baseCurrency || 'USD').toUpperCase();
+
+  // Get ticker's NATIVE currency (not portfolio base currency!)
+  const cur = React.useMemo(() => {
+    // Priority: holding metadata, then infer from symbol
+    if (holding?.currency) return holding.currency.toUpperCase();
+
+    const s = symbol.toUpperCase();
+    if (s.includes('-USD') || s.includes('USD')) return 'USD';
+    if (s.endsWith('.L')) return 'GBP';
+    if (s.endsWith('.T')) return 'JPY';
+    if (s.endsWith('.TO')) return 'CAD';
+    if (s.endsWith('.AX')) return 'AUD';
+    if (s.endsWith('.HK')) return 'HKD';
+    if (s.endsWith('.PA') || s.endsWith('.DE')) return 'EUR';
+    if (s.endsWith('.SW')) return 'CHF';
+    return 'USD'; // Default for US stocks
+  }, [symbol, holding?.currency]);
 
   const lotsRaw = (holding?.lots ?? []) as any[];
   const lots = React.useMemo(() => {
@@ -95,22 +111,31 @@ export default function HoldingHistory() {
             </View>
             <View style={{ flex: 1, backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s12 }}>
               <Text style={{ color: muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.s4 }}>Avg Cost</Text>
-              <Text style={{ color: text, fontSize: 20, fontWeight: '800' }}>{formatCurrency(pnl.avgCost, cur)}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                <Text style={{ color: text, fontSize: 20, fontWeight: '800' }}>{pnl.avgCost.toFixed(2)}</Text>
+                <Text style={{ color: muted, fontSize: 12, marginLeft: 3, fontWeight: '600' }}>{cur}</Text>
+              </View>
             </View>
           </View>
 
           <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
             <View style={{ flex: 1, backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s12 }}>
               <Text style={{ color: muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.s4 }}>Realized</Text>
-              <Text style={{ color: (pnl.realized >= 0 ? get('semantic.success') : get('semantic.danger')) as string, fontSize: 18, fontWeight: '800' }}>
-                {formatCurrency(pnl.realized, cur)}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                <Text style={{ color: (pnl.realized >= 0 ? get('semantic.success') : get('semantic.danger')) as string, fontSize: 18, fontWeight: '800' }}>
+                  {pnl.realized.toFixed(2)}
+                </Text>
+                <Text style={{ color: muted, fontSize: 12, marginLeft: 3, fontWeight: '600' }}>{cur}</Text>
+              </View>
             </View>
             <View style={{ flex: 1, backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s12 }}>
               <Text style={{ color: muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.s4 }}>Unrealized</Text>
-              <Text style={{ color: (pnl.unrealized >= 0 ? get('semantic.success') : get('semantic.danger')) as string, fontSize: 18, fontWeight: '800' }}>
-                {formatCurrency(pnl.unrealized, cur)}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                <Text style={{ color: (pnl.unrealized >= 0 ? get('semantic.success') : get('semantic.danger')) as string, fontSize: 18, fontWeight: '800' }}>
+                  {pnl.unrealized.toFixed(2)}
+                </Text>
+                <Text style={{ color: muted, fontSize: 12, marginLeft: 3, fontWeight: '600' }}>{cur}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -213,8 +238,8 @@ export default function HoldingHistory() {
                 <View style={{ backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, overflow: 'hidden' }}>
                   {group.items.map((l: any, i: number) => (
                     <View key={l.id || i}>
-                      <TransactionRow lot={l} currency={cur} onEdit={onEditLot} onDelete={onDeleteLot} />
-                      {i < group.items.length - 1 ? <View style={{ height: 1, backgroundColor: get('border.subtle') as string, marginHorizontal: spacing.s12 }} /> : null}
+                      <TransactionRow lot={l} currency={cur} symbol={symbol} onEdit={onEditLot} onDelete={onDeleteLot} />
+                      {i < group.items.length - 1 ? <View style={{ height: 1, backgroundColor: get('border.subtle') as string, marginHorizontal: spacing.s16 }} /> : null}
                     </View>
                   ))}
                 </View>

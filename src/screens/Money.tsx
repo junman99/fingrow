@@ -14,7 +14,6 @@ import { StackedAreaChart } from '../components/StackedAreaChart';
 import { CompoundBarChart } from '../components/CompoundBarChart';
 import { BarLineComboChart } from '../components/BarLineComboChart';
 import { SegmentedControl } from '../components/SegmentedControl';
-import { WealthJourneySheet } from '../components/WealthJourneySheet';
 import { useAccountsStore } from '../store/accounts';
 import { useInvestStore } from '../store/invest';
 import { formatCurrency } from '../lib/format';
@@ -25,6 +24,8 @@ import { useDebtsStore } from '../store/debts';
 import { useTxStore } from '../store/transactions';
 import { useIncomeSplittingStore } from '../store/incomeSplitting';
 import { calculateHistoricalNetWorth, aggregateNetWorthData } from '../lib/netWorthHistory';
+import { convertCurrency } from '../lib/fx';
+import { useProfileStore } from '../store/profile';
 
 function withAlpha(color: string, alpha: number) {
   if (!color) return color;
@@ -300,7 +301,6 @@ const Money: React.FC = () => {
   const [showAccountsSheet, setShowAccountsSheet] = useState(false);
   const [showPortfolioSheet, setShowPortfolioSheet] = useState(false);
   const [showDebtsSheet, setShowDebtsSheet] = useState(false);
-  const [showWealthJourney, setShowWealthJourney] = useState(false);
   const { accounts, hydrate: hydrateAcc } = useAccountsStore();
   const { holdings, quotes, hydrate: hydrateInvest } = useInvestStore();
   const { items: recurring, hydrate: hydrateRecur } = useRecurringStore();
@@ -308,6 +308,7 @@ const Money: React.FC = () => {
   const { transactions, hydrate: hydrateTx } = useTxStore();
   const { items: debts, hydrate: hydrateDebts } = useDebtsStore();
   const { config: paycheckConfig, splitHistory, hydrate: hydratePaycheck } = useIncomeSplittingStore();
+  const { profile } = useProfileStore();
   const sheetTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const sheetRafs = useRef<number[]>([]);
 
@@ -402,45 +403,103 @@ const Money: React.FC = () => {
   const totalCreditCardDebt = creditCards.reduce((s, a) => s + Math.abs(a.balance || 0), 0);
 
   const portfolioCalc = useMemo(() => {
-    const symbols = Object.keys(holdings || {});
-    let changeUSD = 0;
+    const { fxRates, portfolios } = useInvestStore.getState();
+    const investCurrency = (profile.investCurrency || profile.currency || 'USD').toUpperCase();
+    const primaryCurrency = (profile.currency || 'USD').toUpperCase();
+
+    // Build aggregated holdings across ALL portfolios
+    const aggregatedHoldings: Record<string, any> = {};
+    Object.values(portfolios || {}).forEach((p: any) => {
+      if (!p || !p.holdings) return;
+      Object.values(p.holdings || {}).forEach((h: any) => {
+        const sym = h.symbol;
+        if (!aggregatedHoldings[sym]) {
+          aggregatedHoldings[sym] = { ...h, lots: [] };
+        }
+        aggregatedHoldings[sym].lots = aggregatedHoldings[sym].lots.concat(h.lots || []);
+      });
+    });
+
+    const symbols = Object.keys(aggregatedHoldings);
+    let totalChangeConverted = 0;
     const rows: { sym: string; value: number }[] = [];
+
     for (const sym of symbols) {
+      const h = aggregatedHoldings[sym];
       const q = quotes[sym]?.last || 0;
       const ch = quotes[sym]?.change || 0;
-      const qty = (holdings[sym]?.lots || []).reduce(
+      const qty = (h?.lots || []).reduce(
         (acc, l) => acc + (l.side === 'buy' ? l.qty : -l.qty),
         0
       );
-      const value = q * qty;
-      changeUSD += ch * qty;
+
+      if (qty <= 0) continue;
+
+      // Get ticker currency (same logic as Invest tab)
+      let tickerCurrency = h?.currency;
+      if (!tickerCurrency) {
+        const s = sym.toUpperCase();
+        if (s.includes('-USD') || s.includes('USD')) tickerCurrency = 'USD';
+        else if (s.endsWith('.L')) tickerCurrency = 'GBP';
+        else if (s.endsWith('.T')) tickerCurrency = 'JPY';
+        else if (s.endsWith('.TO')) tickerCurrency = 'CAD';
+        else if (s.endsWith('.AX')) tickerCurrency = 'AUD';
+        else if (s.endsWith('.HK')) tickerCurrency = 'HKD';
+        else if (s.endsWith('.PA') || s.endsWith('.DE')) tickerCurrency = 'EUR';
+        else if (s.endsWith('.SW')) tickerCurrency = 'CHF';
+        else tickerCurrency = 'USD';
+      }
+      tickerCurrency = String(tickerCurrency).toUpperCase();
+
+      // Convert to investment currency
+      const priceConverted = convertCurrency(fxRates, q, tickerCurrency, investCurrency);
+      const changeConvertedPerShare = convertCurrency(fxRates, ch, tickerCurrency, investCurrency);
+
+      const value = priceConverted * qty;
+      totalChangeConverted += changeConvertedPerShare * qty;
+
       if (value !== 0) {
         rows.push({ sym, value });
       }
     }
-    let cash = 0;
-    try {
-      const portfolio = (useInvestStore.getState().activePortfolio?.() as any);
-      if (portfolio && typeof portfolio.cash === 'number') {
-        cash = Number(portfolio.cash) || 0;
-      }
-    } catch {}
 
-    // Add investment and retirement account balances
+    // Sum cash from ALL portfolios
+    let totalCashInInvestCurrency = 0;
+    Object.values(portfolios || {}).forEach((p: any) => {
+      if (p && typeof p.cash === 'number') {
+        const portfolioBaseCurrency = String(p.baseCurrency || 'USD').toUpperCase();
+        const cashNative = Number(p.cash) || 0;
+        // Convert cash to investment currency
+        totalCashInInvestCurrency += convertCurrency(fxRates, cashNative, portfolioBaseCurrency, investCurrency);
+      }
+    });
+
+    // Add investment and retirement account balances (these are in primary currency)
     const investmentAccountBalance = investmentAccounts.reduce((s, a) => s + (a.balance || 0), 0);
 
-    const totalUSD = rows.reduce((acc, row) => acc + row.value, 0) + cash + investmentAccountBalance;
+    // Total value in investment currency
+    const totalInInvestCurrency = rows.reduce((acc, row) => acc + row.value, 0) + totalCashInInvestCurrency;
+
+    // Convert total portfolio value from investment currency to primary currency for Money tab display
+    const totalInPrimaryCurrency = convertCurrency(fxRates, totalInInvestCurrency, investCurrency, primaryCurrency);
+
+    // Also convert change to primary currency
+    const changeInPrimaryCurrency = convertCurrency(fxRates, totalChangeConverted, investCurrency, primaryCurrency);
+
+    // Add investment account balances (already in primary currency)
+    const totalConverted = totalInPrimaryCurrency + investmentAccountBalance;
+
     const allocations =
-      totalUSD > 0
+      totalInInvestCurrency > 0
         ? [
-            ...rows.map(row => ({ sym: row.sym, wt: row.value / totalUSD })),
-            ...(cash ? [{ sym: 'CASH', wt: cash / totalUSD }] : []),
+            ...rows.map(row => ({ sym: row.sym, wt: row.value / totalInInvestCurrency })),
+            ...(totalCashInInvestCurrency ? [{ sym: 'CASH', wt: totalCashInInvestCurrency / totalInInvestCurrency }] : []),
           ]
             .sort((a, b) => b.wt - a.wt)
             .slice(0, 3)
         : [];
-    return { totalUSD, changeUSD, allocations };
-  }, [holdings, quotes, investmentAccounts]);
+    return { totalUSD: totalConverted, changeUSD: changeInPrimaryCurrency, allocations };
+  }, [holdings, quotes, investmentAccounts, profile.investCurrency, profile.currency]);
 
   const upcoming = useMemo(() => sumUpcoming(recurring || [], new Date(), 30), [recurring]);
 
@@ -508,18 +567,11 @@ const Money: React.FC = () => {
   const visibleBars = netWorthTimeframe === 'D' ? 10 : netWorthTimeframe === 'W' ? 7 : 6;
   const barWidth = screenWidth / visibleBars;
 
-  // Get the visible window of data - show only exact number of bars
+  // Show all chart data (no windowing for now - StackedAreaChart handles the full dataset)
   const aggregatedChartData = useMemo(() => {
-    // Calculate which bars to show based on scroll offset + temp drag
-    const totalOffset = scrollOffset + tempDragOffset; // Right drag (positive tempDragOffset) = older data
-    const scrolledBars = totalOffset / barWidth;
-
-    // Show exactly visibleBars number of bars
-    const endIdx = Math.max(visibleBars, Math.min(allChartData.length, Math.ceil(allChartData.length - scrolledBars)));
-    const startIdx = Math.max(0, endIdx - visibleBars);
-
-    return allChartData.slice(startIdx, endIdx);
-  }, [allChartData, scrollOffset, tempDragOffset, visibleBars, barWidth]);
+    // For now, just return all the data
+    return allChartData;
+  }, [allChartData]);
 
   // Calculate net worth change
   const netWorthChange = useMemo(() => {
@@ -636,27 +688,6 @@ const Money: React.FC = () => {
           <Text style={{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.5 }}>
             Money
           </Text>
-          {/* Milestone Badge - Tappable */}
-          {milestoneInfo.current && (
-            <AnimatedPressable onPress={() => setShowWealthJourney(true)}>
-              <Animated.View style={[milestoneAnimStyle, {
-                paddingHorizontal: spacing.s12,
-                paddingVertical: spacing.s8,
-                borderRadius: radius.pill,
-                backgroundColor: withAlpha(milestoneInfo.current.color, isDark ? 0.3 : 0.2),
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: spacing.s6,
-                borderWidth: 2,
-                borderColor: milestoneInfo.current.color,
-              }]}>
-                <Icon name={milestoneInfo.current.icon} size={16} color={milestoneInfo.current.color} />
-                <Text style={{ color: milestoneInfo.current.color, fontSize: 12, fontWeight: '800' }}>
-                  {milestoneInfo.current.label}
-                </Text>
-              </Animated.View>
-            </AnimatedPressable>
-          )}
         </View>
 
         {/* Net Worth Display with subtle label */}
@@ -741,79 +772,28 @@ const Money: React.FC = () => {
             </>
           )}
 
-          {/* Bar Chart with Swipe Gesture */}
-          <View
-            style={{ marginTop: spacing.s12, overflow: 'hidden' }}
-            onStartShouldSetResponder={() => true}
-            onStartShouldSetResponderCapture={() => false}
-            onMoveShouldSetResponder={(e) => {
-              // Only capture if horizontal movement is significant
-              const dx = Math.abs(e.nativeEvent.pageX - gestureStart.current.x);
-              const dy = Math.abs(e.nativeEvent.pageY - gestureStart.current.y);
-              return dx > 10 && dx > dy;
-            }}
-            onResponderGrant={(e) => {
-              gestureStart.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY };
-              setIsDragging(true);
-              setTempDragOffset(0);
-            }}
-            onResponderMove={(e) => {
-              if (isDragging) {
-                const dx = e.nativeEvent.pageX - gestureStart.current.x;
+          {/* Stacked Area Chart */}
+          <View style={{ marginTop: spacing.s12 }}>
+            {aggregatedChartData.length > 0 ? (
+              <StackedAreaChart
+                data={aggregatedChartData.map(point => ({
+                  t: point.t || Date.now(),
+                  cash: Number(point.cash) || 0,
+                  investments: Number(point.investments) || 0,
+                  debt: Number(point.debt) || 0
+                }))}
+                height={180}
+                showLabels={true}
+              />
+            ) : (
+              <View style={{ height: 180, justifyContent: 'center', alignItems: 'center' }}>
+                <Text style={{ color: muted, fontSize: 13 }}>No historical data available yet</Text>
+              </View>
+            )}
+          </View>
 
-                // Update temp drag offset for real-time data updates
-                // Positive dx (right swipe) = see older data
-                setTempDragOffset(dx);
-              }
-            }}
-            onResponderRelease={(e) => {
-              setIsDragging(false);
-              const dx = e.nativeEvent.pageX - gestureStart.current.x;
-
-              // Commit temp drag to scroll offset
-              // Positive dx (right swipe) = see older data (increase scrollOffset)
-              const maxScrollOffset = (allChartData.length - visibleBars) * barWidth;
-              const newScrollOffset = scrollOffset + dx; // Right drag = older data
-              setScrollOffset(Math.max(0, Math.min(maxScrollOffset, newScrollOffset)));
-              setTempDragOffset(0);
-              setSelectedBarIndex(null);
-            }}
-            onResponderTerminationRequest={() => false}
-          >
-            <View style={{ height: 130, flexDirection: 'row', alignItems: 'flex-end', gap: 4 }}>
-              {aggregatedChartData.map((point, index) => {
-                const netWorthValue = point.cash + point.investments - point.debt;
-                const maxNW = Math.max(...aggregatedChartData.map(p => p.cash + p.investments - p.debt), 1);
-                const barHeight = (netWorthValue / maxNW) * 120;
-                const isSelected = selectedBarIndex === index && !isDragging;
-
-                return (
-                  <ChartBar
-                    key={index}
-                    height={barHeight}
-                    maxHeight={130}
-                    color={accentPrimary}
-                    isSelected={isSelected}
-                    onPress={() => setSelectedBarIndex(isSelected ? null : index)}
-                    delay={0}
-                  />
-                );
-              })}
-            </View>
-
-            {/* Labels below bars */}
-            <View style={{ flexDirection: 'row', marginTop: spacing.s4, gap: 4 }}>
-              {aggregatedChartData.map((point, index) => (
-                <View key={index} style={{ flex: 1, alignItems: 'center' }}>
-                  <Text style={{ color: muted, fontSize: 10, fontWeight: '600' }}>
-                    {point.label}
-                  </Text>
-                </View>
-              ))}
-            </View>
-
-            {/* Swipe Indicator */}
-            {scrollOffset !== 0 && (
+          {/* Removed: Swipe Indicator (no longer needed with LineChart) */}
+          {false && scrollOffset !== 0 && (
               <View style={{ alignItems: 'center', marginTop: spacing.s8 }}>
                 <Pressable
                   onPress={() => {
@@ -834,7 +814,6 @@ const Money: React.FC = () => {
                 </Pressable>
               </View>
             )}
-          </View>
         </View>
       </View>
 
@@ -1187,7 +1166,7 @@ const Money: React.FC = () => {
                     }}
                   >
                     <Text style={{ color: onSurface, fontWeight: '600', fontSize: 13 }}>
-                      {item.sym} {(item.wt * 100).toFixed(0)}%
+                      {item.sym} {(item.wt * 100).toFixed(2)}%
                     </Text>
                   </View>
                 ))}
@@ -1381,16 +1360,6 @@ const Money: React.FC = () => {
         </ScrollView>
       </BottomSheet>
 
-      {/* Wealth Journey Sheet */}
-      <WealthJourneySheet
-        visible={showWealthJourney}
-        onClose={() => setShowWealthJourney(false)}
-        netWorth={netWorth}
-        totalCash={totalCash}
-        totalInvestments={portfolioCalc.totalUSD}
-        totalDebt={totalDebt}
-        netWorthHistory={netWorthHistoryData.map(d => ({ t: d.t, v: d.cash + d.investments - d.debt }))}
-      />
     </ScreenScroll>
   );
 };

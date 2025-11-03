@@ -17,13 +17,15 @@ export function formatCurrency(
 ): string {
   const code = (currency || preferredCurrency() || 'USD').toUpperCase();
   const compact = !!opts?.compact;
-  const hasCents = opts?.forceDecimals ? true : Math.abs(amount % 1) > 1e-6;
-  const maximumFractionDigits = hasCents ? 2 : 0;
+  // Always show 2 decimal places unless compact mode is enabled
+  const minimumFractionDigits = compact ? 0 : 2;
+  const maximumFractionDigits = compact ? 2 : 2;
   try {
     const nf = new Intl.NumberFormat(undefined, {
       style: 'currency',
       currency: code,
       currencyDisplay: 'narrowSymbol',
+      minimumFractionDigits,
       maximumFractionDigits,
       notation: compact ? 'compact' : 'standard',
       compactDisplay: 'short',
@@ -31,7 +33,7 @@ export function formatCurrency(
     return nf.format(amount);
   } catch {
     // Fallback
-    const rounded = hasCents ? amount.toFixed(2) : Math.round(amount).toString();
+    const rounded = compact ? Math.round(amount).toString() : amount.toFixed(2);
     return `${code} ${rounded}`;
   }
 }

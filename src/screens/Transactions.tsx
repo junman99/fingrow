@@ -600,7 +600,7 @@ export const Transactions: React.FC = () => {
                         Total Spending
                       </Text>
                       <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
-                        ${expenseTotal.toFixed(0)}
+                        ${expenseTotal.toFixed(2)}
                       </Text>
                     </View>
                     <View style={{ flex: 1 }}>
@@ -608,7 +608,7 @@ export const Transactions: React.FC = () => {
                         Total Income
                       </Text>
                       <Text style={{ color: success, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
-                        +${incomeTotal.toFixed(0)}
+                        +${incomeTotal.toFixed(2)}
                       </Text>
                     </View>
                   </View>

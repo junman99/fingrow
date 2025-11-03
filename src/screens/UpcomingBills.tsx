@@ -32,7 +32,7 @@ function getBiweeklyPeriod(anchorISO: string | null, today = new Date()): {start
 
 function fmtMoney(n: number) {
   try { return new Intl.NumberFormat(undefined, { style:'currency', currency:'SGD', maximumFractionDigits:0 }).format(n); }
-  catch { return `S$${n.toFixed(0)}`; }
+  catch { return `S$${n.toFixed(2)}`; }
 }
 
 function withAlpha(hex: string, alpha: number) {

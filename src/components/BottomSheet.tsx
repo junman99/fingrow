@@ -33,10 +33,11 @@ export default function BottomSheet({ visible, onClose, children, height, dimmed
 
   useEffect(() => {
     if (visible) {
-      y.value = CLOSED_Y; // Reset to closed before animating
-      y.value = withSpring(OPEN_Y, { damping: 30, stiffness: 350, mass: 0.9 });
+      y.value = CLOSED_Y;
+      // Faster, smoother spring animation
+      y.value = withSpring(OPEN_Y, { damping: 35, stiffness: 450, mass: 0.7 });
     } else {
-      y.value = withTiming(CLOSED_Y, { duration: 200 });
+      y.value = withTiming(CLOSED_Y, { duration: 180 });
     }
   }, [visible]);
 

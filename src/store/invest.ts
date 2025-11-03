@@ -6,6 +6,7 @@ import { fetchDailyHistoryFMP, fetchFMPFundamentals, fetchFMPBatchQuotes, setFMP
 import { isCryptoSymbol, fetchCrypto, baseCryptoSymbol, fetchCryptoOhlc } from '../lib/coingecko';
 import { fetchFxUSD, type FxRates } from '../lib/fx';
 import { computePnL } from '../lib/positions';
+import { fixHoldingsCurrency } from '../lib/fixHoldingsCurrency';
 
 export type InstrumentType = 'stock' | 'bond' | 'crypto' | 'fund' | 'etf';
 
@@ -37,6 +38,7 @@ export type Quote = {
   bars?: Array<{ t: number; o: number; h: number; l: number; c: number; v: number }>;
   fundamentals?: {
     companyName?: string;
+    logo?: string;
     sector?: string;
     industry?: string;
     description?: string;
@@ -101,6 +103,7 @@ type State = {
   // portfolio ops
   createPortfolio: (name: string, baseCurrency: string, opts?: { benchmark?: string, seedFromActive?: boolean, type?: 'Live'|'Paper' }) => Promise<string>;
   renamePortfolio: (id: string, name: string) => Promise<void>;
+  updatePortfolio: (id: string, updates: Partial<Pick<Portfolio, 'name' | 'baseCurrency' | 'benchmark' | 'type'>>) => Promise<void>;
   setActivePortfolio: (id: string) => Promise<void>;
   archivePortfolio: (id: string) => Promise<void>;
   setPortfolioArchived: (id: string, archived: boolean) => Promise<void>;
@@ -120,7 +123,8 @@ type State = {
   setHoldingsOrder: (portfolioId: string, order: string[]) => Promise<void>;
 
   // cash ops
-  addCash: (amount: number, opts?: { portfolioId?: string }) => Promise<void>; // positive=deposit, negative=withdraw
+  addCash: (amount: number, opts?: { portfolioId?: string; date?: string }) => Promise<void>; // positive=deposit, negative=withdraw (creates cashEvent)
+  adjustCashBalance: (amount: number, opts?: { portfolioId?: string }) => Promise<void>; // internal: adjust cash without creating event (for stock trades)
 
   // watchlist ops
   setWatch: (symbols: string[], opts?: { portfolioId?: string }) => Promise<void>;
@@ -205,7 +209,22 @@ export const useInvestStore = create<State>((set, get) => ({
     set({ holdings: p?.holdings || {}, watchlist: p?.watchlist || [] });
   },
 
-  refreshFx: async () => { try { const fx = await fetchFxUSD(); set({ fxRates: fx }); } catch (e) {} },
+  refreshFx: async () => {
+    try {
+      console.log('💱 [Invest Store] Fetching FX rates...');
+      const fx = await fetchFxUSD();
+      console.log('💱 [Invest Store] FX rates fetched:', {
+        base: fx.base,
+        ratesCount: Object.keys(fx.rates || {}).length,
+        hasSGD: !!fx.rates?.SGD,
+        sgdRate: fx.rates?.SGD,
+        hasEUR: !!fx.rates?.EUR,
+      });
+      set({ fxRates: fx });
+    } catch (e) {
+      console.error('❌ [Invest Store] Failed to fetch FX rates:', e);
+    }
+  },
 
   hydrate: async () => {
     try {
@@ -213,9 +232,39 @@ export const useInvestStore = create<State>((set, get) => ({
       const raw2 = await AsyncStorage.getItem(KEY_V2);
       if (raw2) {
         const parsed = JSON.parse(raw2);
+
+        // Migration: Fix holdings currency metadata
+        const portfolios = parsed.portfolios || {};
+        const needsMigration = Object.values(portfolios).some((p: any) => {
+          return Object.values(p?.holdings || {}).some((h: any) => {
+            // Check if holding has wrong currency (e.g., AAPL with SGD)
+            const symbol = h?.symbol;
+            const currency = h?.currency;
+            if (!symbol || !currency) return false;
+
+            // Quick check: US stocks should be USD
+            if (!symbol.includes('.') && !symbol.includes('-') && currency !== 'USD') {
+              return true;
+            }
+            return false;
+          });
+        });
+
+        let fixedPortfolios = portfolios;
+        if (needsMigration) {
+          console.log('🔧 [Invest Store] Migrating holdings currency metadata...');
+          fixedPortfolios = fixHoldingsCurrency(portfolios);
+          // Save the fixed data
+          await AsyncStorage.setItem(KEY_V2, JSON.stringify({
+            portfolios: fixedPortfolios,
+            portfolioOrder: parsed.portfolioOrder || Object.keys(fixedPortfolios),
+            activePortfolioId: parsed.activePortfolioId || null
+          }));
+        }
+
         set({
-          portfolios: parsed.portfolios || {},
-          portfolioOrder: parsed.portfolioOrder || Object.keys(parsed.portfolios || {}),
+          portfolios: fixedPortfolios,
+          portfolioOrder: parsed.portfolioOrder || Object.keys(fixedPortfolios),
           activePortfolioId: parsed.activePortfolioId || null,
         });
         (get() as any)._syncMirrors();
@@ -315,6 +364,15 @@ export const useInvestStore = create<State>((set, get) => ({
     const p = get().portfolios[id];
     if (!p) return;
     const next = { ...p, name, updatedAt: new Date().toISOString() };
+    set({ portfolios: { ...get().portfolios, [id]: next } });
+    (get() as any)._syncMirrors();
+    await (get() as any).persist();
+  },
+
+  updatePortfolio: async (id, updates) => {
+    const p = get().portfolios[id];
+    if (!p) return;
+    const next = { ...p, ...updates, updatedAt: new Date().toISOString() };
     set({ portfolios: { ...get().portfolios, [id]: next } });
     (get() as any)._syncMirrors();
     await (get() as any).persist();
@@ -451,8 +509,24 @@ export const useInvestStore = create<State>((set, get) => ({
     const cur = Number(p.cash || 0);
     const nextCash = Number((cur + Number(amount || 0)).toFixed(2));
     const evs = Array.isArray(p.cashEvents) ? [...p.cashEvents] : [];
-    evs.push({ date: new Date().toISOString(), amount: Number(amount || 0) });
+    const eventDate = opts?.date || new Date().toISOString();
+    evs.push({ date: eventDate, amount: Number(amount || 0) });
     portfolios[pid] = { ...p, cash: nextCash, cashEvents: evs, updatedAt: new Date().toISOString() };
+    set({ portfolios });
+    (get() as any)._syncMirrors();
+    await (get() as any).persist();
+  },
+
+  adjustCashBalance: async (amount, opts) => {
+    // Adjust cash balance without creating a cashEvent (used for stock trades)
+    const pid = opts?.portfolioId || get().activePortfolioId;
+    if (!pid) return;
+    const portfolios = { ...get().portfolios } as any;
+    const p = portfolios[pid];
+    if (!p) return;
+    const cur = Number(p.cash || 0);
+    const nextCash = Number((cur + Number(amount || 0)).toFixed(2));
+    portfolios[pid] = { ...p, cash: nextCash, updatedAt: new Date().toISOString() };
     set({ portfolios });
     (get() as any)._syncMirrors();
     await (get() as any).persist();

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { View, Text, TextInput, Pressable, Keyboard, ScrollView, Platform } from 'react-native';
+import { View, Text, TextInput, Pressable, Keyboard, ScrollView, Platform, Image, Switch } from 'react-native';
 import BottomSheet from '../BottomSheet';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
@@ -8,6 +8,8 @@ import { useInvestStore } from '../../store/invest';
 import { useProfileStore } from '../../store/profile';
 import DateTimeSheet from '../DateTimeSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Icon from '../Icon';
+import { convertCurrency } from '../../lib/fx';
 
 type Props = {
   mode?: 'add'|'edit';
@@ -19,34 +21,67 @@ type Props = {
   portfolioId: string | null;
 };
 
-export default function TransactionEditorSheet({ visible, onClose, symbol, portfolioId, mode='add', lotId, initial }: Props) {
+const TransactionEditorSheet = React.memo(({ visible, onClose, symbol, portfolioId, mode='add', lotId, initial }: Props) => {
   const { get } = useThemeTokens();
   const store = useInvestStore() as any;
   const { profile } = useProfileStore();
   const insets = useSafeAreaInsets();
 
+  // Compact height to fit content
+  const sheetHeight = 420;
+
+  // Get quote data and portfolio info
+  const quotes = useInvestStore(s => s.quotes);
+  const portfolios = useInvestStore(s => s.portfolios);
+  const holdings = useInvestStore(s => s.holdings);
+  const fxRates = useInvestStore(s => s.fxRates);
+  const q: any = quotes[symbol] || {};
+  const currentPrice = q?.last || 0;
+  const fundamentals = q?.fundamentals;
+  const logoUrl = fundamentals?.logo;
+  const companyName = fundamentals?.companyName || symbol;
+
+  const [imageError, setImageError] = React.useState(false);
+
+  function getLogoColor(sym: string): string {
+    const colors = [
+      '#5B9A8B', '#D4735E', '#88AB8E', '#C85C3D', '#E8B86D',
+      '#7FE7CC', '#FF9B71', '#A4BE7B', '#6366f1', '#8b5cf6',
+    ];
+    const index = sym.charCodeAt(0) % colors.length;
+    return colors[index];
+  }
+
+  const logoColor = getLogoColor(symbol);
+  const logoLetter = symbol.charAt(0).toUpperCase();
+  const shouldShowImage = logoUrl && !imageError;
 
   const [side, setSide] = React.useState<'buy'|'sell'>(initial?.side || 'buy');
   const [qtyInput, setQtyInput] = React.useState(initial?.qty != null ? String(initial.qty) : '');
-  const [priceInput, setPriceInput] = React.useState(initial?.price != null ? String(initial.price) : '');
+  const [priceInput, setPriceInput] = React.useState(initial?.price != null ? String(initial.price.toFixed(2)) : (currentPrice ? String(currentPrice.toFixed(2)) : ''));
   const [feesInput, setFeesInput] = React.useState(initial?.fees != null ? String(initial.fees) : '');
   const [date, setDate] = React.useState<Date>(initial?.date ? new Date(initial.date) : new Date());
   const [openDate, setOpenDate] = React.useState(false);
   const [affectCash, setAffectCash] = React.useState(mode !== 'edit');
+  const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
     if (!visible) {
-      setSide('buy'); setQtyInput(''); setPriceInput(''); setFeesInput(''); setDate(new Date()); setOpenDate(false);
+      // Reset on close
+      setSide('buy'); setQtyInput(''); setFeesInput(''); setDate(new Date()); setOpenDate(false);
+      // Reset price to current price (2 decimals)
+      setPriceInput(currentPrice ? String(currentPrice.toFixed(2)) : '');
     }
-  }, [visible]);
+  }, [visible, currentPrice]);
 
   const text = get('text.primary') as string;
   const muted = get('text.muted') as string;
   const border = get('border.subtle') as string;
   const onPrimary = get('text.onPrimary') as string;
 
-  const onSave = async () => {
-    try { Keyboard.dismiss(); } catch {}
+  const onSave = React.useCallback(async () => {
+    if (saving) return;
+
     const qty = Number(qtyInput || '0');
     const price = Number(priceInput || '0');
     const fees = feesInput ? Number(feesInput) : 0;
@@ -66,213 +101,292 @@ export default function TransactionEditorSheet({ visible, onClose, symbol, portf
       return;
     }
 
-    const cur = ((profile?.currency) || 'USD').toUpperCase();
-    if (mode === 'edit' && lotId) {
-      await store.updateLot(symbol, lotId, { side, qty, price, date: date.toISOString(), fees }, { portfolioId: pid });
-      if (affectCash) {
-        try {
-          const gross = qty * price;
-          const cf = side === 'buy' ? -(gross + fees) : (gross - fees);
-          await store.addCash(cf, { portfolioId: pid });
-        } catch {}
-      }
-    } else {
-      await store.addLot(symbol, { side, qty, price, date: date.toISOString(), fees }, { name: symbol, type: 'stock', currency: cur }, { portfolioId: pid });
-      if (affectCash) {
-        try {
-          const gross = qty * price;
-          const cf = side === 'buy' ? -(gross + fees) : (gross - fees);
-          await store.addCash(cf, { portfolioId: pid });
-        } catch {}
-      }
-    }
-    try { await store.refreshQuotes([symbol]); } catch {}
+    // Close immediately for responsive feel
+    setSaving(true);
     onClose();
-  };
+
+    // Perform save operations in background
+    // Get ticker's NATIVE currency (not profile currency!)
+    const h = pid ? portfolios[pid]?.holdings?.[symbol] : holdings[symbol];
+    let cur = 'USD'; // Default
+    if (h?.currency) {
+      cur = h.currency.toUpperCase();
+    } else {
+      // Infer from symbol pattern
+      const s = symbol.toUpperCase();
+      if (s.includes('-USD') || s.includes('USD')) cur = 'USD';
+      else if (s.endsWith('.L')) cur = 'GBP';
+      else if (s.endsWith('.T')) cur = 'JPY';
+      else if (s.endsWith('.TO')) cur = 'CAD';
+      else if (s.endsWith('.AX')) cur = 'AUD';
+      else if (s.endsWith('.HK')) cur = 'HKD';
+      else if (s.endsWith('.PA') || s.endsWith('.DE')) cur = 'EUR';
+      else if (s.endsWith('.SW')) cur = 'CHF';
+    }
+
+    try {
+      if (mode === 'edit' && lotId) {
+        await store.updateLot(symbol, lotId, { side, qty, price, date: date.toISOString(), fees }, { portfolioId: pid });
+        if (affectCash) {
+          try {
+            // Get portfolio currency for conversion
+            const p = pid ? portfolios[pid] : null;
+            const portfolioCurrency = (p?.baseCurrency || 'USD').toUpperCase();
+
+            // Cash flow in ticker's native currency
+            const gross = qty * price;
+            const cfNative = side === 'buy' ? -(gross + fees) : (gross - fees);
+
+            // Convert to portfolio currency before adjusting cash
+            const cfPortfolio = convertCurrency(fxRates, cfNative, cur, portfolioCurrency);
+            await (store as any).adjustCashBalance(cfPortfolio, { portfolioId: pid });
+          } catch {}
+        }
+      } else {
+        await store.addLot(symbol, { side, qty, price, date: date.toISOString(), fees }, { name: symbol, type: 'stock', currency: cur }, { portfolioId: pid });
+        if (affectCash) {
+          try {
+            // Get portfolio currency for conversion
+            const p = pid ? portfolios[pid] : null;
+            const portfolioCurrency = (p?.baseCurrency || 'USD').toUpperCase();
+
+            // Cash flow in ticker's native currency
+            const gross = qty * price;
+            const cfNative = side === 'buy' ? -(gross + fees) : (gross - fees);
+
+            // Convert to portfolio currency before adjusting cash
+            const cfPortfolio = convertCurrency(fxRates, cfNative, cur, portfolioCurrency);
+            await (store as any).adjustCashBalance(cfPortfolio, { portfolioId: pid });
+          } catch {}
+        }
+      }
+      try { await store.refreshQuotes([symbol]); } catch {}
+      setSaving(false);
+    } catch (e) {
+      console.error(e);
+      setSaving(false);
+    }
+  }, [saving, qtyInput, priceInput, feesInput, symbol, portfolioId, store, side, date, mode, lotId, affectCash, profile, onClose]);
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} height={500}>
-      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ paddingBottom: spacing.s24 }}>
-        <View style={{ gap: spacing.s16 }}>
-          {/* Header */}
-          <View>
-            <Text style={{ color: text, fontWeight: '800', fontSize: 24, letterSpacing: -0.5 }}>
-              {mode === 'edit' ? 'Edit' : 'New'} Transaction
-            </Text>
-            <Text style={{ color: muted, fontSize: 14, marginTop: spacing.s4 }}>{symbol}</Text>
-          </View>
-
-          {/* Buy/Sell Toggle */}
-          <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-            <Pressable
-              onPress={() => setSide('buy')}
-              style={({ pressed }) => ({
-                flex: 1,
-                paddingVertical: spacing.s12,
-                borderRadius: radius.md,
+    <BottomSheet visible={visible} onClose={onClose} height={sheetHeight}>
+      <View style={{ flex: 1 }}>
+        {/* Minimal Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
+          {/* Logo and Info */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+            <View
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: shouldShowImage ? 'transparent' : logoColor,
                 alignItems: 'center',
-                backgroundColor: side === 'buy' ? (get('accent.primary') as string) : (get('surface.level1') as string),
-                opacity: pressed ? 0.8 : 1
-              })}
+                justifyContent: 'center',
+                overflow: 'hidden',
+              }}
             >
-              <Text style={{ color: side === 'buy' ? onPrimary : text, fontWeight: '700', fontSize: 15 }}>Buy</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setSide('sell')}
-              style={({ pressed }) => ({
-                flex: 1,
-                paddingVertical: spacing.s12,
-                borderRadius: radius.md,
-                alignItems: 'center',
-                backgroundColor: side === 'sell' ? (get('semantic.danger') as string) : (get('surface.level1') as string),
-                opacity: pressed ? 0.8 : 1
-              })}
-            >
-              <Text style={{ color: side === 'sell' ? onPrimary : text, fontWeight: '700', fontSize: 15 }}>Sell</Text>
-            </Pressable>
-          </View>
-
-          {/* Inputs */}
-          <View style={{ gap: spacing.s12 }}>
-            <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: muted, marginBottom: spacing.s6, fontSize: 13, fontWeight: '600' }}>Shares</Text>
-                <TextInput
-                  keyboardType="decimal-pad"
-                  placeholder="0"
-                  placeholderTextColor={muted}
-                  value={qtyInput}
-                  onChangeText={setQtyInput}
-                  style={{
-                    color: text,
-                    backgroundColor: get('surface.level1') as string,
-                    borderRadius: radius.md,
-                    paddingHorizontal: spacing.s12,
-                    height: 48,
-                    fontSize: 16,
-                    fontWeight: '600'
-                  }}
+              {shouldShowImage ? (
+                <Image
+                  source={{ uri: logoUrl }}
+                  style={{ width: 44, height: 44 }}
+                  onError={() => setImageError(true)}
                 />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: muted, marginBottom: spacing.s6, fontSize: 13, fontWeight: '600' }}>Price</Text>
-                <TextInput
-                  keyboardType="decimal-pad"
-                  placeholder="0.00"
-                  placeholderTextColor={muted}
-                  value={priceInput}
-                  onChangeText={setPriceInput}
-                  style={{
-                    color: text,
-                    backgroundColor: get('surface.level1') as string,
-                    borderRadius: radius.md,
-                    paddingHorizontal: spacing.s12,
-                    height: 48,
-                    fontSize: 16,
-                    fontWeight: '600'
-                  }}
+              ) : (
+                <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '800' }}>
+                  {logoLetter}
+                </Text>
+              )}
+            </View>
+            <View>
+              <Text style={{ color: text, fontSize: 16, fontWeight: '800', letterSpacing: -0.2 }}>
+                {symbol}
+              </Text>
+              <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
+                ${currentPrice.toFixed(2)}
+              </Text>
+            </View>
+          </View>
+
+          {/* Save Button */}
+          <Pressable
+            onPress={onSave}
+            disabled={saving}
+            style={({ pressed }) => ({
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: get('accent.primary') as string,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: saving ? 0.5 : (pressed ? 0.7 : 1)
+            })}
+          >
+            <Icon name="check" size={20} color="#FFFFFF" />
+          </Pressable>
+        </View>
+
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: spacing.s8, paddingHorizontal: spacing.s2 }}
+        >
+          <View style={{ gap: spacing.s14 }}>
+            {/* Buy/Sell Buttons + Cash Toggle */}
+            <View style={{ flexDirection: 'row', gap: spacing.s12, alignItems: 'center' }}>
+              <Pressable
+                onPress={() => setSide('buy')}
+                style={({ pressed }) => ({
+                  paddingHorizontal: spacing.s16,
+                  paddingVertical: spacing.s8,
+                  borderRadius: radius.pill,
+                  backgroundColor: side === 'buy' ? (get('semantic.success') as string) : 'transparent',
+                  opacity: pressed ? 0.8 : 1,
+                  transform: [{ scale: side === 'buy' ? 1.03 : 1 }]
+                })}
+              >
+                <Text style={{
+                  color: side === 'buy' ? '#FFFFFF' : muted,
+                  fontWeight: '700',
+                  fontSize: 13
+                }}>
+                  Buy
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setSide('sell')}
+                style={({ pressed }) => ({
+                  paddingHorizontal: spacing.s16,
+                  paddingVertical: spacing.s8,
+                  borderRadius: radius.pill,
+                  backgroundColor: side === 'sell' ? (get('semantic.danger') as string) : 'transparent',
+                  opacity: pressed ? 0.8 : 1,
+                  transform: [{ scale: side === 'sell' ? 1.03 : 1 }]
+                })}
+              >
+                <Text style={{
+                  color: side === 'sell' ? '#FFFFFF' : muted,
+                  fontWeight: '700',
+                  fontSize: 13
+                }}>
+                  Sell
+                </Text>
+              </Pressable>
+
+              {/* Cash Toggle - moved here */}
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.s8 }}>
+                <Text style={{ color: muted, fontSize: 12, fontWeight: '600' }}>Adjust cash</Text>
+                <Switch
+                  value={affectCash}
+                  onValueChange={setAffectCash}
+                  trackColor={{ false: get('border.subtle') as string, true: get('accent.primary') as string }}
+                  thumbColor="#FFFFFF"
+                  ios_backgroundColor={get('border.subtle') as string}
                 />
               </View>
             </View>
 
-            <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: muted, marginBottom: spacing.s6, fontSize: 13, fontWeight: '600' }}>Date</Text>
+            {/* Main Input Grid */}
+            <View style={{ gap: spacing.s12 }}>
+              {/* Shares and Price Row */}
+              <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: muted, fontSize: 11, fontWeight: '700', marginBottom: spacing.s6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Shares</Text>
+                  <TextInput
+                    keyboardType="decimal-pad"
+                    placeholder="0"
+                    placeholderTextColor={muted}
+                    value={qtyInput}
+                    onChangeText={setQtyInput}
+                    style={{
+                      color: text,
+                      backgroundColor: get('surface.level1') as string,
+                      borderRadius: radius.lg,
+                      paddingHorizontal: spacing.s16,
+                      height: 56,
+                      fontSize: 18,
+                      fontWeight: '700',
+                      borderWidth: 1,
+                      borderColor: border
+                    }}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: muted, fontSize: 11, fontWeight: '700', marginBottom: spacing.s6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Price</Text>
+                  <TextInput
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={muted}
+                    value={priceInput}
+                    onChangeText={setPriceInput}
+                    style={{
+                      color: text,
+                      backgroundColor: get('surface.level1') as string,
+                      borderRadius: radius.lg,
+                      paddingHorizontal: spacing.s16,
+                      height: 56,
+                      fontSize: 18,
+                      fontWeight: '700',
+                      borderWidth: 1,
+                      borderColor: border
+                    }}
+                  />
+                </View>
+              </View>
+
+              {/* Date */}
+              <View>
+                <Text style={{ color: muted, fontSize: 11, fontWeight: '700', marginBottom: spacing.s6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Date</Text>
                 <Pressable
                   onPress={() => setOpenDate(true)}
-                  style={{
+                  style={({ pressed }) => ({
                     backgroundColor: get('surface.level1') as string,
-                    borderRadius: radius.md,
-                    paddingHorizontal: spacing.s12,
-                    height: 48,
-                    justifyContent: 'center'
-                  }}
+                    borderRadius: radius.lg,
+                    paddingHorizontal: spacing.s16,
+                    height: 56,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: spacing.s12,
+                    borderWidth: 1,
+                    borderColor: border,
+                    opacity: pressed ? 0.7 : 1
+                  })}
                 >
-                  <Text style={{ color: text, fontWeight: '600' }}>{date.toLocaleDateString()}</Text>
+                  <Icon name="calendar" size={22} colorToken="text.muted" />
+                  <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>{date.toLocaleDateString()}</Text>
                 </Pressable>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: muted, marginBottom: spacing.s6, fontSize: 13, fontWeight: '600' }}>Fees</Text>
+
+              {/* Fees */}
+              <View>
                 <TextInput
                   keyboardType="decimal-pad"
-                  placeholder="0.00"
+                  placeholder="Fees (optional)"
                   placeholderTextColor={muted}
                   value={feesInput}
                   onChangeText={setFeesInput}
                   style={{
                     color: text,
                     backgroundColor: get('surface.level1') as string,
-                    borderRadius: radius.md,
-                    paddingHorizontal: spacing.s12,
-                    height: 48,
-                    fontSize: 16,
-                    fontWeight: '600'
+                    borderRadius: radius.lg,
+                    paddingHorizontal: spacing.s16,
+                    height: 44,
+                    fontSize: 14,
+                    fontWeight: '600',
+                    borderWidth: 1,
+                    borderColor: border
                   }}
                 />
               </View>
             </View>
           </View>
-
-          {/* Affect Cash Toggle */}
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            backgroundColor: get('surface.level1') as string,
-            padding: spacing.s16,
-            borderRadius: radius.md
-          }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>Adjust cash balance</Text>
-              <Text style={{ color: muted, fontSize: 12, marginTop: spacing.s2 }}>Update portfolio cash</Text>
-            </View>
-            <Pressable
-              accessibilityRole="switch"
-              accessibilityState={{ checked: affectCash }}
-              onPress={() => setAffectCash(v => !v)}
-              style={({ pressed }) => ({
-                width: 51,
-                height: 31,
-                borderRadius: 999,
-                backgroundColor: affectCash ? (get('accent.primary') as string) : (get('surface.level2') as string),
-                alignItems: affectCash ? 'flex-end' : 'flex-start',
-                justifyContent: 'center',
-                paddingHorizontal: 2,
-                opacity: pressed ? 0.9 : 1
-              })}
-            >
-              <View style={{ width: 27, height: 27, borderRadius: 999, backgroundColor: onPrimary }} />
-            </Pressable>
-          </View>
-        </View>
-      </ScrollView>
-
-      <View style={{
-        paddingHorizontal: spacing.s16,
-        paddingTop: spacing.s12,
-        paddingBottom: Math.max(insets.bottom, 16),
-        backgroundColor: get('component.sheet.bg') as string,
-        borderTopWidth: 1,
-        borderTopColor: get('border.subtle') as string
-      }}>
-        <Pressable
-          onPress={onSave}
-          style={({ pressed }) => ({
-            backgroundColor: get('component.button.primary.bg') as string || (get('accent.primary') as string),
-            height: 50,
-            borderRadius: radius.md,
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: pressed ? 0.9 : 1
-          })}
-        >
-          <Text style={{ color: onPrimary, fontWeight: '700', fontSize: 16 }}>
-            {mode === 'edit' ? 'Update' : 'Save'} Transaction
-          </Text>
-        </Pressable>
+        </ScrollView>
       </View>
 
       <DateTimeSheet visible={openDate} date={date} onCancel={() => setOpenDate(false)} onConfirm={(d) => { setDate(d); setOpenDate(false); }} />
     </BottomSheet>
   );
-}
+});
+
+export default TransactionEditorSheet;

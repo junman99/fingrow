@@ -23,6 +23,7 @@ export type FMPBar = { date: number; open: number; high: number; low: number; cl
 
 export type FMPFundamentals = {
   companyName?: string;
+  logo?: string;
   sector?: string;
   industry?: string;
   description?: string;
@@ -253,6 +254,7 @@ export async function fetchFMPFundamentals(symbol: string): Promise<FMPFundament
 
     return {
       companyName: prof.companyName,
+      logo: prof.image,
       sector: prof.sector,
       industry: prof.industry,
       description: prof.description,

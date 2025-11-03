@@ -109,6 +109,33 @@ export default function BudgetSettings() {
   const [budgetText, setBudgetText] = useState(monthlyBudget != null ? String(monthlyBudget) : '');
   const [thresholdText, setThresholdText] = useState(String(Math.round(warnThreshold * 100)));
 
+  // Portfolio display currency
+  const PORTFOLIO_CURRENCY_KEY = 'fingrow/invest/displayCurrency';
+  const [portfolioDisplayCurrency, setPortfolioDisplayCurrency] = useState('SGD');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(PORTFOLIO_CURRENCY_KEY);
+        if (raw) {
+          setPortfolioDisplayCurrency(raw);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  const savePortfolioCurrency = async (currency: string) => {
+    setPortfolioDisplayCurrency(currency);
+    await AsyncStorage.setItem(PORTFOLIO_CURRENCY_KEY, currency);
+    // Refresh FX rates when currency changes
+    try {
+      const { useInvestStore } = await import('../store/invest');
+      await useInvestStore.getState().refreshFx();
+    } catch (e) {
+      console.error('Error refreshing FX rates:', e);
+    }
+  };
+
   useEffect(() => { hydrate(); }, []);
   useEffect(() => {
     if (ready) setBudgetText(monthlyBudget != null ? String(monthlyBudget) : '');
@@ -409,6 +436,65 @@ export default function BudgetSettings() {
             variant="secondary"
             onPress={() => exportPeriodCsv(startOfDay(period.start), endOfDay(period.end))}
           />
+        </View>
+
+        {/* Invest Currency */}
+        <View style={{
+          backgroundColor: surface1,
+          borderRadius: radius.xl,
+          padding: spacing.s16,
+          gap: spacing.s16,
+          borderWidth: 1,
+          borderColor: withAlpha(borderSubtle, isDark ? 0.3 : 0.5)
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s10 }}>
+            <View style={{
+              width: 36,
+              height: 36,
+              borderRadius: radius.md,
+              backgroundColor: withAlpha(accentPrimary, isDark ? 0.2 : 0.12),
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Icon name="trending-up" size={18} color={accentPrimary} />
+            </View>
+            <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 17 }}>Invest Currency</Text>
+          </View>
+          <View style={{ gap: spacing.s12 }}>
+            <Text style={{ color: textMuted, fontSize: 14 }}>All investments will be displayed in this currency</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
+              {['USD', 'SGD', 'EUR', 'GBP', 'JPY', 'CNY', 'AUD', 'CAD'].map(currency => {
+                const isActive = portfolioDisplayCurrency === currency;
+                return (
+                  <Pressable
+                    key={currency}
+                    accessibilityRole="button"
+                    onPress={() => savePortfolioCurrency(currency)}
+                    style={({ pressed }) => ({
+                      paddingVertical: spacing.s10,
+                      paddingHorizontal: spacing.s16,
+                      borderRadius: radius.lg,
+                      backgroundColor: isActive
+                        ? accentPrimary
+                        : withAlpha(borderSubtle, isDark ? 0.2 : 0.25),
+                      borderWidth: 1,
+                      borderColor: isActive
+                        ? accentPrimary
+                        : withAlpha(borderSubtle, isDark ? 0.3 : 0.4),
+                      opacity: pressed ? 0.85 : 1,
+                    })}
+                  >
+                    <Text style={{
+                      color: isActive ? textOnPrimary : textPrimary,
+                      fontWeight: '700',
+                      fontSize: 14
+                    }}>{currency}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+          <Text style={{ color: textMuted, fontSize: 13 }}>Exchange rates will refresh automatically when you change the currency.</Text>
         </View>
       </Animated.View>
     </ScreenScroll>

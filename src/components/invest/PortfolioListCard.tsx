@@ -5,6 +5,7 @@ import Icon from '../Icon';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
 import { useInvestStore, type Portfolio } from '../../store/invest';
+import { useProfileStore } from '../../store/profile';
 import { formatCurrency } from '../../lib/format';
 import { convertCurrency, type FxRates } from '../../lib/fx';
 import { computePnL } from '../../lib/positions';
@@ -62,7 +63,7 @@ function usePortfolioMetrics(p: Portfolio, quotes: any, currency: string, fxRate
     if (qty) positions[h.symbol] = (positions[h.symbol] || 0) + qty;
   });
 
-  let value = 0;
+  let holdingsValue = 0;
   let deltaToday = 0;
   let totalGain = 0;
   const valuesPerSym: Record<string, number> = {};
@@ -72,11 +73,28 @@ function usePortfolioMetrics(p: Portfolio, quotes: any, currency: string, fxRate
     const q = quotes[sym];
     const last = Number(q?.last || 0);
     const chg = Number(q?.change || 0);
-    const holdingCurrency = String(p?.holdings?.[sym]?.currency || 'USD').toUpperCase();
+
+    // Get ticker currency: use holding metadata, or infer from symbol
+    let holdingCurrency = p?.holdings?.[sym]?.currency;
+    if (!holdingCurrency) {
+      // Infer from symbol pattern
+      const s = sym.toUpperCase();
+      if (s.includes('-USD') || s.includes('USD')) holdingCurrency = 'USD';
+      else if (s.endsWith('.L')) holdingCurrency = 'GBP';
+      else if (s.endsWith('.T')) holdingCurrency = 'JPY';
+      else if (s.endsWith('.TO')) holdingCurrency = 'CAD';
+      else if (s.endsWith('.AX')) holdingCurrency = 'AUD';
+      else if (s.endsWith('.HK')) holdingCurrency = 'HKD';
+      else if (s.endsWith('.PA') || s.endsWith('.DE')) holdingCurrency = 'EUR';
+      else if (s.endsWith('.SW')) holdingCurrency = 'CHF';
+      else holdingCurrency = 'USD'; // Default
+    }
+    holdingCurrency = String(holdingCurrency).toUpperCase();
+
     const rawPositionValue = last * positions[sym];
     const rawChange = chg * positions[sym];
     const baseValue = convertCurrency(fxRates, rawPositionValue, holdingCurrency, base);
-    value += baseValue;
+    holdingsValue += baseValue;
     deltaToday += convertCurrency(fxRates, rawChange, holdingCurrency, base);
     valuesPerSym[sym] = baseValue;
   });
@@ -85,12 +103,44 @@ function usePortfolioMetrics(p: Portfolio, quotes: any, currency: string, fxRate
   Object.values(p.holdings || {}).forEach((h: any) => {
     const lots = h?.lots || [];
     if (!lots.length) return;
-    const last = Number((quotes[h.symbol]?.last) || 0);
-    const pnl = computePnL(lots, last);
-    const holdingCurrency = String(h?.currency || 'USD').toUpperCase();
-    totalGain += convertCurrency(fxRates, (pnl.realized + pnl.unrealized), holdingCurrency, base);
+    const sym = h.symbol;
+
+    // Get ticker currency: use holding metadata, or infer from symbol
+    let holdingCurrency = h?.currency;
+    if (!holdingCurrency) {
+      const s = sym.toUpperCase();
+      if (s.includes('-USD') || s.includes('USD')) holdingCurrency = 'USD';
+      else if (s.endsWith('.L')) holdingCurrency = 'GBP';
+      else if (s.endsWith('.T')) holdingCurrency = 'JPY';
+      else if (s.endsWith('.TO')) holdingCurrency = 'CAD';
+      else if (s.endsWith('.AX')) holdingCurrency = 'AUD';
+      else if (s.endsWith('.HK')) holdingCurrency = 'HKD';
+      else if (s.endsWith('.PA') || s.endsWith('.DE')) holdingCurrency = 'EUR';
+      else if (s.endsWith('.SW')) holdingCurrency = 'CHF';
+      else holdingCurrency = 'USD';
+    }
+    holdingCurrency = String(holdingCurrency).toUpperCase();
+
+    // Convert last price from ticker native currency to investment currency
+    const lastNative = Number((quotes[sym]?.last) || 0);
+    const last = convertCurrency(fxRates, lastNative, holdingCurrency, base);
+
+    // Convert lot prices too
+    const normalizedLots = lots.map((l: any) => ({
+      ...l,
+      price: convertCurrency(fxRates, l.price || 0, holdingCurrency, base),
+      fee: convertCurrency(fxRates, (l.fee ?? l.fees) || 0, holdingCurrency, base)
+    }));
+
+    const pnl = computePnL(normalizedLots, last);
+    totalGain += (pnl.realized || 0) + (pnl.unrealized || 0);
   });
 
+  // Add cash to the total value (convert from portfolio base currency to investment currency)
+  const cashInPortfolioCurrency = Number(p.cash || 0);
+  const portfolioBaseCurrency = String(p.baseCurrency || 'USD').toUpperCase();
+  const cashValue = convertCurrency(fxRates, cashInPortfolioCurrency, portfolioBaseCurrency, base);
+  const value = holdingsValue + cashValue;
 
   const total = value || 1;
   const top = Object.entries(valuesPerSym)
@@ -187,6 +237,10 @@ const PortfolioListCard = React.memo(({ selectionMode, selectedIds, onToggleSele
   const setActive = useInvestStore(s => s.setActivePortfolio);
   const activePortfolioId = useInvestStore(s => s.activePortfolioId);
   const fxRates = useInvestStore(s => s.fxRates);
+  const { profile } = useProfileStore();
+
+  // Get investment currency from profile
+  const investCurrency = (profile.investCurrency || profile.currency || 'USD').toUpperCase();
 
   const safeToken = React.useCallback((token: string, fallback: string) => {
     try {
@@ -282,27 +336,12 @@ const PortfolioListCard = React.memo(({ selectionMode, selectedIds, onToggleSele
             accessibilityRole="button"
             accessibilityLabel="Open portfolio menu"
             onPress={openMenu}
-            style={{ borderRadius: radius.lg }}
+            style={({ pressed }) => ({
+              padding: spacing.s8,
+              opacity: pressed ? 0.6 : 1,
+            })}
           >
-            {({ pressed }) => (
-              <LinearGradient
-                colors={[
-                  withAlpha(accentPalette[0]?.chip || get('accent.primary') as string, pressed ? 0.88 : 0.72),
-                  withAlpha(accentPalette[1]?.chip || get('accent.secondary') as string, pressed ? 0.74 : 0.52),
-                ]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: radius.lg,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Icon name="more-horizontal" colorToken="text.onPrimary" />
-              </LinearGradient>
-            )}
+            <Icon name="more-horizontal" colorToken="text.muted" size={24} />
           </Pressable>
         )}
       </View>
@@ -342,8 +381,10 @@ const PortfolioListCard = React.memo(({ selectionMode, selectedIds, onToggleSele
         ) : null}
         {items.map((p, index) => {
           const accent = accentPalette[index % accentPalette.length];
-          const { value, deltaToday, totalGain, top, hasHoldings } = usePortfolioMetrics(p, quotes, p.baseCurrency || 'USD', fxRates);
-          const cur = (p.baseCurrency || 'USD').toUpperCase();
+          // Use portfolio's own currency for display
+          const portfolioCurrency = (p.baseCurrency || 'USD').toUpperCase();
+          const { value, deltaToday, totalGain, top, hasHoldings } = usePortfolioMetrics(p, quotes, portfolioCurrency, fxRates);
+          const cur = portfolioCurrency;
           const textPrimary = get('text.onSurface') as string;
           const textMuted = get('text.muted') as string;
           const isActive = activePortfolioId === p.id;
@@ -380,22 +421,16 @@ const PortfolioListCard = React.memo(({ selectionMode, selectedIds, onToggleSele
                 {isSelected ? <Icon name="check" size={18} colorToken="text.onPrimary" /> : null}
               </View>
             )
-            : isActive ? (
-              <View
-                style={{
-                  paddingHorizontal: spacing.s10,
-                  paddingVertical: spacing.s4,
-                  borderRadius: radius.pill,
-                  backgroundColor: withAlpha(accent.chip, isDark ? 0.5 : 0.2),
-                  borderWidth: 1,
-                  borderColor: withAlpha(accent.chip, isDark ? 0.6 : 0.3),
-                }}
-              >
-                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 11, letterSpacing: 0.4 }}>ACTIVE</Text>
-              </View>
-            ) : null;
-          const metaLine = `${(p.type || 'Live')} · ${cur}${p.benchmark ? ` · vs ${p.benchmark}` : ''}${p.archived ? ' · Archived' : ''}`;
+            : null;
+          const baseCur = (p.baseCurrency || 'USD').toUpperCase();
+          const metaLine = `${(p.type || 'Live')}${p.benchmark ? ` · vs ${p.benchmark}` : ''}${p.archived ? ' · Archived' : ''}`;
           const positionsLabel = holdingsCount === 1 ? '1 position' : `${holdingsCount} positions`;
+
+          // Calculate cash holdings in investment currency
+          const cashInPortfolioCurrency = Number(p.cash || 0);
+          const portfolioBaseCurrency = String(p.baseCurrency || 'USD').toUpperCase();
+          const cashValue = convertCurrency(fxRates, cashInPortfolioCurrency, portfolioBaseCurrency, cur);
+          const cashLabel = `Cash ${formatCurrency(cashValue, cur, { compact: true })}`;
           const gainColor = totalGain >= 0 ? successColor : dangerColor;
 
           const handlePress = () => {
@@ -430,24 +465,33 @@ const PortfolioListCard = React.memo(({ selectionMode, selectedIds, onToggleSele
                 borderRadius: radius.lg,
                 backgroundColor: get('surface.level1') as string,
                 padding: spacing.s16,
-                gap: spacing.s12,
+                gap: 0,
                 opacity: pressed ? 0.7 : 1,
               })}
             >
                   {/* Header Row */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <View style={{ flex: 1, gap: spacing.s2 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                    <View style={{ flex: 1 }}>
                       <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }} numberOfLines={1}>{p.name}</Text>
-                      <Text style={{ color: textMuted, fontSize: 12 }} numberOfLines={1}>{positionsLabel} • {cur}</Text>
                     </View>
-                    {annotation}
+                    {annotation || (
+                      <View style={{ alignItems: 'flex-end', gap: spacing.s2 }}>
+                        <Text style={{ color: textMuted, fontSize: 12 }}>{positionsLabel}</Text>
+                        <Text style={{ color: textMuted, fontSize: 12 }}>{cashLabel}</Text>
+                      </View>
+                    )}
                   </View>
 
                   {/* Value & Today's Change */}
                   <View>
-                    <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800' }}>
-                      {formatCurrency(value, cur)}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                      <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800' }}>
+                        {value.toFixed(2)}
+                      </Text>
+                      <Text style={{ color: textMuted, fontSize: 13, marginLeft: spacing.s4, fontWeight: '600' }}>
+                        {cur}
+                      </Text>
+                    </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, marginTop: spacing.s4 }}>
                       <Text style={{ color: deltaToday >= 0 ? successColor : dangerColor, fontWeight: '600', fontSize: 13 }}>
                         Today: {deltaToday >= 0 ? '+' : ''}{formatCurrency(deltaToday, cur)}
@@ -461,7 +505,7 @@ const PortfolioListCard = React.memo(({ selectionMode, selectedIds, onToggleSele
 
                   {/* Top Holdings - Compact */}
                   {hasHoldings && top.length > 0 && (
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s6 }}>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s6, marginTop: spacing.s8 }}>
                       {top.slice(0, 3).map((s, i) => {
                         const pct = Math.round(s.w * 100);
                         return (
@@ -495,7 +539,6 @@ const PortfolioListCard = React.memo(({ selectionMode, selectedIds, onToggleSele
           {
             key: 'add',
             label: 'Add portfolio',
-            description: 'Create a fresh collection with its own base currency',
             icon: 'plus-circle',
             iconToken: 'accent.primary',
             onPress: () => { if (onCreate) onCreate(); },
@@ -503,15 +546,13 @@ const PortfolioListCard = React.memo(({ selectionMode, selectedIds, onToggleSele
           {
             key: 'reorder',
             label: 'Reorder portfolios',
-            description: 'Drag & drop to match your daily workflow',
             icon: 'sort',
             iconToken: 'accent.secondary',
             onPress: () => { if (onOpenManager) onOpenManager(); },
           },
           {
             key: 'delete',
-            label: 'Delete portfolios…',
-            description: 'Archive or remove the sets you no longer need',
+            label: 'Delete portfolios',
             icon: 'trash',
             iconToken: 'semantic.danger',
             onPress: () => onStartDeleteMode && onStartDeleteMode(),

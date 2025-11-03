@@ -5,12 +5,14 @@ import BottomSheet from '../BottomSheet';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
 import { useInvestStore } from '../../store/invest';
+import { useProfileStore } from '../../store/profile';
 import HoldingRow from './HoldingRow';
 import WatchRow from './WatchRow';
 import Icon, { type IconName } from '../Icon';
 import PopoverMenu from '../PopoverMenu';
 import { computePnL } from '../../lib/positions';
 import { formatCurrency } from '../../lib/format';
+import { convertCurrency } from '../../lib/fx';
 import { exportPortfolioCsv } from '../../lib/export';
 import CashEditorSheet from './CashEditorSheet';
 
@@ -25,7 +27,7 @@ type Props = {
   onAddWatchlist?: () => void;
   onOpenManager?: () => void;
   dimmed?: boolean;
-  defaultTab?: 'Holdings' | 'Watchlist';
+  defaultTab?: 'Holdings' | 'Watchlist' | 'Cash';
 };
 
 type Summary = {
@@ -39,7 +41,9 @@ type Summary = {
   openHoldings: string[];
 };
 
-const TAB_ITEMS = ['Holdings', 'Watchlist'] as const;
+const TAB_ITEMS = ['Holdings', 'Watchlist', 'Cash'] as const;
+
+console.log('🔍 [PortfolioDetailSheet] TAB_ITEMS:', TAB_ITEMS);
 
 export default function PortfolioDetailSheet({
   portfolioId,
@@ -60,7 +64,9 @@ export default function PortfolioDetailSheet({
   const nav = useNavigation<any>();
   const { portfolios } = useInvestStore();
   const quotes = useInvestStore(s => s.quotes);
+  const fxRates = useInvestStore(s => s.fxRates);
   const archivePortfolio = useInvestStore(s => (s as any).archivePortfolio);
+  const { profile } = useProfileStore();
 
   const p = portfolioId ? portfolios[portfolioId] : null;
 
@@ -88,7 +94,10 @@ export default function PortfolioDetailSheet({
 
   const summary = React.useMemo<Summary | null>(() => {
     if (!p) return null;
-    const base = String(p.baseCurrency || 'USD').toUpperCase();
+
+    // Use portfolio's own currency
+    const base = (p.baseCurrency || 'USD').toUpperCase();
+
     let holdingsValue = 0;
     let dayDelta = 0;
     let totalGain = 0;
@@ -100,12 +109,41 @@ export default function PortfolioDetailSheet({
       if (qty <= 0) return;
       const sym = h.symbol;
       const q = quotes[sym];
-      const last = Number(q?.last || 0);
-      const change = Number(q?.change || 0);
+
+      // Get ticker currency: use holding metadata, or infer from symbol
+      let holdingCurrency = h.currency;
+      if (!holdingCurrency) {
+        // Infer from symbol pattern
+        const s = sym.toUpperCase();
+        if (s.includes('-USD') || s.includes('USD')) holdingCurrency = 'USD';
+        else if (s.endsWith('.L')) holdingCurrency = 'GBP';
+        else if (s.endsWith('.T')) holdingCurrency = 'JPY';
+        else if (s.endsWith('.TO')) holdingCurrency = 'CAD';
+        else if (s.endsWith('.AX')) holdingCurrency = 'AUD';
+        else if (s.endsWith('.HK')) holdingCurrency = 'HKD';
+        else if (s.endsWith('.PA') || s.endsWith('.DE')) holdingCurrency = 'EUR';
+        else if (s.endsWith('.SW')) holdingCurrency = 'CHF';
+        else holdingCurrency = 'USD'; // Default
+      }
+      holdingCurrency = String(holdingCurrency).toUpperCase();
+
+      // Convert prices from ticker native currency to investment currency
+      const lastNative = Number(q?.last || 0);
+      const changeNative = Number(q?.change || 0);
+      const last = convertCurrency(fxRates, lastNative, holdingCurrency, base);
+      const change = convertCurrency(fxRates, changeNative, holdingCurrency, base);
+
       const positionValue = qty * last;
       holdingsValue += positionValue;
       dayDelta += change * qty;
-      const pnl = computePnL(lots, last);
+
+      // Convert lot prices for P&L calculation
+      const normalizedLots = lots.map((l: any) => ({
+        ...l,
+        price: convertCurrency(fxRates, l.price || 0, holdingCurrency, base),
+        fee: convertCurrency(fxRates, (l.fee ?? l.fees) || 0, holdingCurrency, base)
+      }));
+      const pnl = computePnL(normalizedLots, last);
       totalGain += (pnl.realized || 0) + (pnl.unrealized || 0);
       openRows.push({ sym, value: positionValue });
     });
@@ -122,7 +160,7 @@ export default function PortfolioDetailSheet({
       positions: sorted.length,
       openHoldings: sorted.map(row => row.sym),
     };
-  }, [p, quotes]);
+  }, [p, quotes, fxRates, profile.investCurrency, profile.currency]);
 
   const textPrimary = get('text.onSurface') as string;
   const textMuted = get('text.muted') as string;
@@ -326,9 +364,14 @@ export default function PortfolioDetailSheet({
                   <Text style={{ color: textMuted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '600', marginBottom: spacing.s4 }}>
                     Total Value
                   </Text>
-                  <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800' }}>
-                    {formatCurrency(summary?.totalValue || 0, summary?.base || 'USD')}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                    <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.8 }}>
+                      {(summary?.totalValue || 0).toFixed(2)}
+                    </Text>
+                    <Text style={{ color: textMuted, fontSize: 14, marginLeft: spacing.s6, fontWeight: '600' }}>
+                      {summary?.base || 'USD'}
+                    </Text>
+                  </View>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
                   <View style={{ flex: 1 }}>
@@ -458,13 +501,14 @@ export default function PortfolioDetailSheet({
                   />
                 )}
               </View>
-            ) : (
+            ) : tab === 'Watchlist' ? (
               <View>
                 {watchlistSyms.length ? (
                   watchlistSyms.map((sym, index) => (
                     <React.Fragment key={sym}>
                       <WatchRow
                         sym={sym}
+                        portfolioCurrency={summary?.base}
                         onPress={() => {
                           // Close the sheet before navigating
                           onClose();
@@ -483,6 +527,29 @@ export default function PortfolioDetailSheet({
                     onPressAction={onAddWatchlist}
                   />
                 )}
+              </View>
+            ) : (
+              <View style={{ paddingVertical: spacing.s24, gap: spacing.s16 }}>
+                <View style={{ alignItems: 'center', gap: spacing.s8 }}>
+                  <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800' }}>
+                    {formatCurrency(summary.cashValue, summary.base)}
+                  </Text>
+                  <Text style={{ color: textMuted, fontSize: 14 }}>Available Cash</Text>
+                </View>
+                <Pressable
+                  onPress={() => setShowCashEditor(true)}
+                  style={({ pressed }) => ({
+                    backgroundColor: get('component.button.primary.bg') as string,
+                    paddingVertical: spacing.s12,
+                    borderRadius: radius.md,
+                    alignItems: 'center',
+                    opacity: pressed ? 0.8 : 1,
+                  })}
+                >
+                  <Text style={{ color: get('text.onPrimary') as string, fontWeight: '700', fontSize: 15 }}>
+                    Adjust Cash
+                  </Text>
+                </Pressable>
               </View>
             )}
           </ScrollView>
@@ -583,6 +650,7 @@ function SegmentedControl({
       }}
     >
       {TAB_ITEMS.map(tab => {
+        console.log('🎨 Rendering tab:', tab);
         const active = tab === value;
         return (
           <Pressable
@@ -597,9 +665,11 @@ function SegmentedControl({
             }}
           >
             <Text
+              numberOfLines={1}
               style={{
                 color: active ? get('text.onPrimary') as string : get('text.muted') as string,
                 fontWeight: '700',
+                fontSize: 13,
               }}
             >
               {tab}

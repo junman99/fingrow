@@ -19,7 +19,7 @@ function withAlpha(hex: string, alpha: number) {
 
 function fmtMoney(n: number) {
   try { return new Intl.NumberFormat(undefined, { style:'currency', currency:'SGD', maximumFractionDigits:0 }).format(n); }
-  catch { return `S$${n.toFixed(0)}`; }
+  catch { return `S$${n.toFixed(2)}`; }
 }
 
 function formatDate(d: Date) {

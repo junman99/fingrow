@@ -4,6 +4,8 @@ import { FMP_API_KEY } from '../config/secrets';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
+export type AITier = 'free' | 'premium';
+
 export type Profile = {
   id: string;
   name: string;
@@ -11,6 +13,7 @@ export type Profile = {
   email: string;
   avatarUri?: string;
   currency: string;
+  investCurrency?: string; // Separate currency for investment portfolios
   budgetCycleDay: number;
   monthlyBudget?: number;
   monthlySavingsGoal?: number;
@@ -23,6 +26,7 @@ export type Profile = {
   };
   analyticsOptIn: boolean;
   tier: 'Starter' | 'Plus';
+  aiTier: AITier; // AI Assistant tier
   dataSource?: 'yahoo' | 'fmp';
   fmpApiKey?: string;
   createdAt: string;
@@ -49,6 +53,7 @@ const defaultProfile: Profile = {
   alerts: { budgetWarnings: true, largeTx: true, goalReminders: false },
   analyticsOptIn: false,
   tier: 'Starter',
+  aiTier: 'free', // Default AI tier
   dataSource: 'fmp',
   fmpApiKey: FMP_API_KEY,
   createdAt: new Date().toISOString(),

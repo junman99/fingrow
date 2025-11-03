@@ -311,13 +311,13 @@ export const Report: React.FC = () => {
             <View style={{ flex: 1 }}>
               <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s6 }}>Income</Text>
               <Text style={{ color: successColor, fontSize: 24, fontWeight: '800' }}>
-                ${currentMonthData.income.toFixed(0)}
+                ${currentMonthData.income.toFixed(2)}
               </Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s6 }}>Expenses</Text>
               <Text style={{ color: dangerColor, fontSize: 24, fontWeight: '800' }}>
-                ${currentMonthData.spending.toFixed(0)}
+                ${currentMonthData.spending.toFixed(2)}
               </Text>
             </View>
             <View style={{ flex: 1 }}>
@@ -327,7 +327,7 @@ export const Report: React.FC = () => {
                 fontSize: 24,
                 fontWeight: '800'
               }}>
-                {currentMonthData.savings >= 0 ? '+' : ''}${currentMonthData.savings.toFixed(0)}
+                {currentMonthData.savings >= 0 ? '+' : ''}${currentMonthData.savings.toFixed(2)}
               </Text>
             </View>
           </View>
@@ -381,7 +381,7 @@ export const Report: React.FC = () => {
 
           <View>
             <Text style={{ color: textPrimary, fontSize: 42, fontWeight: '800', letterSpacing: -1.5 }}>
-              ${(includeCPF ? netWorthData.withCPF : netWorthData.withoutCPF).toFixed(0)}
+              ${(includeCPF ? netWorthData.withCPF : netWorthData.withoutCPF).toFixed(2)}
             </Text>
             <Text style={{ color: textMuted, fontSize: 14, marginTop: spacing.s4 }}>
               {includeCPF ? 'Including CPF' : 'Excluding CPF'}
@@ -393,19 +393,19 @@ export const Report: React.FC = () => {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ color: textMuted, fontSize: 14 }}>Cash & Savings</Text>
               <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>
-                ${netWorthData.cash.toFixed(0)}
+                ${netWorthData.cash.toFixed(2)}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ color: textMuted, fontSize: 14 }}>CPF</Text>
               <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>
-                ${netWorthData.cpf.toFixed(0)}
+                ${netWorthData.cpf.toFixed(2)}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ color: textMuted, fontSize: 14 }}>Investments</Text>
               <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>
-                ${netWorthData.stocks.toFixed(0)}
+                ${netWorthData.stocks.toFixed(2)}
               </Text>
             </View>
             <View style={{
@@ -418,7 +418,7 @@ export const Report: React.FC = () => {
             }}>
               <Text style={{ color: textMuted, fontSize: 14 }}>Liabilities</Text>
               <Text style={{ color: dangerColor, fontWeight: '700', fontSize: 16 }}>
-                ${netWorthData.debts.toFixed(0)}
+                ${netWorthData.debts.toFixed(2)}
               </Text>
             </View>
           </View>
@@ -480,10 +480,10 @@ export const Report: React.FC = () => {
                 >
                   <Text style={{ width: 70, color: textPrimary, fontSize: 13, fontWeight: '600' }}>{month.label}</Text>
                   <Text style={{ width: 80, color: successColor, fontSize: 13, fontWeight: '600', textAlign: 'right' }}>
-                    ${month.income.toFixed(0)}
+                    ${month.income.toFixed(2)}
                   </Text>
                   <Text style={{ width: 80, color: dangerColor, fontSize: 13, fontWeight: '600', textAlign: 'right' }}>
-                    ${month.spending.toFixed(0)}
+                    ${month.spending.toFixed(2)}
                   </Text>
                   <Text style={{
                     width: 80,
@@ -492,19 +492,19 @@ export const Report: React.FC = () => {
                     fontWeight: '600',
                     textAlign: 'right'
                   }}>
-                    {month.savings >= 0 ? '+' : ''}${month.savings.toFixed(0)}
+                    {month.savings >= 0 ? '+' : ''}${month.savings.toFixed(2)}
                   </Text>
                   <Text style={{ width: 80, color: textPrimary, fontSize: 13, fontWeight: '600', textAlign: 'right' }}>
-                    ${month.cash.toFixed(0)}
+                    ${month.cash.toFixed(2)}
                   </Text>
                   <Text style={{ width: 80, color: textPrimary, fontSize: 13, fontWeight: '600', textAlign: 'right' }}>
-                    ${month.cpf.toFixed(0)}
+                    ${month.cpf.toFixed(2)}
                   </Text>
                   <Text style={{ width: 80, color: textPrimary, fontSize: 13, fontWeight: '600', textAlign: 'right' }}>
-                    ${month.stocks.toFixed(0)}
+                    ${month.stocks.toFixed(2)}
                   </Text>
                   <Text style={{ width: 100, color: accentPrimary, fontSize: 13, fontWeight: '700', textAlign: 'right' }}>
-                    ${(includeCPF ? month.netWorth : month.netWorthExCPF).toFixed(0)}
+                    ${(includeCPF ? month.netWorth : month.netWorthExCPF).toFixed(2)}
                   </Text>
                   <Text style={{ width: 80, color: textMuted, fontSize: 13, fontWeight: '600', textAlign: 'right' }}>
                     {month.income > 0 ? ((month.savings / month.income) * 100).toFixed(1) : '0'}%
@@ -531,25 +531,25 @@ export const Report: React.FC = () => {
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <Text style={{ color: textMuted, fontSize: 12 }}>Net Worth ({includeCPF ? 'Inc' : 'Exc'} CPF):</Text>
                   <Text style={{ color: accentPrimary, fontSize: 12, fontWeight: '700' }}>
-                    ${(includeCPF ? monthsData[selectedDataPoint].netWorth : monthsData[selectedDataPoint].netWorthExCPF).toFixed(0)}
+                    ${(includeCPF ? monthsData[selectedDataPoint].netWorth : monthsData[selectedDataPoint].netWorthExCPF).toFixed(2)}
                   </Text>
                 </View>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <Text style={{ color: textMuted, fontSize: 12 }}>Cash Balance:</Text>
                   <Text style={{ color: textPrimary, fontSize: 12, fontWeight: '600' }}>
-                    ${monthsData[selectedDataPoint].cash.toFixed(0)}
+                    ${monthsData[selectedDataPoint].cash.toFixed(2)}
                   </Text>
                 </View>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <Text style={{ color: textMuted, fontSize: 12 }}>CPF Balance:</Text>
                   <Text style={{ color: textPrimary, fontSize: 12, fontWeight: '600' }}>
-                    ${monthsData[selectedDataPoint].cpf.toFixed(0)}
+                    ${monthsData[selectedDataPoint].cpf.toFixed(2)}
                   </Text>
                 </View>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <Text style={{ color: textMuted, fontSize: 12 }}>Stocks Value:</Text>
                   <Text style={{ color: textPrimary, fontSize: 12, fontWeight: '600' }}>
-                    ${monthsData[selectedDataPoint].stocks.toFixed(0)}
+                    ${monthsData[selectedDataPoint].stocks.toFixed(2)}
                   </Text>
                 </View>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -737,7 +737,7 @@ export const Report: React.FC = () => {
                     {cat.name}
                   </Text>
                   <Text style={{ color: warningColor, fontWeight: '800', fontSize: 18 }}>
-                    ${cat.total.toFixed(0)}
+                    ${cat.total.toFixed(2)}
                   </Text>
                 </View>
 
@@ -765,7 +765,7 @@ export const Report: React.FC = () => {
                         </Text>
                       </View>
                       <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 14 }}>
-                        ${Math.abs(Number(tx.amount) || 0).toFixed(0)}
+                        ${Math.abs(Number(tx.amount) || 0).toFixed(2)}
                       </Text>
                     </View>
                   ))}
@@ -827,7 +827,7 @@ export const Report: React.FC = () => {
                   </Text>
                 </View>
                 <Text style={{ color: dangerColor, fontWeight: '800', fontSize: 18 }}>
-                  ${Number(debt.remaining || 0).toFixed(0)}
+                  ${Number(debt.remaining || 0).toFixed(2)}
                 </Text>
               </View>
             ))}
@@ -841,7 +841,7 @@ export const Report: React.FC = () => {
             }}>
               <Text style={{ color: textMuted, fontSize: 14, fontWeight: '600' }}>Total Liabilities</Text>
               <Text style={{ color: dangerColor, fontSize: 18, fontWeight: '800' }}>
-                ${netWorthData.debts.toFixed(0)}
+                ${netWorthData.debts.toFixed(2)}
               </Text>
             </View>
           </View>

@@ -41,6 +41,7 @@ const AddFabButton: React.FC<AddFabProps> = ({ anim, accent, textColor, onPress 
       backgroundColor: accent,
       overflow: 'hidden',
       alignSelf: 'flex-end',
+      opacity: 0.7,
       ...(elevation.level3 as any)
     }}>
       <Pressable

@@ -163,16 +163,28 @@ export default function AddHoldingSheet({ visible, onClose, portfolioId, mode='h
         }
       }
     } else {
-      const cur = ((profile?.currency) || 'USD').toUpperCase();
       const addHolding = (useInvestStore.getState() as any).addHolding;
       const addedSymbols: string[] = [];
       for (const k of keys) {
         const providerCode = k.split(':')[0];
         const sym = k.split(':').slice(1).join(':');
         const type = providerCode === 'C' ? 'crypto' : 'stock';
+
+        // Detect ticker's NATIVE currency from symbol pattern
+        let tickerCurrency = 'USD'; // Default
+        const s = sym.toUpperCase();
+        if (s.includes('-USD') || s.includes('USD')) tickerCurrency = 'USD';
+        else if (s.endsWith('.L')) tickerCurrency = 'GBP';
+        else if (s.endsWith('.T')) tickerCurrency = 'JPY';
+        else if (s.endsWith('.TO')) tickerCurrency = 'CAD';
+        else if (s.endsWith('.AX')) tickerCurrency = 'AUD';
+        else if (s.endsWith('.HK')) tickerCurrency = 'HKD';
+        else if (s.endsWith('.PA') || s.endsWith('.DE')) tickerCurrency = 'EUR';
+        else if (s.endsWith('.SW')) tickerCurrency = 'CHF';
+
         try {
-          console.log('➕ [AddHoldingSheet] Adding holding:', sym, 'type:', type, 'currency:', cur, 'to portfolio:', pid);
-          await addHolding(sym, { name: sym, type, currency: cur }, { portfolioId: pid });
+          console.log('➕ [AddHoldingSheet] Adding holding:', sym, 'type:', type, 'currency:', tickerCurrency, 'to portfolio:', pid);
+          await addHolding(sym, { name: sym, type, currency: tickerCurrency }, { portfolioId: pid });
           console.log('✅ [AddHoldingSheet] Successfully added holding:', sym);
           addedSymbols.push(sym);
         } catch (err) {

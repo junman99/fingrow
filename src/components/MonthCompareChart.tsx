@@ -274,13 +274,13 @@ export const MonthCompareChart: React.FC = () => {
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s10 }}>
         <View style={{ flex: 1, paddingRight: spacing.s10 }}>
           <Text style={{ color: textMuted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: '600' }}>Month pace</Text>
-          <Text style={{ color: textPrimary, fontSize: 26, fontWeight: '800', marginTop: spacing.s2 }}>${sumThis.toFixed(0)}</Text>
+          <Text style={{ color: textPrimary, fontSize: 26, fontWeight: '800', marginTop: spacing.s2 }}>${sumThis.toFixed(2)}</Text>
           <View style={{ flexDirection: 'row', gap: spacing.s6, marginTop: spacing.s6 }}>
             <View style={{ backgroundColor: surface2, borderRadius: radius.pill, paddingHorizontal: spacing.s10, paddingVertical: spacing.s6 }}>
-              <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600' }}>{`Avg ${avgPerDay ? `$${avgPerDay.toFixed(0)}/day` : '$0/day'}`}</Text>
+              <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600' }}>{`Avg ${avgPerDay ? `$${avgPerDay.toFixed(2)}/day` : '$0/day'}`}</Text>
             </View>
             <View style={{ backgroundColor: surface2, borderRadius: radius.pill, paddingHorizontal: spacing.s10, paddingVertical: spacing.s6 }}>
-              <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600' }}>{`Prev ${sumPrev ? `$${sumPrev.toFixed(0)}` : '$0'}`}</Text>
+              <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600' }}>{`Prev ${sumPrev ? `$${sumPrev.toFixed(2)}` : '$0'}`}</Text>
             </View>
           </View>
         </View>
@@ -303,7 +303,7 @@ export const MonthCompareChart: React.FC = () => {
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600' }}>vs last month</Text>
             <Text style={{ color: paceColor, fontWeight: '700' }}>
-              {pace === 0 ? 'Even' : `${pace > 0 ? '+' : '-'}$${Math.abs(pace).toFixed(0)}`}
+              {pace === 0 ? 'Even' : `${pace > 0 ? '+' : '-'}$${Math.abs(pace).toFixed(2)}`}
             </Text>
           </View>
         </View>
@@ -442,8 +442,8 @@ export const MonthCompareChart: React.FC = () => {
               }}
             >
               <Text style={{ color: textMuted, fontSize: 11 }}>{dateLabel}</Text>
-              <Text style={{ color: textPrimary, fontWeight: '700' }}>{`$${daySpend.toFixed(0)} spent`}</Text>
-              <Text style={{ color: textMuted, fontSize: 11 }}>{`MTD $${mtdAtDay.toFixed(0)}`}</Text>
+              <Text style={{ color: textPrimary, fontWeight: '700' }}>{`$${daySpend.toFixed(2)} spent`}</Text>
+              <Text style={{ color: textMuted, fontSize: 11 }}>{`MTD $${mtdAtDay.toFixed(2)}`}</Text>
             </View>
           )}
         </View>
@@ -718,9 +718,9 @@ export const MonthCompareChartClassic: React.FC = () => {
       {/* Header row: Stats only (title moved to page header) */}
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'flex-end', marginBottom: spacing.s6 }}>
         <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>{'Total Spent $' + sumThis.toFixed(0)}</Text>
+          <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>{'Total Spent $' + sumThis.toFixed(2)}</Text>
           <Text style={{ color: get('text.muted') as string }}>
-            {'$' + avgPerDay.toFixed(0) + '/day'}
+            {'$' + avgPerDay.toFixed(2) + '/day'}
           </Text>
         </View>
       </View>
@@ -855,8 +855,8 @@ export const MonthCompareChartClassic: React.FC = () => {
             }}
           >
             <Text style={{ color: get('text.muted') as string, fontSize: 11 }}>{dateLabel}</Text>
-            <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>{`Day: $${daySpend.toFixed(0)}`}</Text>
-            <Text style={{ color: get('text.muted') as string, fontSize: 11 }}>{`MTD: $${mtdAtDay.toFixed(0)}`}</Text>
+            <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>{`Day: $${daySpend.toFixed(2)}`}</Text>
+            <Text style={{ color: get('text.muted') as string, fontSize: 11 }}>{`MTD: $${mtdAtDay.toFixed(2)}`}</Text>
           </View>
         )}
       </View>

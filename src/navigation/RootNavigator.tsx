@@ -20,6 +20,9 @@ import GoalsNavigator from './GoalsNavigator';
 import InvestNavigator from './InvestNavigator';
 import Add from '../screens/Add';
 import EditTransaction from '../screens/EditTransaction';
+import AIAssistant from '../screens/AIAssistant';
+import AIPrivacyInfo from '../screens/AIPrivacyInfo';
+import FloatingAIButton from '../components/FloatingAIButton';
 import { useTheme, useThemeTokens } from '../theme/ThemeProvider';
 import Icon from '../components/Icon';
 
@@ -103,6 +106,8 @@ type RootParamList = {
   Bills: undefined;
   BillEditor: undefined;
   Envelopes: undefined;
+  AIAssistant: undefined;
+  AIPrivacyInfo: undefined;
 };
 
 const Root = createNativeStackNavigator<RootParamList>();
@@ -123,7 +128,12 @@ export default function RootNavigator() {
         <Root.Screen name="Bills" component={BillsModal} options={{ presentation: 'modal', headerShown: false }} />
         <Root.Screen name="BillEditor" component={BillEditor} options={{ presentation: 'modal', headerShown: false }} />
         <Root.Screen name="Envelopes" component={EnvelopesEditor} options={{ presentation: 'modal', headerShown: false }} />
+        <Root.Screen name="AIAssistant" component={AIAssistant} options={{ presentation: 'modal', headerShown: false }} />
+        <Root.Screen name="AIPrivacyInfo" component={AIPrivacyInfo} options={{ presentation: 'modal', headerShown: false }} />
       </Root.Navigator>
+
+      {/* Global Floating AI Button */}
+      <FloatingAIButton />
     </NavigationContainer>
   );
 }

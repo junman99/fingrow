@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, Platform, Alert } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
 import { Screen } from '../components/Screen';
@@ -58,9 +59,46 @@ export default function CashManagement() {
   }, [eventsWithBalance]);
 
   const [showCashEditor, setShowCashEditor] = React.useState(false);
+  const [editingEvent, setEditingEvent] = React.useState<{ date: string; amount: number; index: number } | null>(null);
 
   const text = get('text.primary') as string;
   const muted = get('text.muted') as string;
+
+  const handleEdit = (event: { date: string; amount: number }, index: number) => {
+    setEditingEvent({ ...event, index });
+    setShowCashEditor(true);
+  };
+
+  const handleDelete = async (event: { date: string; amount: number; balance: number }) => {
+    if (!p || !portfolioId) return;
+
+    Alert.alert(
+      'Delete Transaction',
+      `Delete ${event.amount > 0 ? 'deposit' : 'withdrawal'} of ${formatCurrency(Math.abs(event.amount), cur)}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Remove the cash event
+              const newEvents = cashEvents.filter(e => e.date !== event.date || e.amount !== event.amount);
+
+              // Update portfolio with new events list and adjusted cash
+              const newCash = currentCash - event.amount;
+              await store.updatePortfolio(portfolioId, {
+                cashEvents: newEvents,
+                cash: newCash
+              });
+            } catch (e) {
+              console.error('Error deleting cash transaction:', e);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // Calculate total deposits and withdrawals
   const totals = React.useMemo(() => {
@@ -83,7 +121,7 @@ export default function CashManagement() {
       >
         {/* Header with Back Button */}
         <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.s8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, marginBottom: spacing.s4 }}>
             <Pressable
               onPress={() => nav.goBack()}
               style={({ pressed }) => ({
@@ -96,11 +134,11 @@ export default function CashManagement() {
             >
               <Icon name="chevron-left" size={24} color={text} />
             </Pressable>
+            <Text style={{ color: text, fontWeight: '800', fontSize: 20 }}>
+              Cash Management
+            </Text>
           </View>
-          <Text style={{ color: text, fontWeight: '800', fontSize: 28, letterSpacing: -0.5 }}>
-            Cash Management
-          </Text>
-          <Text style={{ color: muted, fontSize: 14, marginTop: spacing.s2 }}>
+          <Text style={{ color: muted, fontSize: 14, marginLeft: spacing.s32 }}>
             {p?.name || 'Portfolio'}
           </Text>
         </View>
@@ -215,6 +253,50 @@ export default function CashManagement() {
           </Pressable>
         </View>
 
+        {/* Clear Events (Development/Debug Tool) */}
+        {cashEvents.length > 0 && (
+          <View style={{ paddingHorizontal: spacing.s16, marginBottom: spacing.s16 }}>
+            <Pressable
+              onPress={() => {
+                Alert.alert(
+                  'Clear All Cash Events',
+                  'This will clear all cash transaction history but keep your current cash balance. This is useful if you have incorrect events from stock trades. Continue?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Clear',
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          await store.updatePortfolio(portfolioId, { cashEvents: [] });
+                        } catch (e) {
+                          console.error('Error clearing cash events:', e);
+                        }
+                      },
+                    },
+                  ]
+                );
+              }}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: spacing.s8,
+                paddingVertical: spacing.s8,
+                borderRadius: radius.lg,
+                backgroundColor: pressed ? get('surface.level2') as string : 'transparent',
+                borderWidth: 1,
+                borderColor: get('semantic.danger') as string,
+              })}
+            >
+              <Icon name="trash-2" size={16} color={get('semantic.danger') as string} />
+              <Text style={{ color: get('semantic.danger') as string, fontWeight: '600', fontSize: 13 }}>
+                Clear All Events (Keep Balance)
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
         {/* Transaction History */}
         <View style={{ paddingHorizontal: spacing.s16 }}>
           <Text style={{ color: text, fontWeight: '800', fontSize: 18, marginBottom: spacing.s12 }}>
@@ -263,10 +345,57 @@ export default function CashManagement() {
                   {group.items.map((event, i) => {
                     const isDeposit = event.amount > 0;
                     const date = new Date(event.date);
+
+                    const renderRightActions = () => (
+                      <View style={{ flexDirection: 'row', alignItems: 'stretch', height: '100%' }}>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => handleEdit(event, i)}
+                          style={{
+                            width: 80,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: get('accent.primary') as string,
+                          }}
+                        >
+                          <Icon name="edit" size={20} colorToken="text.onPrimary" />
+                          <Text style={{
+                            color: get('text.onPrimary') as string,
+                            fontWeight: '700',
+                            fontSize: 13,
+                            marginTop: spacing.s4
+                          }}>
+                            Edit
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => handleDelete(event)}
+                          style={{
+                            width: 80,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: get('semantic.danger') as string,
+                          }}
+                        >
+                          <Icon name="trash" size={20} colorToken="text.onPrimary" />
+                          <Text style={{
+                            color: get('text.onPrimary') as string,
+                            fontWeight: '700',
+                            fontSize: 13,
+                            marginTop: spacing.s4
+                          }}>
+                            Delete
+                          </Text>
+                        </Pressable>
+                      </View>
+                    );
+
                     return (
                       <View key={i}>
-                        <View style={{ padding: spacing.s12 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
+                          <View style={{ padding: spacing.s12, backgroundColor: get('surface.level1') as string }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                             <View style={{ flex: 1 }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
                                 <View
@@ -282,7 +411,7 @@ export default function CashManagement() {
                                   }}
                                 >
                                   <Icon
-                                    name={isDeposit ? 'trending-down' : 'trending-up'}
+                                    name={isDeposit ? 'trending-up' : 'trending-down'}
                                     size={18}
                                     color={
                                       isDeposit
@@ -323,7 +452,8 @@ export default function CashManagement() {
                               </Text>
                             </View>
                           </View>
-                        </View>
+                          </View>
+                        </Swipeable>
                         {i < group.items.length - 1 ? (
                           <View
                             style={{
@@ -348,7 +478,7 @@ export default function CashManagement() {
           visible={showCashEditor}
           onClose={() => setShowCashEditor(false)}
           portfolioId={p.id}
-          currency={cur}
+          portfolioCurrency={cur}
         />
       )}
     </Screen>

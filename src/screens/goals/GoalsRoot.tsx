@@ -9,9 +9,12 @@ import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
 import { useGoalsStore, type Goal } from '../../store/goals';
 import { useAccountsStore } from '../../store/accounts';
+import { useInvestStore } from '../../store/invest';
+import { useTxStore } from '../../store/transactions';
 import { formatCurrency } from '../../lib/format';
 import Svg, { Circle, G } from 'react-native-svg';
 import { useStreaksStore, getStreakMessage, getNextMilestone } from '../../store/streaks';
+import { WealthJourneySheet } from '../../components/WealthJourneySheet';
 
 type TabType = 'milestone' | 'networth';
 
@@ -110,8 +113,11 @@ const GoalsRoot: React.FC = () => {
   const { get, isDark } = useThemeTokens();
   const { goals, achievements, level, xp, hydrate } = useGoalsStore();
   const { accounts } = useAccountsStore();
+  const { holdings, quotes } = useInvestStore();
+  const { transactions } = useTxStore();
   const { currentStreak, longestStreak, recordVisit, hydrate: hydrateStreaks } = useStreaksStore();
   const [activeTab, setActiveTab] = useState<TabType>('milestone');
+  const [showWealthJourney, setShowWealthJourney] = useState(false);
 
   useEffect(() => {
     hydrate();
@@ -128,6 +134,54 @@ const GoalsRoot: React.FC = () => {
       .filter(a => a.includeInNetWorth !== false)
       .reduce((sum, a) => sum + (a.balance || 0), 0);
   }, [accounts]);
+
+  // Calculate wealth journey data
+  const totalCash = useMemo(() => {
+    return accounts
+      .filter(a => a.includeInNetWorth !== false)
+      .reduce((sum, a) => sum + (a.balance || 0), 0);
+  }, [accounts]);
+
+  const totalInvestments = useMemo(() => {
+    let total = 0;
+    Object.values(holdings || {}).forEach((h: any) => {
+      const qty = (h?.lots || []).reduce((s: number, l: any) => s + (l.side === 'buy' ? l.qty : -l.qty), 0);
+      if (qty > 0) {
+        const q = quotes[h.symbol];
+        const last = Number(q?.last || 0);
+        total += qty * last;
+      }
+    });
+    return total;
+  }, [holdings, quotes]);
+
+  const totalDebt = useMemo(() => {
+    return accounts
+      .filter(a => a.type === 'debt')
+      .reduce((sum, a) => sum + Math.abs(a.balance || 0), 0);
+  }, [accounts]);
+
+  const netWorth = totalCash + totalInvestments - totalDebt;
+
+  // Calculate net worth history
+  const netWorthHistoryData = useMemo(() => {
+    const now = new Date();
+    const history: Array<{ t: number; cash: number; investments: number; debt: number }> = [];
+
+    // Simple placeholder - would need actual historical data
+    for (let i = 30; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      history.push({
+        t: date.getTime(),
+        cash: totalCash,
+        investments: totalInvestments,
+        debt: totalDebt,
+      });
+    }
+
+    return history;
+  }, [totalCash, totalInvestments, totalDebt]);
 
   const milestoneGoals = useMemo(() =>
     (goals || []).filter(g => (!g.type || g.type === 'milestone') && !g.completedAt),
@@ -292,25 +346,46 @@ const GoalsRoot: React.FC = () => {
           <Text style={{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.5 }}>
             Goals
           </Text>
-          {/* Achievements Badge - Always visible */}
-          <AnimatedPressable onPress={() => nav.navigate('AchievementsModal')}>
-            <View style={{
-              paddingHorizontal: spacing.s12,
-              paddingVertical: spacing.s8,
-              borderRadius: radius.pill,
-              backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: spacing.s6,
-              borderWidth: 1,
-              borderColor: withAlpha(accentPrimary, 0.3),
-            }}>
-              <Icon name="trophy" size={16} color={accentPrimary} />
-              <Text style={{ color: text, fontSize: 13, fontWeight: '700' }}>
-                {achievements.length > 0 ? `${achievements.length} Badge${achievements.length !== 1 ? 's' : ''}` : 'Badges'}
-              </Text>
-            </View>
-          </AnimatedPressable>
+          <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
+            {/* Wealth Journey Button */}
+            <AnimatedPressable onPress={() => setShowWealthJourney(true)}>
+              <View style={{
+                paddingHorizontal: spacing.s12,
+                paddingVertical: spacing.s8,
+                borderRadius: radius.pill,
+                backgroundColor: withAlpha(successColor, isDark ? 0.25 : 0.15),
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.s6,
+                borderWidth: 1,
+                borderColor: withAlpha(successColor, 0.3),
+              }}>
+                <Icon name="trending-up" size={16} color={successColor} />
+                <Text style={{ color: text, fontSize: 13, fontWeight: '700' }}>
+                  Journey
+                </Text>
+              </View>
+            </AnimatedPressable>
+            {/* Achievements Badge */}
+            <AnimatedPressable onPress={() => nav.navigate('AchievementsModal')}>
+              <View style={{
+                paddingHorizontal: spacing.s12,
+                paddingVertical: spacing.s8,
+                borderRadius: radius.pill,
+                backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.s6,
+                borderWidth: 1,
+                borderColor: withAlpha(accentPrimary, 0.3),
+              }}>
+                <Icon name="trophy" size={16} color={accentPrimary} />
+                <Text style={{ color: text, fontSize: 13, fontWeight: '700' }}>
+                  {achievements.length > 0 ? `${achievements.length} Badge${achievements.length !== 1 ? 's' : ''}` : 'Badges'}
+                </Text>
+              </View>
+            </AnimatedPressable>
+          </View>
         </View>
 
         {/* Streak Counter */}
@@ -531,6 +606,17 @@ const GoalsRoot: React.FC = () => {
           activeGoals.map(renderGoalCard)
         )}
       </View>
+
+      {/* Wealth Journey Sheet */}
+      <WealthJourneySheet
+        visible={showWealthJourney}
+        onClose={() => setShowWealthJourney(false)}
+        netWorth={netWorth}
+        totalCash={totalCash}
+        totalInvestments={totalInvestments}
+        totalDebt={totalDebt}
+        netWorthHistory={netWorthHistoryData.map(d => ({ t: d.t, v: d.cash + d.investments - d.debt }))}
+      />
     </ScreenScroll>
   );
 };

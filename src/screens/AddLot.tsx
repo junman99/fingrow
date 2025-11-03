@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Platform } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Platform, Image, Keyboard } from 'react-native';
 import { Screen } from '../components/Screen';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
@@ -14,6 +14,7 @@ import TransactionRow from '../components/invest/TransactionRow';
 import { formatCurrency, formatPercent } from '../lib/format';
 import { computePnL } from '../lib/positions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { convertCurrency } from '../lib/fx';
 
 export const AddLot = React.memo(() => {
   const [showTxSheet, setShowTxSheet] = React.useState(false);
@@ -30,11 +31,28 @@ export const AddLot = React.memo(() => {
   const quotes = useInvestStore(s => s.quotes);
   const portfolios = useInvestStore(s => s.portfolios);
   const holdings = useInvestStore(s => s.holdings);
+  const fxRates = useInvestStore(s => s.fxRates);
 
   const q: any = quotes[symbol] || {};
   const p = portfolioId ? portfolios[portfolioId] : null;
   const holding = portfolioId ? (p?.holdings?.[symbol]) : (holdings?.[symbol]);
-  const cur = (p?.baseCurrency || 'USD').toUpperCase();
+
+  // Get ticker's NATIVE currency (not portfolio base currency!)
+  const cur = React.useMemo(() => {
+    // Priority: holding metadata, then infer from symbol
+    if (holding?.currency) return holding.currency.toUpperCase();
+
+    const s = symbol.toUpperCase();
+    if (s.includes('-USD') || s.includes('USD')) return 'USD';
+    if (s.endsWith('.L')) return 'GBP';
+    if (s.endsWith('.T')) return 'JPY';
+    if (s.endsWith('.TO')) return 'CAD';
+    if (s.endsWith('.AX')) return 'AUD';
+    if (s.endsWith('.HK')) return 'HKD';
+    if (s.endsWith('.PA') || s.endsWith('.DE')) return 'EUR';
+    if (s.endsWith('.SW')) return 'CHF';
+    return 'USD'; // Default for US stocks
+  }, [symbol, holding?.currency]);
 
   // Build chart data from quotes (line/bars) -> [{t,v}]
   const chartData = React.useMemo(() => {
@@ -59,9 +77,33 @@ export const AddLot = React.memo(() => {
   const last = q?.last ?? (chartData.length ? chartData[chartData.length - 1].v : 0);
   const change = q?.change ?? 0;
   const changePct = q?.changePct ?? 0;
+  const fundamentals = q?.fundamentals;
+  const logoUrl = fundamentals?.logo;
+  const companyName = fundamentals?.companyName || symbol;
+
+  const [imageError, setImageError] = React.useState(false);
+
+  function getLogoColor(sym: string): string {
+    const colors = [
+      '#5B9A8B', '#D4735E', '#88AB8E', '#C85C3D', '#E8B86D',
+      '#7FE7CC', '#FF9B71', '#A4BE7B', '#6366f1', '#8b5cf6',
+    ];
+    const index = sym.charCodeAt(0) % colors.length;
+    return colors[index];
+  }
+
+  const logoColor = getLogoColor(symbol);
+  const logoLetter = symbol.charAt(0).toUpperCase();
+  const shouldShowImage = logoUrl && !imageError;
 
   // Timeframe selection
   const [tf, setTf] = React.useState<'1D'|'5D'|'1M'|'6M'|'YTD'|'1Y'|'5Y'|'ALL'>('6M');
+
+  // Tab selection for info sections
+  // Default to 'positions' if coming from holdings (portfolioId exists), otherwise 'metrics' for watchlist
+  const [activeTab, setActiveTab] = React.useState<'metrics' | 'earnings' | 'positions'>(
+    portfolioId ? 'positions' : 'metrics'
+  );
 
   // Fallback series if empty
   const displaySeries = React.useMemo(() => {
@@ -141,9 +183,6 @@ export const AddLot = React.memo(() => {
   const onPrimary = get('text.onPrimary') as string;
   const primary = get('component.button.primary.bg') as string;
 
-  // Get fundamentals data
-  const fundamentals = q?.fundamentals;
-
   const onSave = React.useCallback(async () => {
     const qn = Number(qtyInput);
     const pr = Number(priceInput);
@@ -155,12 +194,19 @@ export const AddLot = React.memo(() => {
     };
     try {
       await store.addLot(symbol, { side, qty: qn, price: pr, date: date.toISOString() }, meta, { portfolioId });
-      // Auto-adjust cash for quick trade form
+      // Auto-adjust cash for quick trade form (without creating cashEvent - this is a stock trade, not a deposit/withdrawal)
       try {
+        // Get portfolio currency for conversion
+        const portfolioCurrency = (p?.baseCurrency || 'USD').toUpperCase();
+
+        // Cash flow in ticker's native currency
         const gross = qn * pr;
         const fees = 0;
-        const cf = side === 'buy' ? -(gross + fees) : (gross - fees);
-        await (store as any).addCash(cf, { portfolioId });
+        const cfNative = side === 'buy' ? -(gross + fees) : (gross - fees);
+
+        // Convert to portfolio currency before adjusting cash
+        const cfPortfolio = convertCurrency(fxRates, cfNative, cur, portfolioCurrency);
+        await (store as any).adjustCashBalance(cfPortfolio, { portfolioId });
       } catch {}
       try { await store.refreshQuotes(); } catch {}
       try { setShowTxSheet(false); } catch {}
@@ -184,23 +230,62 @@ export const AddLot = React.memo(() => {
 
         {/* Chart Section - No Card */}
         <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s12 }}>
-          {/* Header */}
-          <View>
-            <Text style={{ color: text, fontWeight:'800', fontSize: 32, letterSpacing: -0.8 }}>{symbol}</Text>
-            {fundamentals?.companyName && fundamentals.companyName !== symbol && (
-              <Text style={{ color: muted, fontSize: 15, marginTop: spacing.s2 }}>{fundamentals.companyName}</Text>
-            )}
-            <Text style={{ color: text, fontSize: 40, fontWeight: '800', marginTop: spacing.s8, letterSpacing: -1 }}>
-              {formatCurrency(Number(last || 0), cur, { compact: false })}
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6, marginTop: spacing.s4 }}>
-              <Text style={{ color: (Number(changePct) >= 0 ? good : bad), fontSize: 16, fontWeight: '700' }}>
-                {formatCurrency(Number(change || 0), cur, { compact: false })}
+          {/* Header with Logo */}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8 }}>
+            {/* Left column: Logo */}
+            <View
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: shouldShowImage ? 'transparent' : logoColor,
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                padding: shouldShowImage ? spacing.s8 : 0,
+              }}
+            >
+              {shouldShowImage ? (
+                <Image
+                  source={{ uri: logoUrl }}
+                  style={{ width: '100%', height: '100%' }}
+                  resizeMode="contain"
+                  onError={() => setImageError(true)}
+                />
+              ) : (
+                <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '800' }}>
+                  {logoLetter}
+                </Text>
+              )}
+            </View>
+
+            {/* Right column: Company Info */}
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: text, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>
+                {companyName}
               </Text>
-              <Text style={{ color: (Number(changePct) >= 0 ? good : bad), fontSize: 16, fontWeight: '700' }}>
-                ({formatPercent(Number(changePct || 0))})
+              <Text style={{ color: muted, fontSize: 14, marginTop: spacing.s2 }}>
+                {symbol}
               </Text>
             </View>
+          </View>
+
+          {/* Price below header */}
+          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+            <Text style={{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.8 }}>
+              {Number(last || 0).toFixed(2)}
+            </Text>
+            <Text style={{ color: muted, fontSize: 14, marginLeft: spacing.s4, fontWeight: '600' }}>
+              {cur}
+            </Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6 }}>
+            <Text style={{ color: (Number(changePct) >= 0 ? good : bad), fontSize: 16, fontWeight: '700' }}>
+              {formatCurrency(Number(change || 0), cur, { compact: false })}
+            </Text>
+            <Text style={{ color: (Number(changePct) >= 0 ? good : bad), fontSize: 16, fontWeight: '700' }}>
+              ({formatPercent(Number(changePct || 0))})
+            </Text>
           </View>
 
           {/* Chart */}
@@ -208,40 +293,63 @@ export const AddLot = React.memo(() => {
             data={chartToShow}
             height={200}
             yAxisWidth={0}
-            padding={{ left: 12, right: 12, bottom: 20, top: 10 }}
+            padding={{ left: 0, right: 0, bottom: 20, top: 10 }}
             showArea
             currency={cur}
             xTickStrategy={xTickStrategy}
           />
 
-          {/* Timeframes */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: spacing.s6 }}
-          >
+          {/* Timeframes - same style as PortfolioDetail */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             {(['1D','5D','1M','6M','YTD','1Y','ALL'] as const).map(k => {
               const on = tf===k;
               return (
                 <Pressable
                   key={k}
                   onPress={() => setTf(k)}
-                  style={{
-                    paddingHorizontal: spacing.s14,
-                    paddingVertical: spacing.s8,
-                    borderRadius: radius.pill,
-                    backgroundColor: on ? (get('accent.primary') as string) : bg,
-                    borderWidth: on ? 0 : 1,
-                    borderColor: border
-                  }}
                 >
-                  <Text style={{ color: on ? onPrimary : text, fontWeight: '700', fontSize: 13 }}>
+                  <Text style={{
+                    color: on ? (get('accent.primary') as string) : muted,
+                    fontSize: on ? 15 : 13,
+                    fontWeight: on ? '800' : '600',
+                  }}>
                     {k}
                   </Text>
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </View>
+
+          {/* Tabs for Metrics, Earnings, Positions */}
+          <View style={{ flexDirection: 'row', gap: spacing.s16, marginTop: spacing.s12 }}>
+            <Pressable onPress={() => setActiveTab('metrics')}>
+              <Text style={{
+                color: activeTab === 'metrics' ? text : muted,
+                fontSize: 16,
+                fontWeight: activeTab === 'metrics' ? '800' : '600',
+              }}>
+                Key Metrics
+              </Text>
+            </Pressable>
+            <Pressable onPress={() => setActiveTab('earnings')}>
+              <Text style={{
+                color: activeTab === 'earnings' ? text : muted,
+                fontSize: 16,
+                fontWeight: activeTab === 'earnings' ? '800' : '600',
+              }}>
+                Earnings
+              </Text>
+            </Pressable>
+            <Pressable onPress={() => setActiveTab('positions')}>
+              <Text style={{
+                color: activeTab === 'positions' ? text : muted,
+                fontSize: 16,
+                fontWeight: activeTab === 'positions' ? '800' : '600',
+              }}>
+                Positions
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* Company Info - No Card, Clean Design */}
@@ -291,9 +399,8 @@ export const AddLot = React.memo(() => {
         )}
 
         {/* Key Metrics - Grid Layout */}
-        {fundamentals && (
+        {activeTab === 'metrics' && fundamentals && (
           <View style={{ paddingHorizontal: spacing.s16, marginTop: spacing.s24 }}>
-            <Text style={{ color: text, fontWeight: '800', fontSize: 20, marginBottom: spacing.s12 }}>Key Metrics</Text>
 
             <Card>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s12 }}>
@@ -392,9 +499,8 @@ export const AddLot = React.memo(() => {
         )}
 
         {/* Earnings Performance Charts */}
-        {fundamentals?.earningsHistory && fundamentals.earningsHistory.length > 0 && (
+        {activeTab === 'earnings' && fundamentals?.earningsHistory && fundamentals.earningsHistory.length > 0 && (
           <View style={{ paddingHorizontal: spacing.s16, marginTop: spacing.s24 }}>
-            <Text style={{ color: text, fontWeight: '800', fontSize: 20, marginBottom: spacing.s12 }}>Earnings Performance</Text>
 
             <Card>
               {/* EPS Chart: Estimate vs Actual */}
@@ -603,8 +709,8 @@ export const AddLot = React.memo(() => {
         )}
 
         {/* Position summary */}
+        {activeTab === 'positions' && (
         <View style={{ paddingHorizontal: spacing.s16, marginTop: spacing.s24 }}>
-        <Text style={{ color: text, fontWeight: '800', fontSize: 20, marginBottom: spacing.s12 }}>Your Position</Text>
         <Card>
           <View style={{ gap: spacing.s12 }}>
             {/* Gains Row */}
@@ -645,9 +751,9 @@ export const AddLot = React.memo(() => {
           </View>
           
 
-        
+
           {/* Actions */}
-          <View style={{ gap: spacing.s8, paddingTop: spacing.s12, borderTopWidth: 1, borderColor: border, marginTop: spacing.s4 }}>
+          <View style={{ paddingTop: spacing.s12, borderTopWidth: 1, borderColor: border, marginTop: spacing.s4 }}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Add transaction"
@@ -663,60 +769,46 @@ export const AddLot = React.memo(() => {
             >
               <Text style={{ color: onPrimary, fontWeight:'700', fontSize: 15 }}>Add Transaction</Text>
             </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="View all transactions"
-              onPress={() => nav.navigate('HoldingHistory' as never, { symbol, portfolioId } as never)}
-              style={({ pressed }) => ({
-                height: 44,
-                borderRadius: radius.md,
-                alignItems:'center',
-                justifyContent:'center',
-                backgroundColor: bg,
-                opacity: pressed ? 0.8 : 1
-              })}
-            >
-              <Text style={{ color: text, fontWeight:'700', fontSize: 15 }}>View History</Text>
-            </Pressable>
           </View>
+        </Card>
 
-          {/* Recent transactions preview */}
-          {lots.length > 0 ? (
-            <View style={{ paddingTop: spacing.s12, marginTop: spacing.s12, borderTopWidth: 1, borderColor: border }}>
-              <Text style={{ color: text, fontWeight:'800', marginBottom: spacing.s8, fontSize: 16 }}>Recent Transactions</Text>
-              <View style={{ borderTopWidth: 1, borderColor: border }}>
-                {[...lots].sort((a:any,b:any)=> new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0,3).map((l:any, i:number, arr:any[]) => (
-                  <View key={l.id || i}>
-                    <TransactionRow lot={l} currency={cur} onEdit={onEditLot} onDelete={onDeleteLot} />
-                    {i < arr.length - 1 ? <View style={{ height: 1, backgroundColor: border }} /> : null}
-                  </View>
-                ))}
-              </View>
+        {/* Recent transactions preview */}
+        {lots.length > 0 ? (
+          <View style={{ gap: spacing.s12, marginTop: spacing.s16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>Recent Transactions</Text>
               <Pressable
                 accessibilityRole="button"
                 onPress={() => nav.navigate('HoldingHistory' as never, { symbol, portfolioId } as never)}
                 style={({ pressed }) => ({
-                  alignSelf:'flex-start',
-                  marginTop: spacing.s10,
-                  paddingHorizontal: spacing.s12,
-                  paddingVertical: spacing.s6,
-                  borderRadius: radius.pill,
-                  backgroundColor: bg,
-                  opacity: pressed ? 0.7 : 1
+                  opacity: pressed ? 0.5 : 1
                 })}
               >
-                <Text style={{ color: text, fontWeight:'700', fontSize: 13 }}>View all</Text>
+                <Text style={{ color: muted, fontWeight:'600', fontSize: 13 }}>View all</Text>
               </Pressable>
             </View>
-          ) : null}
-        </Card>
+            <Card style={{ padding: 0, overflow: 'hidden' }}>
+              {[...lots].sort((a:any,b:any)=> new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0,3).map((l:any, i:number) => (
+                <View key={l.id || i}>
+                  <TransactionRow lot={l} currency={cur} symbol={symbol} onEdit={onEditLot} onDelete={onDeleteLot} />
+                  {i < [...lots].length - 1 ? <View style={{ height: 1, backgroundColor: border, marginHorizontal: spacing.s16 }} /> : null}
+                </View>
+              ))}
+            </Card>
+          </View>
+        ) : null}
         </View>
+        )}
 
       </ScrollView>
 
       <TransactionEditorSheet
         visible={showTxSheet}
-        onClose={()=> { setShowTxSheet(false); setEditLotState(null); }}
+        onClose={()=> {
+          Keyboard.dismiss();
+          setShowTxSheet(false);
+          setEditLotState(null);
+        }}
         symbol={symbol}
         portfolioId={portfolioId}
         mode={editLotState ? 'edit' : 'add'}

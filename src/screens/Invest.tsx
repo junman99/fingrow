@@ -9,8 +9,9 @@ import { useProfileStore } from '../store/profile';
 import { useNavigation } from '@react-navigation/native';
 import LineChart from '../components/LineChart';
 import { computePnL } from '../lib/positions';
+import { convertCurrency } from '../lib/fx';
 import PortfolioListCard from '../components/invest/PortfolioListCard';
-import CreatePortfolioModal from '../components/invest/CreatePortfolioModal';
+// CreatePortfolioModal removed - now using CreatePortfolio screen
 import PortfolioDetailSheet from '../components/invest/PortfolioDetailSheet';
 import AddHoldingSheet from '../components/invest/AddHoldingSheet';
 import PortfolioManagerModal from '../components/invest/PortfolioManagerModal';
@@ -71,11 +72,11 @@ export const Invest = React.memo(() => {
   const [pfTf, setPfTf] = React.useState<'1D'|'5D'|'1M'|'6M'|'YTD'|'1Y'|'ALL'>('6M');
   const [hideAmounts, setHideAmounts] = React.useState(false);
   const [showChart, setShowChart] = React.useState(true);
-  const [showCreateSheet, setShowCreateSheet] = React.useState(false);
+  // Removed showCreateSheet state - now using navigation
   const [showManager, setShowManager] = React.useState(false);
   const [showAddHolding, setShowAddHolding] = React.useState(false);
   const [addMode, setAddMode] = React.useState<'holdings'|'watchlist'>('holdings');
-  const [portfolioDefaultTab, setPortfolioDefaultTab] = React.useState<'Holdings'|'Watchlist'>('Holdings');
+  const [portfolioDefaultTab, setPortfolioDefaultTab] = React.useState<'Holdings'|'Watchlist'|'Cash'>('Holdings');
   const [editPortfolioId, setEditPortfolioId] = React.useState<string | null>(null);
   const [deleteMode, setDeleteMode] = React.useState(false);
   const [selectedPids, setSelectedPids] = React.useState<string[]>([]);
@@ -111,9 +112,12 @@ export const Invest = React.memo(() => {
   const [sortKey, setSortKey] = React.useState<'mv'|'pnlAbs'|'pnlPct'|'ticker'>('mv');
   const [sortDir, setSortDir] = React.useState<'asc'|'desc'>('desc');
 
-  const { portfolios, quotes, hydrate, refreshQuotes, refreshing, error, fxRates, refreshFx, allSymbols } = useInvestStore();
+  const { portfolios, quotes, hydrate, refreshQuotes, refreshing, error, fxRates, refreshFx, allSymbols, lastUpdated } = useInvestStore();
   const activePortfolioId = useInvestStore(state => state.activePortfolioId);
   const { profile } = useProfileStore();
+
+  // Get invest currency from profile (fallback to primary currency)
+  const investCurrency = (profile.investCurrency || profile.currency || 'USD').toUpperCase();
 
   React.useEffect(() => { hydrate(); refreshFx(); const syms = allSymbols(); refreshQuotes(syms && syms.length ? syms : undefined); }, []);
 
@@ -132,33 +136,65 @@ export const Invest = React.memo(() => {
 
   const symbols = React.useMemo(()=> Object.keys(effectiveHoldings), [effectiveHoldings]);
 
-  const totalUSD = React.useMemo(() => {
-    return symbols.reduce((acc, sym) => {
-      const last = quotes[sym]?.last || 0;
-      const qty = (effectiveHoldings[sym]?.lots || []).reduce((s:any,l:any)=> s + (l.side==='buy'? l.qty : -l.qty), 0);
-      return acc + last * qty;
-    }, 0);
-  }, [symbols, effectiveHoldings, quotes]);
+  // Calculate total value by summing all portfolios (each converted to investment currency)
+  const { totalValue, holdingsValue } = React.useMemo(() => {
+    let totalHoldings = 0;
+    let totalCash = 0;
 
-  const cashUSD = React.useMemo(() => {
-    const rates = fxRates?.rates || {} as Record<string, number>;
-    let sum = 0;
     Object.values(portfolios || {}).forEach((p: any) => {
-      const cash = Number(p?.cash || 0);
-      if (!cash) return;
-      const cur = String(p?.baseCurrency || 'USD').toUpperCase();
-      if (cur === 'USD') sum += cash;
-      else {
-        const r = Number(rates[cur] || 0);
-        sum += r ? (cash / r) : cash;
-      }
-    });
-    return sum;
-  }, [portfolios, fxRates]);
+      if (!p) return;
 
-  const cur = ((profile?.currency) || 'USD').toUpperCase();
-  const rate = fxRates?.rates?.[cur] || (cur==='USD'?1:undefined);
-  const totalValue = rate ? (totalUSD + cashUSD) * rate : (totalUSD + cashUSD);
+      // Calculate holdings value for this portfolio (converted to investment currency)
+      let portfolioHoldingsValue = 0;
+      Object.values(p.holdings || {}).forEach((h: any) => {
+        const lots = h?.lots || [];
+        const qty = lots.reduce((s: number, l: any) => s + (l.side === 'buy' ? l.qty : -l.qty), 0);
+        if (qty <= 0) return;
+
+        const q = quotes[h.symbol];
+        const lastNative = Number(q?.last || 0);
+
+        // Get ticker currency
+        let tickerCurrency = h.currency;
+        if (!tickerCurrency) {
+          const s = h.symbol.toUpperCase();
+          if (s.includes('-USD') || s.includes('USD')) tickerCurrency = 'USD';
+          else if (s.endsWith('.L')) tickerCurrency = 'GBP';
+          else if (s.endsWith('.T')) tickerCurrency = 'JPY';
+          else if (s.endsWith('.TO')) tickerCurrency = 'CAD';
+          else if (s.endsWith('.AX')) tickerCurrency = 'AUD';
+          else if (s.endsWith('.HK')) tickerCurrency = 'HKD';
+          else if (s.endsWith('.PA') || s.endsWith('.DE')) tickerCurrency = 'EUR';
+          else if (s.endsWith('.SW')) tickerCurrency = 'CHF';
+          else tickerCurrency = 'USD';
+        }
+        tickerCurrency = String(tickerCurrency).toUpperCase();
+
+        // Convert ticker price to investment currency
+        const last = convertCurrency(fxRates, lastNative, tickerCurrency, investCurrency);
+        portfolioHoldingsValue += qty * last;
+      });
+
+      // Convert cash from portfolio currency to investment currency
+      const portfolioBaseCurrency = String(p.baseCurrency || 'USD').toUpperCase();
+      const cash = Number(p.cash || 0);
+      const portfolioCashValue = convertCurrency(fxRates, cash, portfolioBaseCurrency, investCurrency);
+
+      totalHoldings += portfolioHoldingsValue;
+      totalCash += portfolioCashValue;
+    });
+
+    return {
+      holdingsValue: totalHoldings,
+      totalValue: totalHoldings + totalCash
+    };
+  }, [portfolios, quotes, fxRates, investCurrency]);
+
+  const cur = investCurrency;
+  const cashValue = totalValue - holdingsValue;
+
+  // For portfolioLine chart calculation compatibility
+  const rate = 1; // Chart calculation will be updated later to handle multi-currency properly
 
   const portfolioLine = React.useMemo(() => {
     // Skip expensive calculation if chart is hidden
@@ -254,7 +290,8 @@ export const Invest = React.memo(() => {
           if (qty) total += qty * price;
         }
       });
-      total += cashByDateUSD[d] || 0;
+      // Exclude cash from chart - only track holdings performance
+      // total += cashByDateUSD[d] || 0;
       return { t: new Date(d).getTime(), v: (rate || 1) * total };
     });
     return points.slice(-520);
@@ -291,31 +328,40 @@ export const Invest = React.memo(() => {
 
   const todayInfo = React.useMemo(() => {
     const s = portfolioLine || [];
-    if (!s || s.length < 2) return { color: get('text.muted') as string, text: '+0 (+0.0%)' };
+    if (!s || s.length < 2) return { color: get('text.muted') as string, text: `+${formatCurrency(0, cur)} (+0.0%)` };
     const last = s[s.length - 1].v;
     const prev = s[s.length - 2].v;
     const delta = last - prev;
     const pct = prev !== 0 ? (delta / Math.abs(prev)) * 100 : 0;
     const color = delta > 0 ? (get('semantic.success') as string) : delta < 0 ? (get('semantic.danger') as string) : (get('text.muted') as string);
-    const sign = delta > 0 ? '+' : (delta < 0 ? '' : '+');
-    const absDelta = Math.abs(delta);
-    const text = `${sign}${absDelta.toLocaleString(undefined, { maximumFractionDigits: 2 })} (${sign}${Math.abs(pct).toFixed(1)}%)`;
+    const sign = delta > 0 ? '+' : '';
+    const text = `${sign}${formatCurrency(Math.abs(delta), cur)} (${sign}${Math.abs(pct).toFixed(2)}%)`;
     return { color, text };
-  }, [portfolioLine, get]);
+  }, [portfolioLine, get, cur]);
 
   const rangeInfo = React.useMemo(() => {
     const s = (visibleSeries && visibleSeries.length >= 2) ? visibleSeries : displaySeries;
-    if (!s || s.length < 2) return { color: get('text.muted') as string, text: '+0 (+0.0%)' };
+    if (!s || s.length < 2) return { color: get('text.muted') as string, text: `+${formatCurrency(0, cur)} (+0.0%)`, label: 'All-Time Gain/Loss' };
     const first = s[0].v;
     const last = s[s.length - 1].v;
     const delta = last - first;
     const pct = first !== 0 ? (delta / Math.abs(first)) * 100 : 0;
     const color = delta > 0 ? (get('semantic.success') as string) : delta < 0 ? (get('semantic.danger') as string) : (get('text.muted') as string);
-    const sign = delta > 0 ? '+' : (delta < 0 ? '' : '+');
-    const absDelta = Math.abs(delta);
-    const text = `${sign}${absDelta.toLocaleString(undefined, { maximumFractionDigits: 2 })} (${sign}${Math.abs(pct).toFixed(1)}%)`;
-    return { color, text };
-  }, [visibleSeries, displaySeries, get]);
+    const sign = delta > 0 ? '+' : '';
+    const text = `${sign}${formatCurrency(Math.abs(delta), cur)} (${sign}${Math.abs(pct).toFixed(2)}%)`;
+
+    const labels: Record<typeof pfTf, string> = {
+      '1D': '1 Day Gain/Loss',
+      '5D': '5 Day Gain/Loss',
+      '1M': '1 Month Gain/Loss',
+      '6M': '6 Month Gain/Loss',
+      'YTD': 'YTD Gain/Loss',
+      '1Y': '1 Year Gain/Loss',
+      'ALL': 'All-Time Gain/Loss',
+    };
+
+    return { color, text, label: labels[pfTf] };
+  }, [visibleSeries, displaySeries, get, cur, pfTf]);
 
   const xTickStrategy = React.useMemo(() => {
     if (pfTf === '1D' || pfTf === '5D') {
@@ -329,8 +375,21 @@ export const Invest = React.memo(() => {
     return { mode: 'month' } as const;
   }, [pfTf, visibleSeries, displaySeries]);
 
-  const investedValue = rate ? totalUSD * rate : totalUSD;
-  const cashValue = rate ? cashUSD * rate : cashUSD;
+  const lastRefreshedText = React.useMemo(() => {
+    if (!lastUpdated) return 'Never refreshed';
+    const now = Date.now();
+    const diff = now - lastUpdated;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return new Date(lastUpdated).toLocaleDateString();
+  }, [lastUpdated]);
+
+  const investedValue = holdingsValue;
+  // cashValue is already defined above as totalValue - holdingsValue
   const portfolioCount = Object.keys(portfolios || {}).length;
   const holdingsCount = symbols.length;
   const watchlistCount = React.useMemo(() => {
@@ -445,7 +504,6 @@ export const Invest = React.memo(() => {
     showHoldingsSort,
     showManager,
     editPortfolioId,
-    showCreateSheet,
     portfolioCount: Object.keys(portfolios || {}).length
   });
 
@@ -455,7 +513,7 @@ export const Invest = React.memo(() => {
       onRefresh={async () => { try { await refreshFx(); const syms = allSymbols(); await refreshQuotes(syms && syms.length ? syms : undefined); } catch (e) {} }}
       inTab
     >
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s16, paddingBottom: spacing.s32 }}>
+      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s32 }}>
         {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s4 }}>
           <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.5 }}>
@@ -490,83 +548,88 @@ export const Invest = React.memo(() => {
         </View>
 
         {/* Global Indices Ticker */}
-        <View style={{ marginLeft: -spacing.s16, marginRight: -spacing.s16 }}>
+        <View style={{ marginLeft: -spacing.s16, marginRight: -spacing.s16, marginBottom: spacing.s16 }}>
           <GlobalIndicesTicker />
         </View>
 
         {/* Value Display */}
         <View>
-          <Text style={{ color: textMuted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '600', marginBottom: spacing.s4 }}>
-            Total Value
-          </Text>
-          <Text style={{ color: textPrimary, fontSize: 36, fontWeight: '800', letterSpacing: -1 }}>
-            {hideAmounts ? '••••••' : formatCurrency(totalValue, cur)}
-          </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, marginTop: spacing.s6 }}>
-            <Text style={{ color: todayInfo.color, fontWeight: '600', fontSize: 13 }}>
-              {hideAmounts ? '•••' : `Today ${todayInfo.text}`}
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: spacing.s4 }}>
+            <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.8 }}>
+              {hideAmounts ? '••••••' : totalValue.toFixed(2)}
             </Text>
-            {perfStats.best && (
-              <>
-                <Text style={{ color: textMuted, fontSize: 13 }}>•</Text>
-                <Text style={{ color: perfStats.best.pct >= 0 ? (get('semantic.success') as string) : (get('semantic.danger') as string), fontWeight: '600', fontSize: 13 }}>
-                  {perfStats.best.sym} {perfStats.best.pct >= 0 ? '+' : ''}{perfStats.best.pct.toFixed(1)}%
-                </Text>
-              </>
-            )}
+            <Text style={{ color: textMuted, fontSize: 14, marginLeft: spacing.s6, fontWeight: '600' }}>
+              {cur}
+            </Text>
+          </View>
+          <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s8 }}>
+            {hideAmounts ? '•••' : `Holdings: ${holdingsValue.toFixed(2)} ${cur}`} · {hideAmounts ? '•••' : `Cash: ${cashValue.toFixed(2)} ${cur}`}
+          </Text>
+
+          {/* Day's Gain */}
+          <View style={{ marginBottom: spacing.s4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+              <Text style={{ color: todayInfo.color, fontWeight: '700', fontSize: 16 }}>
+                {hideAmounts ? '•••' : todayInfo.text}
+              </Text>
+              <Text style={{ color: textMuted, fontSize: 12 }}>Today's Change</Text>
+            </View>
+          </View>
+
+          {/* Interval Gain */}
+          <View style={{ marginBottom: spacing.s20 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+              <Text style={{ color: rangeInfo.color, fontWeight: '700', fontSize: 16 }}>
+                {hideAmounts ? '•••' : rangeInfo.text}
+              </Text>
+              <Text style={{ color: textMuted, fontSize: 12 }}>{rangeInfo.label}</Text>
+            </View>
           </View>
         </View>
 
         {/* Chart */}
         {showChart && (
-          <View style={{ gap: spacing.s8 }}>
+          <View style={{ gap: spacing.s8, marginLeft: -spacing.s16, marginRight: -spacing.s16, marginBottom: spacing.s16 }}>
             <LineChart
               data={visibleSeries.length ? visibleSeries : displaySeries}
               height={180}
               yAxisWidth={0}
-              padding={{ left: 12, right: 12, bottom: 20, top: 10 }}
+              padding={{ left: 16, right: 16, bottom: 20, top: 10 }}
               xTickStrategy={xTickStrategy}
               currency={cur}
             />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: spacing.s6 }}
-            >
+
+            {/* Last Refreshed */}
+            <Text style={{ color: textMuted, fontSize: 11, paddingHorizontal: spacing.s16 }}>
+              Last refreshed: {lastRefreshedText}
+            </Text>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.s16 }}>
               {(['1D','5D','1M','6M','YTD','1Y','ALL'] as const).map(k => {
                 const on = pfTf === k;
                 return (
-                  <AnimatedPressable
+                  <Pressable
                     key={k}
                     onPress={() => setPfTf(k)}
                   >
-                    <View
+                    <Text
                       style={{
-                        paddingHorizontal: spacing.s12,
-                        paddingVertical: spacing.s6,
-                        borderRadius: radius.pill,
-                        backgroundColor: on ? accentPrimary : surface1,
+                        color: on ? accentPrimary : textMuted,
+                        fontSize: on ? 15 : 13,
+                        fontWeight: on ? '800' : '600',
                       }}
                     >
-                      <Text
-                        style={{
-                          color: on ? (get('text.onPrimary') as string) : textPrimary,
-                          fontWeight: '700',
-                          fontSize: 12,
-                        }}
-                      >
-                        {k}
-                      </Text>
-                    </View>
-                  </AnimatedPressable>
+                      {k}
+                    </Text>
+                  </Pressable>
                 );
               })}
-            </ScrollView>
+            </View>
           </View>
         )}
 
         {/* Portfolio List */}
-        <View>
+        <View style={{ marginBottom: spacing.s16 }}>
           <PortfolioListCard
             selectionMode={deleteMode}
             selectedIds={selectedPids}
@@ -578,7 +641,7 @@ export const Invest = React.memo(() => {
               console.log('🟢 [Invest] onOpenPortfolio callback called with id:', id);
               nav.navigate('PortfolioDetail', { portfolioId: id });
             }}
-            onCreate={() => setShowCreateSheet(true)}
+            onCreate={() => nav.navigate('CreatePortfolio')}
           />
         </View>
 
@@ -699,19 +762,6 @@ export const Invest = React.memo(() => {
         />
       )}
 
-      {showCreateSheet && (
-        <CreatePortfolioModal
-          visible={true}
-          onClose={() => setShowCreateSheet(false)}
-          defaultCurrency={(profile?.currency || 'SGD').toUpperCase()}
-          onConfirm={async (name, currency, type, benchmark) => {
-            const id = await (useInvestStore.getState() as any).createPortfolio(name, currency, { type, benchmark: benchmark === 'NONE' ? undefined : benchmark });
-            await (useInvestStore.getState() as any).setActivePortfolio(id);
-            setShowCreateSheet(false);
-            setCurrentPortfolioId(id);
-          }}
-        />
-      )}
     </ScreenScroll>
   );
 });
