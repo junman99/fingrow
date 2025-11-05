@@ -1,6 +1,15 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { FlatList, View, Text, Pressable, Animated } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import AnimatedRN, {
+  useAnimatedStyle,
+  useSharedValue,
+  useAnimatedScrollHandler,
+  interpolate,
+  Extrapolate,
+} from 'react-native-reanimated';
 import { Screen } from '../../components/Screen';
 import Button from '../../components/Button';
 import Icon, { IconName } from '../../components/Icon';
@@ -13,6 +22,7 @@ import { formatCurrency, sum } from '../../lib/format';
 export default function GroupsRoot() {
   const { get, isDark } = useThemeTokens();
   const nav = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const { groups, hydrate, balances } = useGroupsStore();
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -28,6 +38,62 @@ export default function GroupsRoot() {
 
   const [filterTab, setFilterTab] = useState<'all' | 'unsettled'>('all');
   const meName = (useProfileStore.getState().profile.name || '').trim().toLowerCase();
+
+  // Main Tab Title Animation
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+
+  // Original title animation (fades out)
+  const originalTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: 1 - progress,
+    };
+  });
+
+  // Floating title animation (fades in, shrinks)
+  const floatingTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    const fontSize = interpolate(progress, [0, 1], [28, 20]);
+    const fontWeight = interpolate(progress, [0, 1], [800, 700]);
+
+    return {
+      fontSize,
+      fontWeight: fontWeight.toString() as any,
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
+  // Gradient background animation
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
 
   const accentPrimary = get('accent.primary') as string;
   const accentSecondary = get('accent.secondary') as string;
@@ -265,157 +331,224 @@ export default function GroupsRoot() {
   };
 
   return (
-    <Screen inTab>
-      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-        <FlatList
-          data={filteredData}
-          keyExtractor={(item: any) => item.id}
-          renderItem={({ item }) => <Row item={item} />}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: spacing.s16, paddingBottom: spacing.s32 }}
-          ListHeaderComponentStyle={{ marginBottom: spacing.s16 }}
-          ListHeaderComponent={(
-          <View>
-            <View style={{ marginTop: spacing.s12 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8, marginBottom: spacing.s16 }}>
-                <Pressable
-                  onPress={() => nav.goBack()}
-                  style={({ pressed }) => ({
-                    padding: spacing.s8,
-                    marginLeft: -spacing.s8,
-                    marginTop: -spacing.s4,
-                    borderRadius: radius.md,
-                    backgroundColor: pressed ? surface1 : 'transparent',
-                  })}
-                  hitSlop={8}
-                >
-                  <Icon name="chevron-left" size={28} color={textPrimary} />
-                </Pressable>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>Shared bills</Text>
+    <>
+      {/* Main Tab Title Animation - Floating Gradient Header (Fixed at top, outside scroll) */}
+      <AnimatedRN.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            pointerEvents: 'none',
+          },
+          gradientAnimatedStyle,
+        ]}
+      >
+        <LinearGradient
+          colors={[
+            backgroundDefault,
+            backgroundDefault,
+            withAlpha(backgroundDefault, 0.95),
+            withAlpha(backgroundDefault, 0.8),
+            withAlpha(backgroundDefault, 0.5),
+            withAlpha(backgroundDefault, 0)
+          ]}
+          style={{
+            paddingTop: insets.top + spacing.s16,
+            paddingBottom: spacing.s32 + spacing.s20,
+            paddingHorizontal: spacing.s16,
+          }}
+        >
+          <AnimatedRN.Text
+            style={[
+              {
+                color: textPrimary,
+                fontSize: 20,
+                fontWeight: '700',
+                letterSpacing: -0.5,
+                textAlign: 'center',
+              },
+              floatingTitleAnimatedStyle,
+            ]}
+          >
+            Shared bills
+          </AnimatedRN.Text>
+        </LinearGradient>
+      </AnimatedRN.View>
+
+      <Screen inTab>
+        <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+          <AnimatedRN.FlatList
+            data={filteredData}
+            keyExtractor={(item: any) => item.id}
+            renderItem={({ item }) => <Row item={item} />}
+            showsVerticalScrollIndicator={false}
+            onScroll={scrollHandler}
+            scrollEventThrottle={16}
+            contentContainerStyle={{
+              paddingHorizontal: spacing.s16,
+              paddingTop: insets.top + spacing.s16,
+              paddingBottom: spacing.s32,
+            }}
+            ListHeaderComponentStyle={{ marginBottom: spacing.s16 }}
+            ListHeaderComponent={(
+            <View>
+              <View style={{ paddingTop: spacing.s12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8, marginBottom: spacing.s16 }}>
+                  <Pressable
+                    onPress={() => nav.goBack()}
+                    style={({ pressed }) => ({
+                      padding: spacing.s8,
+                      marginLeft: -spacing.s8,
+                      marginTop: -spacing.s4,
+                      borderRadius: radius.md,
+                      backgroundColor: pressed ? surface1 : 'transparent',
+                    })}
+                    hitSlop={8}
+                  >
+                    <Icon name="chevron-left" size={28} color={textPrimary} />
+                  </Pressable>
+                  <View style={{ flex: 1 }}>
+                    <AnimatedRN.Text
+                      style={[
+                        {
+                          color: textPrimary,
+                          fontSize: 28,
+                          fontWeight: '800',
+                          letterSpacing: -0.5,
+                          marginTop: spacing.s2,
+                        },
+                        originalTitleAnimatedStyle,
+                      ]}
+                    >
+                      Shared bills
+                    </AnimatedRN.Text>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s12, marginBottom: spacing.s8 }}>
+                  <MetricCard
+                    icon="users-2"
+                    label="Groups"
+                    value={`${data.length}`}
+                    caption={summary.unsettledCount > 0 ? `${summary.unsettledCount} need attention` : 'All squared up'}
+                  />
+                  <MetricCard
+                    icon="receipt"
+                    label="Outstanding"
+                    value={formatCurrency(summary.totalOutstanding)}
+                    caption={summary.unsettledCount > 0 ? `Across ${summary.unsettledCount} group(s)` : 'Nothing unsettled'}
+                  />
+                  <MetricCard
+                    icon="wallet"
+                    label="You owe"
+                    value={totals.youOwe > 0.009 ? formatCurrency(totals.youOwe) : 'All clear'}
+                    caption={totals.youOwe > 0.009 ? 'Plan a settle-up soon' : 'No paybacks pending'}
+                  />
+                  <MetricCard
+                    icon="trending-up"
+                    label="Owed to you"
+                    value={totals.theyOwe > 0.009 ? formatCurrency(totals.theyOwe) : 'All clear'}
+                    caption={totals.theyOwe > 0.009 ? 'Give your pals a nudge' : 'Nothing outstanding'}
+                  />
                 </View>
               </View>
 
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s12, marginBottom: spacing.s8 }}>
-                <MetricCard
-                  icon="users-2"
-                  label="Groups"
-                  value={`${data.length}`}
-                  caption={summary.unsettledCount > 0 ? `${summary.unsettledCount} need attention` : 'All squared up'}
-                />
-                <MetricCard
-                  icon="receipt"
-                  label="Outstanding"
-                  value={formatCurrency(summary.totalOutstanding)}
-                  caption={summary.unsettledCount > 0 ? `Across ${summary.unsettledCount} group(s)` : 'Nothing unsettled'}
-                />
-                <MetricCard
-                  icon="wallet"
-                  label="You owe"
-                  value={totals.youOwe > 0.009 ? formatCurrency(totals.youOwe) : 'All clear'}
-                  caption={totals.youOwe > 0.009 ? 'Plan a settle-up soon' : 'No paybacks pending'}
-                />
-                <MetricCard
-                  icon="trending-up"
-                  label="Owed to you"
-                  value={totals.theyOwe > 0.009 ? formatCurrency(totals.theyOwe) : 'All clear'}
-                  caption={totals.theyOwe > 0.009 ? 'Give your pals a nudge' : 'Nothing outstanding'}
-                />
+              <View style={{
+                marginTop: spacing.s16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.s8,
+              }}>
+                <View style={{
+                  backgroundColor: surface1,
+                  borderRadius: radius.pill,
+                  padding: spacing.s4,
+                  flexDirection: 'row',
+                  borderWidth: 1,
+                  borderColor: borderSubtle,
+                  flex: 1,
+                }}>
+                  <Pressable
+                    onPress={() => setFilterTab('all')}
+                    style={({ pressed }) => ({
+                      paddingVertical: spacing.s6,
+                      paddingHorizontal: spacing.s16,
+                      borderRadius: radius.pill,
+                      backgroundColor: filterTab === 'all' ? accentPrimary : surface1,
+                      opacity: pressed ? 0.85 : 1,
+                      flex: 1,
+                    })}
+                  >
+                    <Text style={{ color: filterTab === 'all' ? textOnPrimary : textPrimary, fontWeight: '600', textAlign: 'center' }}>
+                      All groups ({data.length})
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setFilterTab('unsettled')}
+                    style={({ pressed }) => ({
+                      paddingVertical: spacing.s6,
+                      paddingHorizontal: spacing.s16,
+                      borderRadius: radius.pill,
+                      backgroundColor: filterTab === 'unsettled' ? accentPrimary : surface1,
+                      opacity: pressed ? 0.85 : 1,
+                      flex: 1,
+                    })}
+                  >
+                    <Text style={{ color: filterTab === 'unsettled' ? textOnPrimary : textPrimary, fontWeight: '600', textAlign: 'center' }}>
+                      Needs attention ({summary.unsettledCount})
+                    </Text>
+                  </Pressable>
+                </View>
+                <Pressable
+                  onPress={() => nav.navigate('CreateGroup')}
+                  style={({ pressed }) => ({
+                    width: 40,
+                    height: 40,
+                    borderRadius: radius.pill,
+                    backgroundColor: accentPrimary,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Icon name="plus" size={20} color={textOnPrimary} />
+                </Pressable>
               </View>
             </View>
-
-            <View style={{
-              marginTop: spacing.s16,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: spacing.s8,
-            }}>
+          )}
+          ListEmptyComponent={() => (
+            <View style={{ marginTop: spacing.s24 }}>
               <View style={{
+                borderRadius: radius.xl,
                 backgroundColor: surface1,
-                borderRadius: radius.pill,
-                padding: spacing.s4,
-                flexDirection: 'row',
+                padding: spacing.s16,
                 borderWidth: 1,
                 borderColor: borderSubtle,
-                flex: 1,
+                ...(elevation.level1 as any)
               }}>
-                <Pressable
-                  onPress={() => setFilterTab('all')}
-                  style={({ pressed }) => ({
-                    paddingVertical: spacing.s6,
-                    paddingHorizontal: spacing.s16,
-                    borderRadius: radius.pill,
-                    backgroundColor: filterTab === 'all' ? accentPrimary : surface1,
-                    opacity: pressed ? 0.85 : 1,
-                    flex: 1,
-                  })}
-                >
-                  <Text style={{ color: filterTab === 'all' ? textOnPrimary : textPrimary, fontWeight: '600', textAlign: 'center' }}>
-                    All groups ({data.length})
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setFilterTab('unsettled')}
-                  style={({ pressed }) => ({
-                    paddingVertical: spacing.s6,
-                    paddingHorizontal: spacing.s16,
-                    borderRadius: radius.pill,
-                    backgroundColor: filterTab === 'unsettled' ? accentPrimary : surface1,
-                    opacity: pressed ? 0.85 : 1,
-                    flex: 1,
-                  })}
-                >
-                  <Text style={{ color: filterTab === 'unsettled' ? textOnPrimary : textPrimary, fontWeight: '600', textAlign: 'center' }}>
-                    Needs attention ({summary.unsettledCount})
-                  </Text>
-                </Pressable>
+                <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 18, marginBottom: spacing.s8 }}>
+                  {data.length === 0 ? 'Create your first group' : 'Everything is settled'}
+                </Text>
+                <Text style={{ color: textMuted, marginBottom: spacing.s16 }}>
+                  {data.length === 0
+                    ? 'Start a group to split shared bills and track balances in one beautiful view.'
+                    : 'No groups need attention right now. Switch back to all groups to keep exploring.'}
+                </Text>
+                {data.length === 0 ? (
+                  <Button title="Create group" onPress={() => nav.navigate('CreateGroup')} />
+                ) : (
+                  <Button variant="secondary" title="View all groups" onPress={() => setFilterTab('all')} />
+                )}
               </View>
-              <Pressable
-                onPress={() => nav.navigate('CreateGroup')}
-                style={({ pressed }) => ({
-                  width: 40,
-                  height: 40,
-                  borderRadius: radius.pill,
-                  backgroundColor: accentPrimary,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  opacity: pressed ? 0.85 : 1,
-                })}
-              >
-                <Icon name="plus" size={20} color={textOnPrimary} />
-              </Pressable>
             </View>
-          </View>
-        )}
-        ListEmptyComponent={() => (
-          <View style={{ marginTop: spacing.s24 }}>
-            <View style={{
-              borderRadius: radius.xl,
-              backgroundColor: surface1,
-              padding: spacing.s16,
-              borderWidth: 1,
-              borderColor: borderSubtle,
-              ...(elevation.level1 as any)
-            }}>
-              <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 18, marginBottom: spacing.s8 }}>
-                {data.length === 0 ? 'Create your first group' : 'Everything is settled'}
-              </Text>
-              <Text style={{ color: textMuted, marginBottom: spacing.s16 }}>
-                {data.length === 0
-                  ? 'Start a group to split shared bills and track balances in one beautiful view.'
-                  : 'No groups need attention right now. Switch back to all groups to keep exploring.'}
-              </Text>
-              {data.length === 0 ? (
-                <Button title="Create group" onPress={() => nav.navigate('CreateGroup')} />
-              ) : (
-                <Button variant="secondary" title="View all groups" onPress={() => setFilterTab('all')} />
-              )}
-            </View>
-          </View>
-        )}
-        />
-      </Animated.View>
-    </Screen>
+          )}
+          />
+        </Animated.View>
+      </Screen>
+    </>
   );
 }
 

@@ -7,7 +7,6 @@ import Icon from '../components/Icon';
 import { useNavigation } from '@react-navigation/native';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
-import { detectRecurring, forecastUpcoming } from '../lib/recurrence';
 import { useRecurringStore, computeNextDue } from '../store/recurring';
 import { CYCLE_KEY } from './Budgets';
 
@@ -70,18 +69,12 @@ export default function UpcomingBills() {
     ? { start: startOfMonth(today), end: endOfMonth(today) }
     : getBiweeklyPeriod(anchorISO, today);
 
-  // Detect recurring bills
-  const allTx = require('../store/transactions').useTxStore.getState().transactions || [];
-  const recSeries = detectRecurring(allTx, today);
-
-  // Prefer explicit templates
+  // Use explicit bills only from recurring store
   const { items: tmpl } = useRecurringStore.getState();
-  const tmplItems = (tmpl || []).map((t:any)=>{
+  const holdItems = (tmpl || []).map((t:any)=>{
     const next = computeNextDue(t, today);
     return next && next <= period.end ? { key: t.id, label: t.label || t.category, category: t.category, amount: t.amount, due: next } : null;
   }).filter(Boolean) as any[];
-  const useTemplates = tmplItems.length > 0;
-  const holdItems = useTemplates ? tmplItems : forecastUpcoming(recSeries, today, period.end, today);
 
   const holdAmount = holdItems.reduce((s,it)=> s + (Number(it.amount)||0), 0);
   const holdSummaryLabel = holdItems.length === 0

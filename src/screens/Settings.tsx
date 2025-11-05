@@ -29,6 +29,7 @@ import { seedInvestSixMonths, clearInvestDemo } from '../lib/demo_invest';
 import { exportPortfolioCsv } from '../lib/export';
 import { useAuthStore } from '../store/auth';
 import { changeLanguage, getCurrentLanguage, setSystemLanguage } from '../i18n/config';
+import { COUNTRY_OPTIONS, getCountryConfig, type CountryCode } from '../lib/countryConfig';
 
 type ThemeOption = { label: string; value: ThemeMode; icon: string; description: string };
 
@@ -187,6 +188,7 @@ export const Settings: React.FC = () => {
   const [currencyQuery, setCurrencyQuery] = useState('');
   const [investCurrencySheet, setInvestCurrencySheet] = useState(false);
   const [investCurrencyQuery, setInvestCurrencyQuery] = useState('');
+  const [countrySheet, setCountrySheet] = useState(false);
 
   const selectedCurrency = useMemo(
     () => findCurrency(profile.currency || 'USD'),
@@ -196,6 +198,11 @@ export const Settings: React.FC = () => {
   const selectedInvestCurrency = useMemo(
     () => findCurrency(profile.investCurrency || profile.currency || 'USD'),
     [profile.investCurrency, profile.currency],
+  );
+
+  const selectedCountry = useMemo(
+    () => profile.country ? getCountryConfig(profile.country) : null,
+    [profile.country],
   );
 
   const filteredCurrencies = useMemo(() => {
@@ -260,6 +267,28 @@ export const Settings: React.FC = () => {
     update({ investCurrency: code.toUpperCase() });
     setInvestCurrencySheet(false);
     setInvestCurrencyQuery('');
+    try {
+      await Promise.all([
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
+        refreshFx(),
+      ]);
+    } catch {
+      try { await refreshFx(); } catch {}
+    }
+  };
+
+  const handleCountryChange = async (code: CountryCode) => {
+    const config = getCountryConfig(code);
+
+    // Auto-configure currency and investment currency based on country
+    update({
+      country: code,
+      currency: config.currency,
+      investCurrency: config.investmentCurrency,
+    });
+
+    setCountrySheet(false);
+
     try {
       await Promise.all([
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
@@ -596,7 +625,7 @@ export const Settings: React.FC = () => {
                   key={option.value}
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    updateProfile({ aiTier: option.value });
+                    update({ aiTier: option.value });
                   }}
                 >
                   <View
@@ -769,6 +798,16 @@ export const Settings: React.FC = () => {
               );
             })}
           </View>
+        </SettingsSection>
+
+        {/* Country & Region */}
+        <SettingsSection title="Country & Region" description="Regional settings and preferences" icon="globe">
+          <SettingRow
+            title="Country"
+            subtitle={selectedCountry ? `${selectedCountry.flag} ${selectedCountry.name} • Auto-configures currency & retirement` : 'Not set • Tap to select your country'}
+            onPress={() => setCountrySheet(true)}
+            icon="map-pin"
+          />
         </SettingsSection>
 
         {/* Money Preferences */}
@@ -965,6 +1004,7 @@ export const Settings: React.FC = () => {
             {[
               { key: 'yahoo' as const, title: 'Yahoo Finance', subtitle: 'Free, no API key needed', icon: 'globe' },
               { key: 'fmp' as const, title: 'FinancialModelingPrep', subtitle: '150 calls/day free tier', icon: 'database' },
+              { key: 'finnhub' as const, title: 'Finnhub', subtitle: '60 calls/min free tier', icon: 'activity' },
             ].map((item, idx, arr) => {
               const selected = (profile.dataSource || 'yahoo') === item.key;
               return (
@@ -1076,6 +1116,63 @@ export const Settings: React.FC = () => {
                 value={profile.fmpApiKey || ''}
                 onChangeText={(text) => update({ fmpApiKey: text })}
                 placeholder="Enter your FMP API key..."
+                placeholderTextColor={get('text.muted') as string}
+                style={{
+                  height: 44,
+                  borderRadius: radius.md,
+                  borderWidth: 1,
+                  borderColor: get('border.subtle') as string,
+                  backgroundColor: get('surface.level2') as string,
+                  paddingHorizontal: spacing.s12,
+                  color: get('text.primary') as string,
+                  fontSize: 14,
+                  fontFamily: 'monospace',
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+          )}
+
+          {/* Finnhub API Key Input - only show when Finnhub is selected */}
+          {(profile.dataSource || 'yahoo') === 'finnhub' && (
+            <View
+              style={{
+                paddingVertical: spacing.s12,
+                paddingHorizontal: spacing.s16,
+                backgroundColor: get('surface.level1') as string,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: get('border.subtle') as string,
+                gap: spacing.s8,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: radius.md,
+                    backgroundColor: get('surface.level2') as string,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Icon name="key" size={18} color={get('text.primary') as string} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: get('text.primary') as string, fontWeight: '600', fontSize: 15 }}>
+                    API Key
+                  </Text>
+                  <Text style={{ color: get('text.muted') as string, fontSize: 13, marginTop: spacing.s2 }}>
+                    Get yours at finnhub.io
+                  </Text>
+                </View>
+              </View>
+              <TextInput
+                value={profile.finnhubApiKey || ''}
+                onChangeText={(text) => update({ finnhubApiKey: text })}
+                placeholder="Enter your Finnhub API key..."
                 placeholderTextColor={get('text.muted') as string}
                 style={{
                   height: 44,
@@ -1428,6 +1525,95 @@ export const Settings: React.FC = () => {
                       </Text>
                       <Text style={{ color: get('text.muted') as string, marginTop: spacing.s2, fontSize: 13 }}>
                         {cur.regions?.join(', ') || 'International'}
+                      </Text>
+                    </View>
+                    {active && (
+                      <View
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: radius.pill,
+                          backgroundColor: get('accent.primary') as string,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Icon name="check" size={14} color={get('text.onPrimary') as string} />
+                      </View>
+                    )}
+                  </View>
+                </AnimatedPressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </BottomSheet>
+
+      {/* Country Picker Bottom Sheet */}
+      <BottomSheet
+        visible={countrySheet}
+        onClose={() => setCountrySheet(false)}
+        fullHeight={false}
+      >
+        <View style={{ gap: spacing.s16 }}>
+          <View>
+            <Text style={{ fontSize: 24, fontWeight: '800', color: get('text.primary') as string, letterSpacing: -0.5 }}>
+              Choose your country
+            </Text>
+            <Text style={{ color: get('text.muted') as string, marginTop: spacing.s4 }}>
+              Auto-configures currency, retirement system, and regional features
+            </Text>
+          </View>
+
+          <ScrollView
+            style={{ maxHeight: 500 }}
+            contentContainerStyle={{ gap: spacing.s8, paddingBottom: spacing.s16 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {COUNTRY_OPTIONS.map(option => {
+              const active = profile.country === option.code;
+              const config = getCountryConfig(option.code);
+              return (
+                <AnimatedPressable
+                  key={option.code}
+                  onPress={() => handleCountryChange(option.code)}
+                >
+                  <View
+                    style={{
+                      paddingVertical: spacing.s14,
+                      paddingHorizontal: spacing.s16,
+                      borderRadius: radius.lg,
+                      backgroundColor: active
+                        ? withAlpha(get('accent.primary') as string, 0.12)
+                        : (get('surface.level1') as string),
+                      borderWidth: 1.5,
+                      borderColor: active
+                        ? (get('accent.primary') as string)
+                        : (get('border.subtle') as string),
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: spacing.s12,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: radius.md,
+                        backgroundColor: get('surface.level2') as string,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text style={{ fontSize: 24 }}>{config.flag}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: get('text.primary') as string, fontWeight: '700', fontSize: 16 }}>
+                        {config.name}
+                      </Text>
+                      <Text style={{ color: get('text.muted') as string, marginTop: spacing.s2, fontSize: 13 }}>
+                        {config.currency} • {config.retirement.name}
+                        {config.retirement.enabled ? '' : ' (manual entry)'}
                       </Text>
                     </View>
                     {active && (

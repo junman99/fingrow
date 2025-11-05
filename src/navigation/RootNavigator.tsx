@@ -128,7 +128,7 @@ export default function RootNavigator() {
         <Root.Screen name="Bills" component={BillsModal} options={{ presentation: 'modal', headerShown: false }} />
         <Root.Screen name="BillEditor" component={BillEditor} options={{ presentation: 'modal', headerShown: false }} />
         <Root.Screen name="Envelopes" component={EnvelopesEditor} options={{ presentation: 'modal', headerShown: false }} />
-        <Root.Screen name="AIAssistant" component={AIAssistant} options={{ presentation: 'modal', headerShown: false }} />
+        <Root.Screen name="AIAssistant" component={AIAssistant} options={{ presentation: 'formSheet', headerShown: false, sheetAllowedDetents: [0.8] }} />
         <Root.Screen name="AIPrivacyInfo" component={AIPrivacyInfo} options={{ presentation: 'modal', headerShown: false }} />
       </Root.Navigator>
 

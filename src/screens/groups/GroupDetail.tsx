@@ -2,6 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet, Modal, Animated, Alert } from 'react-native';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import AnimatedRN, {
+  useAnimatedStyle,
+  useSharedValue,
+  useAnimatedScrollHandler,
+  interpolate,
+  Extrapolate,
+} from 'react-native-reanimated';
 import { Swipeable } from 'react-native-gesture-handler';
 import { ScreenScroll } from '../../components/ScreenScroll';
 import Button from '../../components/Button';
@@ -276,6 +285,7 @@ const SettlementTransferRow: React.FC<{
 export default function GroupDetail() {
   const nav = useNavigation<NativeStackNavigationProp<GroupsStackParamList>>();
   const route = useRoute<any>();
+  const insets = useSafeAreaInsets();
   const { groupId } = (route?.params ?? {}) as { groupId: string };
   const { groups, hydrate, balances, deleteGroup, deleteBill, addSettlement } = useGroupsStore();
   const { add: addTransaction } = useTxStore();
@@ -286,6 +296,62 @@ export default function GroupDetail() {
   const [showSettleUpCard, setShowSettleUpCard] = useState(false);
   const slideAnim = useRef(new Animated.Value(300)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Main Tab Title Animation
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+
+  // Original title animation (fades out)
+  const originalTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: 1 - progress,
+    };
+  });
+
+  // Floating title animation (fades in, shrinks)
+  const floatingTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    const fontSize = interpolate(progress, [0, 1], [28, 20]);
+    const fontWeight = interpolate(progress, [0, 1], [800, 700]);
+
+    return {
+      fontSize,
+      fontWeight: fontWeight.toString() as any,
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
+  // Gradient background animation
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -478,6 +544,7 @@ export default function GroupDetail() {
   const surface1 = get('surface.level1') as string;
   const surface2 = get('surface.level2') as string;
   const borderSubtle = get('border.subtle') as string;
+  const bgDefault = get('background.default') as string;
   const successColor = get('semantic.success') as string;
   const warningColor = get('semantic.warning') as string;
   const dangerColor = get('semantic.danger') as string;
@@ -694,8 +761,62 @@ export default function GroupDetail() {
 
   return (
     <>
-      <ScreenScroll inTab contentStyle={{ paddingBottom: spacing.s32 }}>
-        <Animated.View style={{ opacity: fadeAnim, paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s20 }}>
+      {/* Main Tab Title Animation - Floating Gradient Header (Fixed at top, outside scroll) */}
+      <AnimatedRN.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            pointerEvents: 'none',
+          },
+          gradientAnimatedStyle,
+        ]}
+      >
+        <LinearGradient
+          colors={[
+            bgDefault,
+            bgDefault,
+            withAlpha(bgDefault, 0.95),
+            withAlpha(bgDefault, 0.8),
+            withAlpha(bgDefault, 0.5),
+            withAlpha(bgDefault, 0)
+          ]}
+          style={{
+            paddingTop: insets.top + spacing.s16,
+            paddingBottom: spacing.s32 + spacing.s20,
+            paddingHorizontal: spacing.s16,
+          }}
+        >
+          <AnimatedRN.Text
+            style={[
+              {
+                color: textPrimary,
+                fontSize: 20,
+                fontWeight: '700',
+                letterSpacing: -0.5,
+                textAlign: 'center',
+              },
+              floatingTitleAnimatedStyle,
+            ]}
+          >
+            {group.name}
+          </AnimatedRN.Text>
+        </LinearGradient>
+      </AnimatedRN.View>
+
+      <ScreenScroll
+        inTab
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        contentStyle={{
+          paddingBottom: spacing.s32,
+          paddingTop: insets.top + spacing.s24,
+        }}
+      >
+        <Animated.View style={{ opacity: fadeAnim, paddingHorizontal: spacing.s16, gap: spacing.s20 }}>
           {/* Header with back button */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12 }}>
             <Pressable
@@ -712,7 +833,20 @@ export default function GroupDetail() {
               <Icon name="chevron-left" size={28} color={textPrimary} />
             </Pressable>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 }}>{group.name}</Text>
+              <AnimatedRN.Text
+                style={[
+                  {
+                    color: textPrimary,
+                    fontSize: 28,
+                    fontWeight: '800',
+                    letterSpacing: -0.5,
+                    marginTop: spacing.s2,
+                  },
+                  originalTitleAnimatedStyle,
+                ]}
+              >
+                {group.name}
+              </AnimatedRN.Text>
             </View>
             <Pressable
               onPress={() => setShowSettingsMenu(true)}

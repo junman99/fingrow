@@ -430,20 +430,6 @@ const AccountsList: React.FC = () => {
               )}
             </CollapsibleSection>
 
-            {/* Retirement Accounts */}
-            <CollapsibleSection
-              title="Retirement Accounts"
-              icon="award"
-              count={categorizedAccounts.retirement.length}
-              total={totals.retirement}
-              color={successColor}
-              defaultExpanded={false}
-            >
-              {categorizedAccounts.retirement.map((account, index) =>
-                renderAccount(account, successColor, index === categorizedAccounts.retirement.length - 1)
-              )}
-            </CollapsibleSection>
-
             {/* Investment Accounts */}
             <CollapsibleSection
               title="Investment Accounts"

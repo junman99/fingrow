@@ -5,12 +5,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  withRepeat,
-  withSequence,
-  withDelay,
   withTiming,
-  interpolate,
-  Extrapolate,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
@@ -167,22 +162,40 @@ const PaycheckBreakdown: React.FC = () => {
   const warningColor = get('semantic.warning') as string;
   const bgDefault = get('background.default') as string;
 
-  // Animations
-  const fadeAnim = useSharedValue(0);
-  const slideAnim = useSharedValue(50);
-
-  useEffect(() => {
-    fadeAnim.value = withTiming(1, { duration: 600 });
-    slideAnim.value = withSpring(0, { damping: 18, stiffness: 150 });
-  }, []);
-
-  const fadeStyle = useAnimatedStyle(() => ({
-    opacity: fadeAnim.value,
-    transform: [{ translateY: slideAnim.value }],
-  }));
+  // Removed entrance animations for cleaner navigation experience
 
   // State for manual calculator
   const [calculatorAmount, setCalculatorAmount] = useState('');
+
+  // Animation for breakdown appearance
+  const breakdownHeight = useSharedValue(0);
+  const breakdownOpacity = useSharedValue(0);
+
+  // Animate breakdown when it appears/disappears
+  useEffect(() => {
+    if (calculatorAmount && parseFloat(calculatorAmount) > 0) {
+      breakdownHeight.value = withSpring(1, {
+        damping: 20,
+        stiffness: 200,
+      });
+      breakdownOpacity.value = withTiming(1, { duration: 300 });
+    } else {
+      breakdownHeight.value = withTiming(0, { duration: 200 });
+      breakdownOpacity.value = withTiming(0, { duration: 200 });
+    }
+  }, [calculatorAmount]);
+
+  const breakdownAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: breakdownOpacity.value,
+    transform: [
+      {
+        scaleY: breakdownHeight.value,
+      },
+      {
+        translateY: (1 - breakdownHeight.value) * -50,
+      },
+    ],
+  }));
 
   // Calculate breakdown from manual input
   const calculatedBreakdown = useMemo(() => {
@@ -507,7 +520,7 @@ const PaycheckBreakdown: React.FC = () => {
       contentStyle={{ padding: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s32, gap: spacing.s20 }}
     >
       {/* Header */}
-      <Animated.View style={[{ gap: spacing.s8 }, fadeStyle]}>
+      <View style={{ gap: spacing.s8 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <View style={{ flex: 1 }}>
             <Text style={{ color: muted, fontSize: 14, fontWeight: '600' }}>
@@ -537,11 +550,11 @@ const PaycheckBreakdown: React.FC = () => {
             </View>
           </AnimatedPressable>
         </View>
-      </Animated.View>
+      </View>
 
       {/* Live Breakdown */}
       {calculatedBreakdown && (
-        <Animated.View style={[fadeStyle, { gap: spacing.s16 }]}>
+        <Animated.View style={[{ gap: spacing.s16 }, breakdownAnimatedStyle]}>
           <LinearGradient
             colors={[
               isDark ? withAlpha(accentPrimary, 0.15) : withAlpha(accentPrimary, 0.08),
@@ -702,7 +715,7 @@ const PaycheckBreakdown: React.FC = () => {
       )}
 
       {/* Salary Input Calculator */}
-      <Animated.View style={fadeStyle}>
+      <View>
         <View style={{ gap: spacing.s12 }}>
           <Text style={{ color: text, fontSize: 16, fontWeight: '700' }}>
             💰 Enter Gross Salary
@@ -755,11 +768,11 @@ const PaycheckBreakdown: React.FC = () => {
             />
           )}
         </View>
-      </Animated.View>
+      </View>
 
       {/* Recent Paycheck Breakdown */}
       {recentSplit && (
-        <Animated.View style={fadeStyle}>
+        <View>
           <Card
             style={{
               padding: 0,
@@ -948,12 +961,12 @@ const PaycheckBreakdown: React.FC = () => {
               </View>
             </LinearGradient>
           </Card>
-        </Animated.View>
+        </View>
       )}
 
       {/* CPF Accounts */}
       {cpfAccounts.length > 0 && (
-        <Animated.View style={[{ gap: spacing.s12 }, fadeStyle]}>
+        <View style={{ gap: spacing.s12 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>
               CPF Balances
@@ -1004,12 +1017,12 @@ const PaycheckBreakdown: React.FC = () => {
               </Card>
             </AnimatedPressable>
           ))}
-        </Animated.View>
+        </View>
       )}
 
       {/* Year-to-Date Summary */}
       {ytdData.count > 0 && (
-        <Animated.View style={[{ gap: spacing.s12 }, fadeStyle]}>
+        <View style={{ gap: spacing.s12 }}>
           <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>
             {new Date().getFullYear()} Summary
           </Text>
@@ -1066,11 +1079,11 @@ const PaycheckBreakdown: React.FC = () => {
               </View>
             </View>
           </Card>
-        </Animated.View>
+        </View>
       )}
 
       {/* Quick Actions */}
-      <Animated.View style={[{ gap: spacing.s12 }, fadeStyle]}>
+      <View style={{ gap: spacing.s12 }}>
         <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>
           Quick Actions
         </Text>
@@ -1089,7 +1102,7 @@ const PaycheckBreakdown: React.FC = () => {
             icon="settings"
           />
         </View>
-      </Animated.View>
+      </View>
     </ScreenScroll>
   );
 };

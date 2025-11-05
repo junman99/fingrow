@@ -6,8 +6,7 @@ import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import Button from '../components/Button';
 import { useNavigation } from '@react-navigation/native';
-import { useRecurringStore, computeNextDue, Freq } from '../store/recurring';
-import { detectRecurring, forecastUpcoming } from '../lib/recurrence';
+import { useRecurringStore, computeNextDue } from '../store/recurring';
 import { useTxStore } from '../store/transactions';
 import { LinearGradient } from 'expo-linear-gradient';
 import { formatCurrency } from '../lib/format';
@@ -108,10 +107,6 @@ export default function BillsList() {
       })()
     : 'No upcoming due';
 
-  const detectedSeries = useMemo(() => detectRecurring(transactions, today), [transactions, today]);
-  const forecastedSuggestions = useMemo(() => forecastUpcoming(detectedSeries, today, period.end, today) || [], [detectedSeries, period.end, today]);
-  const managedLabels = useMemo(() => new Set((items || []).map(it => (it.label || it.category || '').toLowerCase())), [items]);
-  const suggestions = useMemo(() => forecastedSuggestions.filter(item => !managedLabels.has((item.label || item.category || '').toLowerCase())).slice(0, 5), [forecastedSuggestions, managedLabels]);
 
   const heroGradient: [string, string] = isDark ? ['#10192c', '#1f2a45'] : [accentPrimary, accentSecondary];
   const heroText = isDark ? '#eef3ff' : (get('text.onPrimary') as string);
@@ -137,20 +132,6 @@ export default function BillsList() {
     borderColor: withAlpha(textMuted, isDark ? 0.38 : 0.18)
   }), [isDark, textMuted]);
 
-  const handleCaptureSuggestion = useCallback(async (suggestion: any) => {
-    const payload = {
-      label: suggestion.label || suggestion.category || 'Bill',
-      category: suggestion.category || 'bills',
-      amount: Math.max(0, Math.round(Number(suggestion.amount) || 0)),
-      freq: 'monthly' as Freq,
-      anchorISO: suggestion.due ? new Date(suggestion.due).toISOString() : new Date().toISOString(),
-      autoPost: false,
-      remind: true,
-      active: true,
-      autoMatch: true
-    };
-    await add(payload as any);
-  }, [add]);
 
   const fmtDiff = (next?: Date | null) => {
     if (!next) return { label: 'No schedule', tone: textMuted };
@@ -202,41 +183,6 @@ export default function BillsList() {
           <Button title="Add bill" variant="primary" onPress={() => nav.navigate('BillEditor')} />
         </LinearGradient>
 
-        {suggestions.length ? (
-          <View style={{
-            backgroundColor: surface1,
-            borderRadius: radius.xl,
-            padding: spacing.s16,
-            gap: spacing.s12,
-            borderWidth: 1,
-            borderColor: borderSubtle
-          }}>
-            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>Smart suggestions</Text>
-            <Text style={{ color: textMuted }}>Based on your recent transactions, these look like bills worth capturing.</Text>
-            {suggestions.map((suggestion, idx) => (
-              <View key={idx} style={{
-                borderRadius: radius.lg,
-                padding: spacing.s12,
-                backgroundColor: withAlpha(accentSecondary, isDark ? 0.2 : 0.12),
-                borderWidth: 1,
-                borderColor: withAlpha(accentSecondary, isDark ? 0.35 : 0.18),
-                gap: spacing.s6
-              }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ color: textPrimary, fontWeight: '700' }}>{suggestion.label || suggestion.category || 'Bill suggestion'}</Text>
-                  <Text style={{ color: textPrimary, fontWeight: '700' }}>{formatCurrency(Number(suggestion.amount) || 0)}</Text>
-                </View>
-                <Text style={{ color: textMuted }}>Due around {suggestion.due ? new Date(suggestion.due).toDateString() : 'upcoming'} • {suggestion.category || 'Uncategorised'}</Text>
-                <Button
-                  title="Add to bills"
-                  size="sm"
-                  variant="secondary"
-                  onPress={() => handleCaptureSuggestion(suggestion)}
-                />
-              </View>
-            ))}
-          </View>
-        ) : null}
 
         {(!items || items.length === 0) ? (
           <View style={emptyCardStyle}>

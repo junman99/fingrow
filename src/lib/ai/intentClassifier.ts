@@ -86,13 +86,15 @@ export function classifyIntent(query: string): Intent {
     };
   }
 
-  // Simple balance query
-  if (/^(?:what(?:'s| is) my )?(?:balance|total|cash)(?:\?)?$/i.test(q)) {
+  // Balance/Cash queries - check for keywords but let AI handle the response with local data
+  if (/(?:balance|cash|account|money|have|total)/i.test(q) &&
+      !/(?:spent|spending|spend|bought|paid|purchased|add|log)/i.test(q)) {
+    // Likely asking about balance - provide aggregated data to AI
     return {
       type: IntentType.SIMPLE_QUERY,
-      confidence: 'high',
-      needsAI: false,
-      directResponse: 'balance' // Will be handled by direct query
+      confidence: 'medium',
+      needsAI: true, // Let AI format the response naturally
+      params: { queryType: 'balance' }
     };
   }
 

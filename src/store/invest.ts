@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchDailyHistoryYahoo, fetchYahooFundamentals } from '../lib/yahoo';
 import { fetchDailyHistoryFMP, fetchFMPFundamentals, fetchFMPBatchQuotes, setFMPApiKey } from '../lib/fmp';
+import { setFinnhubApiKey } from '../lib/finnhub';
 import { isCryptoSymbol, fetchCrypto, baseCryptoSymbol, fetchCryptoOhlc } from '../lib/coingecko';
 import { fetchFxUSD, type FxRates } from '../lib/fx';
 import { computePnL } from '../lib/positions';
@@ -70,6 +71,7 @@ export type Portfolio = {
   holdingsOrder?: string[];
   type?: 'Live' | 'Paper';
   archived?: boolean;
+  trackingEnabled?: boolean; // if false, exclude from total portfolio tracking
   cash?: number;          // cash balance in baseCurrency
   cashEvents?: Array<{ date: string; amount: number }>; // history of cash adjustments
   createdAt: string;
@@ -107,6 +109,7 @@ type State = {
   setActivePortfolio: (id: string) => Promise<void>;
   archivePortfolio: (id: string) => Promise<void>;
   setPortfolioArchived: (id: string, archived: boolean) => Promise<void>;
+  setPortfolioTracking: (id: string, enabled: boolean) => Promise<void>;
   deletePortfolio: (id: string) => Promise<void>;
 
   // order ops
@@ -254,6 +257,18 @@ export const useInvestStore = create<State>((set, get) => ({
         if (needsMigration) {
           console.log('🔧 [Invest Store] Migrating holdings currency metadata...');
           fixedPortfolios = fixHoldingsCurrency(portfolios);
+        }
+
+        // Ensure all portfolios have trackingEnabled field (default to true for existing portfolios)
+        let needsTrackingMigration = false;
+        Object.keys(fixedPortfolios).forEach(id => {
+          if (fixedPortfolios[id].trackingEnabled === undefined) {
+            fixedPortfolios[id] = { ...fixedPortfolios[id], trackingEnabled: true };
+            needsTrackingMigration = true;
+          }
+        });
+
+        if (needsMigration || needsTrackingMigration) {
           // Save the fixed data
           await AsyncStorage.setItem(KEY_V2, JSON.stringify({
             portfolios: fixedPortfolios,
@@ -317,15 +332,17 @@ export const useInvestStore = create<State>((set, get) => ({
     } finally {
       set({ ready: true });
 
-      // Initialize FMP API key on startup
+      // Initialize API keys on startup
       try {
         const { useProfileStore } = await import('./profile');
         const profile = useProfileStore.getState().profile;
         if (profile.dataSource === 'fmp' && profile.fmpApiKey) {
           setFMPApiKey(profile.fmpApiKey);
+        } else if (profile.dataSource === 'finnhub' && profile.finnhubApiKey) {
+          setFinnhubApiKey(profile.finnhubApiKey);
         }
       } catch (e) {
-        console.warn('[Invest Store] Failed to initialize FMP API key:', e);
+        console.warn('[Invest Store] Failed to initialize API keys:', e);
       }
     }
   },
@@ -344,6 +361,7 @@ export const useInvestStore = create<State>((set, get) => ({
       id, name, baseCurrency,
       benchmark: opts?.benchmark || 'SPY',
       type: opts?.type || 'Live',
+      trackingEnabled: true, // Default to enabled
       holdings: seed.holdings,
       watchlist: seed.watchlist,
       cash: 0,
@@ -414,6 +432,14 @@ export const useInvestStore = create<State>((set, get) => ({
       set({ portfolios, portfolioOrder: order });
     }
     ;(get() as any)._syncMirrors();
+    await (get() as any).persist();
+  },
+  setPortfolioTracking: async (id, enabled) => {
+    const p = get().portfolios[id];
+    if (!p) return;
+    const next = { ...p, trackingEnabled: enabled, updatedAt: new Date().toISOString() };
+    set({ portfolios: { ...get().portfolios, [id]: next } });
+    (get() as any)._syncMirrors();
     await (get() as any).persist();
   },
   deletePortfolio: async (id) => {
@@ -663,17 +689,21 @@ addLot: async (symbol, lot, meta, opts) => {
     const quotes = { ...get().quotes } as any;
 
     // Get data source preference from profile
-    let dataSource: 'yahoo' | 'fmp' = 'yahoo';
+    let dataSource: 'yahoo' | 'fmp' | 'finnhub' = 'yahoo';
     let fmpApiKey = '';
+    let finnhubApiKey = '';
     try {
       const { useProfileStore } = await import('./profile');
       const profile = useProfileStore.getState().profile;
       dataSource = profile.dataSource || 'yahoo';
       fmpApiKey = profile.fmpApiKey || '';
+      finnhubApiKey = profile.finnhubApiKey || '';
 
-      // Set FMP API key if using FMP
+      // Set API keys based on data source
       if (dataSource === 'fmp' && fmpApiKey) {
         setFMPApiKey(fmpApiKey);
+      } else if (dataSource === 'finnhub' && finnhubApiKey) {
+        setFinnhubApiKey(finnhubApiKey);
       }
     } catch (e) {
       console.warn('[Invest Store] Failed to get profile, defaulting to Yahoo');
@@ -760,6 +790,43 @@ addLot: async (symbol, lot, meta, opts) => {
           console.error('[Invest Store] FMP batch failed, falling back to Yahoo:', e);
           // Fall back to Yahoo if FMP fails
           dataSource = 'yahoo';
+        }
+      }
+
+      // Finnhub
+      if (dataSource === 'finnhub' && finnhubApiKey && equitySymbols.length > 0) {
+        const { fetchFinnhubQuote, fetchFinnhubCandles, fetchFinnhubProfile } = await import('../lib/finnhub');
+
+        for (const sym of equitySymbols) {
+          try {
+            const [quote, rawBars, fundamentals] = await Promise.all([
+              fetchFinnhubQuote(sym).catch(() => null),
+              fetchFinnhubCandles(sym, '5y').catch(() => []),
+              fetchFinnhubProfile(sym).catch(() => null),
+            ]);
+
+            if (rawBars && rawBars.length > 0) {
+              const last = quote?.price || (rawBars.length ? rawBars[rawBars.length-1].close : 0);
+              const change = quote?.change || 0;
+              const changePct = quote?.changesPercentage || 0;
+              const line = rawBars.map(b => ({ t: b.date, v: Number(b.close.toFixed(2)) }));
+              const cbars = rawBars.map(b => ({ t: b.date, o: b.open, h: b.high, l: b.low, c: b.close, v: b.volume }));
+
+              quotes[sym] = {
+                symbol: sym,
+                last,
+                change,
+                changePct,
+                ts: Date.now(),
+                line,
+                bars: cbars,
+                fundamentals: fundamentals || undefined
+              };
+            }
+          } catch (e) {
+            console.error('[Invest Store] Failed to fetch Finnhub data for:', sym, e);
+          }
+          await new Promise(r => setTimeout(r, 1200)); // Rate limiting: 1 call per 1.2 seconds
         }
       }
 

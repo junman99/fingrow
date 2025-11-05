@@ -55,6 +55,9 @@ export default function TransactionConfirmation({ type, data, onConfirm, onCance
   });
   const [customAccountName, setCustomAccountName] = React.useState('');
   const [showCustomInput, setShowCustomInput] = React.useState(false);
+  const [showAccountDropdown, setShowAccountDropdown] = React.useState(false);
+  const [dropdownLayout, setDropdownLayout] = React.useState({ y: 0, height: 0 });
+  const accountRowRef = React.useRef<any>(null);
 
   const text = get('text.primary') as string;
   const muted = get('text.muted') as string;
@@ -62,7 +65,8 @@ export default function TransactionConfirmation({ type, data, onConfirm, onCance
   const surface2 = get('surface.level2') as string;
   const accent = get('accent.primary') as string;
   const border = get('border.subtle') as string;
-  const success = get('status.success') as string;
+  const success = get('semantic.success') as string;
+  const error = get('semantic.error') as string;
 
   const handleConfirm = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -81,6 +85,21 @@ export default function TransactionConfirmation({ type, data, onConfirm, onCance
 
   if (type === 'transaction') {
     const txData = editedData as TransactionData;
+
+    // Format date to human-readable
+    const formatDate = (dateStr?: string) => {
+      if (!dateStr) return 'Today';
+      const date = new Date(dateStr);
+      const month = date.toLocaleString('default', { month: 'short' });
+      const day = date.getDate();
+      const year = date.getFullYear();
+      let hours = date.getHours();
+      const minutes = date.getMinutes();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12 || 12;
+      const minutesStr = minutes < 10 ? `0${minutes}` : minutes;
+      return `${year} ${month} ${day}, ${hours}:${minutesStr} ${ampm}`;
+    };
 
     return (
       <View
@@ -144,68 +163,125 @@ export default function TransactionConfirmation({ type, data, onConfirm, onCance
             <Text style={{ color: text, fontSize: 14 }}>{txData.merchant || 'Added via AI'}</Text>
           </View>
 
+          {/* Account - Tappable */}
+          <View
+            style={{ position: 'relative' }}
+            ref={accountRowRef}
+            onLayout={(event) => {
+              accountRowRef.current?.measureInWindow((x: number, y: number, width: number, height: number) => {
+                setDropdownLayout({ y, height });
+              });
+            }}
+          >
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setShowAccountDropdown(!showAccountDropdown);
+              }}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Text style={{ color: muted, fontSize: 13 }}>Account</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
+                <Text style={{ color: accent, fontSize: 14, fontWeight: '600' }}>
+                  {selectedAccountName || 'Select account'}
+                </Text>
+                <Icon name="chevron-down" size={16} colorToken="accent.primary" />
+              </View>
+            </Pressable>
+
+            {/* Floating Account Dropdown */}
+            {showAccountDropdown && suggestedAccounts && suggestedAccounts.length > 0 && (() => {
+              // Calculate if dropdown should appear above or below
+              const screenHeight = 800; // Approximate screen height
+              const dropdownHeight = Math.min(suggestedAccounts.length * 44 + 16, 200);
+              const spaceBelow = screenHeight - (dropdownLayout.y + dropdownLayout.height);
+              const showAbove = spaceBelow < dropdownHeight + 20 && dropdownLayout.y > dropdownHeight + 20;
+
+              return (
+                <View
+                  style={{
+                    position: 'absolute',
+                    ...(showAbove ? { bottom: 28 } : { top: 28 }),
+                    right: 0,
+                    backgroundColor: surface1,
+                    borderRadius: radius.lg,
+                    padding: spacing.s6,
+                    borderWidth: 1,
+                    borderColor: border,
+                    maxHeight: 200,
+                    zIndex: 1000,
+                    shadowColor: '#000000',
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.15,
+                    shadowRadius: 12,
+                    elevation: 8,
+                  }}
+                >
+                  {suggestedAccounts.map((account, index) => {
+                    const isSelected = selectedAccountName === account.name;
+                    return (
+                      <Pressable
+                        key={account.id}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setSelectedAccountName(account.name);
+                          setShowAccountDropdown(false);
+                        }}
+                        style={({ pressed }) => ({
+                          backgroundColor: isSelected ? accent + '15' : 'transparent',
+                          borderRadius: radius.md,
+                          padding: spacing.s8,
+                          paddingHorizontal: spacing.s12,
+                          marginBottom: index < suggestedAccounts.length - 1 ? spacing.s2 : 0,
+                          opacity: pressed ? 0.7 : 1,
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: spacing.s24,
+                        })}
+                      >
+                        {/* Left: Account Type */}
+                        <Text
+                          style={{
+                            color: muted,
+                            fontSize: 11,
+                            textTransform: 'capitalize',
+                            fontWeight: '600',
+                            minWidth: 60,
+                          }}
+                        >
+                          {account.kind || 'Account'}
+                        </Text>
+                        {/* Right: Account Name */}
+                        <Text
+                          style={{
+                            color: isSelected ? accent : text,
+                            fontSize: 14,
+                            fontWeight: isSelected ? '700' : '600',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {account.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              );
+            })()}
+          </View>
+
           {/* Date */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text style={{ color: muted, fontSize: 13 }}>Date</Text>
-            <Text style={{ color: text, fontSize: 14 }}>{txData.date || 'Today'}</Text>
+            <Text style={{ color: text, fontSize: 14 }}>{formatDate(txData.date)}</Text>
           </View>
         </View>
-
-        {/* Account Selection */}
-        {suggestedAccounts && suggestedAccounts.length > 0 && (
-          <View style={{ marginTop: spacing.s16 }}>
-            <Text style={{ color: muted, fontSize: 13, marginBottom: spacing.s8 }}>
-              Select Account
-            </Text>
-            <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-              {suggestedAccounts.map((account) => {
-                const isSelected = selectedAccountName === account.name;
-                return (
-                  <Pressable
-                    key={account.id}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setSelectedAccountName(account.name);
-                    }}
-                    style={({ pressed }) => ({
-                      flex: 1,
-                      backgroundColor: isSelected ? accent + '15' : surface2,
-                      borderRadius: radius.md,
-                      padding: spacing.s12,
-                      borderWidth: isSelected ? 2 : 1,
-                      borderColor: isSelected ? accent : border,
-                      opacity: pressed ? 0.7 : 1,
-                    })}
-                  >
-                    <Text
-                      style={{
-                        color: isSelected ? accent : text,
-                        fontSize: 14,
-                        fontWeight: isSelected ? '700' : '600',
-                        textAlign: 'center',
-                      }}
-                    >
-                      {account.name}
-                    </Text>
-                    {account.kind && (
-                      <Text
-                        style={{
-                          color: muted,
-                          fontSize: 11,
-                          marginTop: 2,
-                          textAlign: 'center',
-                          textTransform: 'capitalize',
-                        }}
-                      >
-                        {account.kind}
-                      </Text>
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        )}
 
         {/* Action Buttons */}
         <View style={{ flexDirection: 'row', gap: spacing.s8, marginTop: spacing.s16 }}>
@@ -213,16 +289,14 @@ export default function TransactionConfirmation({ type, data, onConfirm, onCance
             onPress={handleCancel}
             style={({ pressed }) => ({
               flex: 1,
-              backgroundColor: surface2,
+              backgroundColor: 'transparent',
               borderRadius: radius.md,
               padding: spacing.s12,
               alignItems: 'center',
               opacity: pressed ? 0.7 : 1,
-              borderWidth: 1,
-              borderColor: border,
             })}
           >
-            <Text style={{ color: text, fontSize: 14, fontWeight: '600' }}>Cancel</Text>
+            <Text style={{ color: error, fontSize: 14, fontWeight: '600' }}>Cancel</Text>
           </Pressable>
 
           <Pressable
@@ -327,16 +401,14 @@ export default function TransactionConfirmation({ type, data, onConfirm, onCance
           onPress={handleCancel}
           style={({ pressed }) => ({
             flex: 1,
-            backgroundColor: surface2,
+            backgroundColor: 'transparent',
             borderRadius: radius.md,
             padding: spacing.s12,
             alignItems: 'center',
             opacity: pressed ? 0.7 : 1,
-            borderWidth: 1,
-            borderColor: border,
           })}
         >
-          <Text style={{ color: text, fontSize: 14, fontWeight: '600' }}>Cancel</Text>
+          <Text style={{ color: error, fontSize: 14, fontWeight: '600' }}>Cancel</Text>
         </Pressable>
 
         <Pressable

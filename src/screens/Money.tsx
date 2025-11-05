@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, withRepeat, Easing, FadeIn, runOnJS } from 'react-native-reanimated';
+import { View, Text, Pressable, ScrollView, Dimensions } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, withRepeat, Easing, runOnJS, useAnimatedScrollHandler, interpolate, Extrapolate } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenScroll } from '../components/ScreenScroll';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
@@ -237,8 +238,7 @@ const ChartBar: React.FC<{
   color: string;
   isSelected: boolean;
   onPress: () => void;
-  delay: number;
-}> = ({ height, maxHeight, color, isSelected, onPress, delay }) => {
+}> = ({ height, maxHeight, color, isSelected, onPress }) => {
   const scale = useSharedValue(1);
   const animatedHeight = useSharedValue(0);
 
@@ -269,7 +269,6 @@ const ChartBar: React.FC<{
       }}
     >
       <Animated.View
-        entering={FadeIn.delay(delay)}
         style={[
           {
             width: '100%',
@@ -298,9 +297,15 @@ const ChartBar: React.FC<{
 const Money: React.FC = () => {
   const nav = useNavigation<any>();
   const { get, isDark } = useThemeTokens();
+  const insets = useSafeAreaInsets();
   const [showAccountsSheet, setShowAccountsSheet] = useState(false);
-  const [showPortfolioSheet, setShowPortfolioSheet] = useState(false);
   const [showDebtsSheet, setShowDebtsSheet] = useState(false);
+
+  // Main Tab Title Animation
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
   const { accounts, hydrate: hydrateAcc } = useAccountsStore();
   const { holdings, quotes, hydrate: hydrateInvest } = useInvestStore();
   const { items: recurring, hydrate: hydrateRecur } = useRecurringStore();
@@ -363,6 +368,11 @@ const Money: React.FC = () => {
     [accountsList]
   );
 
+  const retirementAccounts = useMemo(
+    () => accountsList.filter(acc => acc.kind === 'retirement' && acc.includeInNetWorth !== false),
+    [accountsList]
+  );
+
   const creditCards = useMemo(
     () => accountsList.filter(acc => acc.kind === 'credit' && acc.includeInNetWorth !== false),
     [accountsList]
@@ -388,6 +398,58 @@ const Money: React.FC = () => {
   const successColor = get('semantic.success') as string;
   const bgDefault = get('background.default') as string;
 
+  // Main Tab Title Animation - Get screen width outside worklet
+  const titleScreenWidth = Dimensions.get('window').width;
+
+  // Main Tab Title Animation - Animated Styles
+  const originalTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    // Fade out the original title as we scroll
+    return {
+      opacity: 1 - progress,
+    };
+  });
+
+  const floatingTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    const fontSize = interpolate(progress, [0, 1], [28, 20]);
+    const fontWeight = interpolate(progress, [0, 1], [800, 700]);
+
+    return {
+      fontSize,
+      fontWeight: fontWeight.toString() as any,
+      opacity: progress >= 1 ? 1 : progress, // Keep opacity at 1 once fully scrolled
+    };
+  });
+
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: progress >= 1 ? 1 : progress, // Keep opacity at 1 once fully scrolled
+    };
+  });
+
   const avgDaily = useMemo(() => {
     if (!transactions || transactions.length === 0) return 0;
     const now = new Date();
@@ -407,10 +469,11 @@ const Money: React.FC = () => {
     const investCurrency = (profile.investCurrency || profile.currency || 'USD').toUpperCase();
     const primaryCurrency = (profile.currency || 'USD').toUpperCase();
 
-    // Build aggregated holdings across ALL portfolios
+    // Build aggregated holdings across ALL portfolios (excluding disabled tracking)
     const aggregatedHoldings: Record<string, any> = {};
     Object.values(portfolios || {}).forEach((p: any) => {
-      if (!p || !p.holdings) return;
+      // Skip portfolios with tracking disabled
+      if (!p || !p.holdings || (p.trackingEnabled === false)) return;
       Object.values(p.holdings || {}).forEach((h: any) => {
         const sym = h.symbol;
         if (!aggregatedHoldings[sym]) {
@@ -463,19 +526,16 @@ const Money: React.FC = () => {
       }
     }
 
-    // Sum cash from ALL portfolios
+    // Sum cash from ALL portfolios (excluding disabled tracking)
     let totalCashInInvestCurrency = 0;
     Object.values(portfolios || {}).forEach((p: any) => {
-      if (p && typeof p.cash === 'number') {
-        const portfolioBaseCurrency = String(p.baseCurrency || 'USD').toUpperCase();
-        const cashNative = Number(p.cash) || 0;
-        // Convert cash to investment currency
-        totalCashInInvestCurrency += convertCurrency(fxRates, cashNative, portfolioBaseCurrency, investCurrency);
-      }
+      // Skip portfolios with tracking disabled
+      if (!p || typeof p.cash !== 'number' || (p.trackingEnabled === false)) return;
+      const portfolioBaseCurrency = String(p.baseCurrency || 'USD').toUpperCase();
+      const cashNative = Number(p.cash) || 0;
+      // Convert cash to investment currency
+      totalCashInInvestCurrency += convertCurrency(fxRates, cashNative, portfolioBaseCurrency, investCurrency);
     });
-
-    // Add investment and retirement account balances (these are in primary currency)
-    const investmentAccountBalance = investmentAccounts.reduce((s, a) => s + (a.balance || 0), 0);
 
     // Total value in investment currency
     const totalInInvestCurrency = rows.reduce((acc, row) => acc + row.value, 0) + totalCashInInvestCurrency;
@@ -486,8 +546,12 @@ const Money: React.FC = () => {
     // Also convert change to primary currency
     const changeInPrimaryCurrency = convertCurrency(fxRates, totalChangeConverted, investCurrency, primaryCurrency);
 
-    // Add investment account balances (already in primary currency)
-    const totalConverted = totalInPrimaryCurrency + investmentAccountBalance;
+    // Calculate retirement accounts total (CPF, 401k, etc.)
+    const retirementAccountsTotal = retirementAccounts.reduce((sum, acc) => sum + (acc.balance || 0), 0);
+
+    // Combined total = active portfolios + retirement accounts (if enabled in settings)
+    const includeRetirement = profile.includeRetirementInInvestments !== false; // Default to true
+    const totalConverted = totalInPrimaryCurrency + (includeRetirement ? retirementAccountsTotal : 0);
 
     const allocations =
       totalInInvestCurrency > 0
@@ -498,8 +562,14 @@ const Money: React.FC = () => {
             .sort((a, b) => b.wt - a.wt)
             .slice(0, 3)
         : [];
-    return { totalUSD: totalConverted, changeUSD: changeInPrimaryCurrency, allocations };
-  }, [holdings, quotes, investmentAccounts, profile.investCurrency, profile.currency]);
+    return {
+      totalUSD: totalConverted,
+      portfolioValue: totalInPrimaryCurrency,
+      retirementValue: retirementAccountsTotal,
+      changeUSD: changeInPrimaryCurrency,
+      allocations
+    };
+  }, [holdings, quotes, retirementAccounts, profile.investCurrency, profile.currency, profile.includeRetirementInInvestments]);
 
   const upcoming = useMemo(() => sumUpcoming(recurring || [], new Date(), 30), [recurring]);
 
@@ -529,12 +599,12 @@ const Money: React.FC = () => {
     return calculateHistoricalNetWorth(
       accountsList,
       transactions || [],
-      portfolioCalc.totalUSD,
+      portfolioCalc.totalUSD, // This already respects the retirement toggle
       180 // Last 180 days
     );
   }, [accountsList, transactions, portfolioCalc.totalUSD]);
 
-  const [netWorthTimeframe, setNetWorthTimeframe] = useState<'D'|'W'|'M'>('D');
+  const [netWorthTimeframe, setNetWorthTimeframe] = useState<'1W'|'1M'|'3M'|'6M'|'YTD'|'1Y'|'ALL'>('6M');
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
   const [scrollOffset, setScrollOffset] = useState(0); // Pixel offset scrolled (persisted)
   const [tempDragOffset, setTempDragOffset] = useState(0); // Real-time drag offset
@@ -547,24 +617,57 @@ const Money: React.FC = () => {
     // Get all data without filtering by offset
     if (!netWorthHistoryData.length) return [];
 
+    const now = Date.now();
     const msDay = 24 * 60 * 60 * 1000;
 
-    // For Day view: get daily data for last 180 days
-    if (netWorthTimeframe === 'D') {
-      return aggregateNetWorthData(netWorthHistoryData, 'D', 0);
+    // Determine cutoff time and aggregation type based on selected interval
+    let cutoffTime: number;
+    let aggregationType: 'D' | 'W' | 'M';
+
+    switch (netWorthTimeframe) {
+      case '1W':
+        cutoffTime = now - 7 * msDay;
+        aggregationType = 'D'; // Daily data for 1 week
+        break;
+      case '1M':
+        cutoffTime = now - 30 * msDay;
+        aggregationType = 'D'; // Daily data for 1 month
+        break;
+      case '3M':
+        cutoffTime = now - 90 * msDay;
+        aggregationType = 'W'; // Weekly data for 3 months
+        break;
+      case '6M':
+        cutoffTime = now - 180 * msDay;
+        aggregationType = 'W'; // Weekly data for 6 months
+        break;
+      case 'YTD':
+        const startOfYear = new Date(new Date().getFullYear(), 0, 1).getTime();
+        cutoffTime = startOfYear;
+        aggregationType = 'W'; // Weekly data for YTD
+        break;
+      case '1Y':
+        cutoffTime = now - 365 * msDay;
+        aggregationType = 'M'; // Monthly data for 1 year
+        break;
+      case 'ALL':
+        cutoffTime = 0; // No cutoff, show all data
+        aggregationType = 'M'; // Monthly data for all time
+        break;
+      default:
+        cutoffTime = now - 180 * msDay;
+        aggregationType = 'W';
     }
-    // For Week view: get weekly data for last ~26 weeks
-    else if (netWorthTimeframe === 'W') {
-      return aggregateNetWorthData(netWorthHistoryData, 'W', 0);
-    }
-    // For Month view: get monthly data for last 6 months
-    else {
-      return aggregateNetWorthData(netWorthHistoryData, 'M', 0);
-    }
+
+    // Aggregate the data
+    const aggregated = aggregateNetWorthData(netWorthHistoryData, aggregationType, 0);
+
+    // Filter to only show data within the timeframe
+    return aggregated.filter(point => point.t >= cutoffTime);
   }, [netWorthHistoryData, netWorthTimeframe]);
 
   // Number of visible bars based on timeframe
-  const visibleBars = netWorthTimeframe === 'D' ? 10 : netWorthTimeframe === 'W' ? 7 : 6;
+  const visibleBars = netWorthTimeframe === '1W' ? 7 : netWorthTimeframe === '1M' ? 30 : 10;
   const barWidth = screenWidth / visibleBars;
 
   // Show all chart data (no windowing for now - StackedAreaChart handles the full dataset)
@@ -655,6 +758,13 @@ const Money: React.FC = () => {
       ? 'No change today'
       : `${portfolioCalc.changeUSD > 0 ? '+' : ''}${formatCurrency(portfolioCalc.changeUSD)} today`;
 
+  const includeRetirement = profile.includeRetirementInInvestments !== false;
+  const portfolioSubtitle = portfolioCalc.retirementValue > 0 && includeRetirement
+    ? 'Active + Retirement'
+    : portfolioCalc.retirementValue > 0 && !includeRetirement
+    ? 'Active only'
+    : portfolioChangeLabel;
+
   // Animation values for milestone achievement - subtle pulse effect
   const milestoneScale = useSharedValue(1);
 
@@ -673,67 +783,90 @@ const Money: React.FC = () => {
   }));
 
   return (
-    <ScreenScroll
-      inTab
-      contentStyle={{
-        paddingHorizontal: 0,
-        paddingTop: spacing.s16,
-        paddingBottom: spacing.s32,
-        gap: spacing.s16,
-      }}
-    >
+    <>
+      {/* Main Tab Title Animation - Floating Gradient Header (Fixed at top, outside scroll) */}
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            pointerEvents: 'none',
+          },
+          gradientAnimatedStyle,
+        ]}
+      >
+        <LinearGradient
+          colors={[
+            bgDefault,
+            bgDefault,
+            withAlpha(bgDefault, 0.95),
+            withAlpha(bgDefault, 0.8),
+            withAlpha(bgDefault, 0.5),
+            withAlpha(bgDefault, 0)
+          ]}
+          style={{
+            paddingTop: insets.top + spacing.s16,
+            paddingBottom: spacing.s32 + spacing.s20,
+            paddingHorizontal: spacing.s16,
+          }}
+        >
+          <Animated.Text
+            style={[
+              {
+                color: text,
+                fontSize: 20,
+                fontWeight: '700',
+                letterSpacing: -0.5,
+                textAlign: 'center',
+              },
+              floatingTitleAnimatedStyle,
+            ]}
+          >
+            Money
+          </Animated.Text>
+        </LinearGradient>
+      </Animated.View>
+
+      <ScreenScroll
+        inTab
+        fullScreen
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        contentStyle={{
+          paddingHorizontal: 0,
+          paddingTop: insets.top + spacing.s24,
+          paddingBottom: spacing.s32,
+          gap: spacing.s16,
+        }}
+      >
+
       {/* Header like Invest tab */}
       <View style={{ paddingHorizontal: spacing.s16, gap: spacing.s16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text style={{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.5 }}>
+          <Animated.Text
+            style={[
+              {
+                color: text,
+                fontSize: 28,
+                fontWeight: '800',
+                letterSpacing: -0.5,
+              },
+              originalTitleAnimatedStyle,
+            ]}
+          >
             Money
-          </Text>
+          </Animated.Text>
         </View>
 
         {/* Net Worth Display with subtle label */}
         <View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s4 }}>
+          <View style={{ marginBottom: spacing.s4 }}>
             <Text style={{ color: muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '600' }}>
               Net Worth
             </Text>
-
-            {/* Timeframe Selector (D, W, M) */}
-            <View style={{
-              flexDirection: 'row',
-              backgroundColor: surface2,
-              borderRadius: radius.pill,
-              padding: 2,
-            }}>
-              {(['D', 'W', 'M'] as const).map((option) => {
-                const isSelected = option === netWorthTimeframe;
-                return (
-                  <Pressable
-                    key={option}
-                    onPress={() => {
-                      setNetWorthTimeframe(option);
-                      setSelectedBarIndex(null);
-                      setScrollOffset(0); // Reset offset when changing timeframe
-                    }}
-                    style={{
-                      paddingHorizontal: spacing.s12,
-                      paddingVertical: spacing.s6,
-                      borderRadius: radius.pill,
-                      backgroundColor: isSelected ? accentPrimary : 'transparent',
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: isSelected ? textOnPrimary : muted,
-                        fontSize: 13,
-                        fontWeight: '700',
-                      }}
-                    >
-                      {option}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
           </View>
 
           {/* Net Worth Value - changes based on selected bar */}
@@ -764,16 +897,12 @@ const Money: React.FC = () => {
                 }}>
                   {netWorthChange >= 0 ? '+' : ''}{formatCurrency(Math.abs(netWorthChange))} ({netWorthChange >= 0 ? '+' : ''}{netWorthChangePercent.toFixed(1)}%)
                 </Text>
-                <Text style={{ color: muted, fontSize: 13 }}>•</Text>
-                <Text style={{ color: muted, fontSize: 13 }}>
-                  {motivationalMsg.emoji} {motivationalMsg.message}
-                </Text>
               </View>
             </>
           )}
 
           {/* Stacked Area Chart */}
-          <View style={{ marginTop: spacing.s12 }}>
+          <View style={{ marginTop: spacing.s12, marginLeft: -spacing.s16, marginRight: -spacing.s16, gap: spacing.s8 }}>
             {aggregatedChartData.length > 0 ? (
               <StackedAreaChart
                 data={aggregatedChartData.map(point => ({
@@ -790,6 +919,34 @@ const Money: React.FC = () => {
                 <Text style={{ color: muted, fontSize: 13 }}>No historical data available yet</Text>
               </View>
             )}
+
+            {/* Interval Buttons */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.s16 }}>
+              {(['1W', '1M', '3M', '6M', 'YTD', '1Y', 'ALL'] as const).map((k) => {
+                const on = netWorthTimeframe === k;
+                return (
+                  <Pressable
+                    key={k}
+                    onPress={() => {
+                      setNetWorthTimeframe(k);
+                      setSelectedBarIndex(null);
+                      setScrollOffset(0);
+                    }}
+                    style={{ paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}
+                  >
+                    <Text
+                      style={{
+                        color: on ? accentPrimary : muted,
+                        fontSize: on ? 15 : 13,
+                        fontWeight: on ? '800' : '600',
+                      }}
+                    >
+                      {k}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
           {/* Removed: Swipe Indicator (no longer needed with LineChart) */}
@@ -835,12 +992,12 @@ const Money: React.FC = () => {
             }
           />
           <MetricCard
-            title="Portfolio"
+            title="Investments"
             value={formatCurrency(portfolioCalc.totalUSD)}
-            subtitle={portfolioChangeLabel}
+            subtitle={portfolioSubtitle}
             icon="trending-up"
             bgColor={withAlpha(accentSecondary, isDark ? 0.22 : 0.14)}
-            onPress={() => nav.navigate('PortfolioList')}
+            onPress={() => nav.navigate('InvestmentsList')}
           />
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
@@ -1119,79 +1276,6 @@ const Money: React.FC = () => {
       </BottomSheet>
 
       <BottomSheet
-        visible={showPortfolioSheet}
-        onClose={() => setShowPortfolioSheet(false)}
-        fullHeight
-      >
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: spacing.s16, gap: spacing.s16 }}
-          showsVerticalScrollIndicator={false}
-        >
-          <View>
-            <Text style={{ color: text, fontSize: 24, fontWeight: '700' }}>Portfolio</Text>
-            <Text style={{ color: muted, marginTop: spacing.s6 }}>
-              Track your investments and market performance
-            </Text>
-          </View>
-
-          <Card
-            style={{
-              backgroundColor: withAlpha(accentSecondary, isDark ? 0.22 : 0.14),
-              padding: spacing.s16,
-            }}
-          >
-            <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>Total value</Text>
-            <Text style={{ color: text, fontSize: 28, fontWeight: '800', marginTop: spacing.s4 }}>
-              {formatCurrency(portfolioCalc.totalUSD)}
-            </Text>
-            <Text style={{ color: muted, marginTop: spacing.s8 }}>{portfolioChangeLabel}</Text>
-            {portfolioCalc.allocations.length > 0 && (
-              <View
-                style={{
-                  flexDirection: 'row',
-                  flexWrap: 'wrap',
-                  gap: spacing.s8,
-                  marginTop: spacing.s12,
-                }}
-              >
-                {portfolioCalc.allocations.map(item => (
-                  <View
-                    key={item.sym}
-                    style={{
-                      paddingVertical: spacing.s6,
-                      paddingHorizontal: spacing.s12,
-                      borderRadius: radius.pill,
-                      backgroundColor: withAlpha(text, isDark ? 0.12 : 0.08),
-                    }}
-                  >
-                    <Text style={{ color: onSurface, fontWeight: '600', fontSize: 13 }}>
-                      {item.sym} {(item.wt * 100).toFixed(2)}%
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </Card>
-
-          <Button
-            title="Open portfolio"
-            onPress={() => {
-              closeSheetThen(setShowPortfolioSheet, () => nav.navigate('Invest', { screen: 'InvestHome' }));
-            }}
-          />
-
-          {portfolioCalc.totalUSD === 0 && (
-            <Card style={{ backgroundColor: cardBg, padding: spacing.s16 }}>
-              <Text style={{ color: muted }}>
-                No investments yet. Start building your portfolio by adding your first holding.
-              </Text>
-            </Card>
-          )}
-        </ScrollView>
-      </BottomSheet>
-
-      <BottomSheet
         visible={showDebtsSheet}
         onClose={() => setShowDebtsSheet(false)}
         fullHeight
@@ -1361,6 +1445,7 @@ const Money: React.FC = () => {
       </BottomSheet>
 
     </ScreenScroll>
+    </>
   );
 };
 

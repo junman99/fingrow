@@ -75,14 +75,14 @@ export const StackedAreaChart: React.FC<Props> = ({
   const accentSecondary = get('accent.secondary') as string;
   const warningColor = get('semantic.warning') as string;
 
-  // Theme-aware colors: vibrant for light, milk/neutral for dark
-  const cashColor = isDark ? '#D6D1CC' : '#3B82F6'; // Warm gray for dark, blue for light
-  const investColor = isDark ? '#CFC9D1' : '#8B5CF6'; // Purple-tinted gray for dark, purple for light
-  const netWorthLineColor = isDark ? '#F0EBE6' : '#6366F1'; // Soft white for dark, indigo for light (back to original)
-  const currentNetWorthColor = isDark ? '#FFFFFF' : '#1E40AF'; // Pure white for dark, darker blue for light (for horizontal line)
-  const debtColor = warningColor; // Keep warning color for debt
+  // Use the same colors as the Money overview cards for visual consistency
+  const cashColor = accentPrimary; // Matches Cash card
+  const investColor = accentSecondary; // Matches Investments card
+  const debtColor = warningColor; // Matches Debts card
+  const netWorthLineColor = text; // Use text color for net worth line (more prominent)
+  const currentNetWorthColor = muted; // Use muted color for current net worth horizontal line
 
-  // Calculate bounds with smart Y-axis scaling (don't start from 0)
+  // Calculate bounds with smart Y-axis scaling for clean net worth trend line
   const { minVal, maxVal, times } = useMemo(() => {
     if (!data.length) return { minVal: 0, maxVal: 1, times: [] };
 
@@ -160,20 +160,11 @@ export const StackedAreaChart: React.FC<Props> = ({
     };
   }, [data]);
 
-  // Generate path data for stacked areas with smooth curves + net worth line
+  // Generate path data for clean net worth line only (no stacked areas)
   const paths = useMemo(() => {
-    if (!data.length) return { cashPath: '', investPath: '', debtPath: '', cashLine: '', investLine: '', debtLine: '', netWorthLine: '' };
+    if (!data.length) return { netWorthLine: '', fillPath: '' };
 
-    // Generate points for each layer with safety checks
-    const cashPoints = data.map(d => {
-      const cash = Number(d.cash) || 0;
-      return { x: xFor(d.t), y: yFor(cash) };
-    });
-    const investPoints = data.map(d => {
-      const cash = Number(d.cash) || 0;
-      const investments = Number(d.investments) || 0;
-      return { x: xFor(d.t), y: yFor(cash + investments) };
-    });
+    // Generate net worth line points
     const netWorthPoints = data.map(d => {
       const cash = Number(d.cash) || 0;
       const investments = Number(d.investments) || 0;
@@ -182,64 +173,27 @@ export const StackedAreaChart: React.FC<Props> = ({
     });
 
     // Safety check for empty data after filtering
-    if (cashPoints.length === 0) {
-      return { cashPath: '', investPath: '', debtPath: '', cashLine: '', investLine: '', debtLine: '', netWorthLine: '' };
+    if (netWorthPoints.length === 0) {
+      return { netWorthLine: '', fillPath: '' };
     }
 
-    // Cash layer (from minVal baseline) with straight lines
-    const cashTopPath = straightPath(cashPoints);
-    if (!cashTopPath) {
-      return { cashPath: '', investPath: '', debtPath: '', cashLine: '', investLine: '', debtLine: '', netWorthLine: '' };
+    // Net worth line
+    const netWorthLine = straightPath(netWorthPoints);
+    if (!netWorthLine) {
+      return { netWorthLine: '', fillPath: '' };
     }
 
-    const firstCash = Number(data[0].cash) || 0;
-    const lastCash = Number(data[data.length - 1].cash) || 0;
+    // Optional: Create a subtle fill area below the net worth line
     const x0 = xFor(data[0].t);
     const xN = xFor(data[data.length - 1].t);
-    const yMinVal = yFor(minVal);
-    const yCash0 = yFor(firstCash);
-    const yCashN = yFor(lastCash);
+    const yBottom = yFor(minVal);
 
-    // Cash area: start at minVal, go up to cash line, follow it, then back down to minVal
-    let cashPath = `M ${x0} ${yMinVal}`;
-    cashPath += ` L ${x0} ${yCash0}`;
-    cashPath += cashTopPath.substring(1); // Remove M from start, add the line
-    cashPath += ` L ${xN} ${yMinVal} Z`;
+    let fillPath = netWorthLine; // Start with the net worth line
+    fillPath += ` L ${xN} ${yBottom}`; // Go down to bottom right
+    fillPath += ` L ${x0} ${yBottom}`; // Go to bottom left
+    fillPath += ' Z'; // Close the path
 
-    // Cash top line for border
-    const cashLine = cashTopPath;
-
-    // Investments layer (on top of cash) with straight lines
-    const investTopPath = straightPath(investPoints);
-    if (!investTopPath) {
-      return { cashPath, investPath: '', debtPath: '', cashLine, investLine: '', debtLine: '', netWorthLine: '' };
-    }
-
-    // Investment area: draw as area between cash line and investment line
-    // Start with investment line, then connect back along cash line
-    let investPath = investTopPath; // Investment top line (M x0 y0 L ...)
-
-    // Connect to last cash point and trace back
-    investPath += ` L ${cashPoints[cashPoints.length - 1].x} ${cashPoints[cashPoints.length - 1].y}`;
-
-    // Trace back along cash in reverse
-    for (let i = cashPoints.length - 2; i >= 0; i--) {
-      investPath += ` L ${cashPoints[i].x} ${cashPoints[i].y}`;
-    }
-
-    investPath += ' Z';
-
-    // Investment top line for border
-    const investLine = investTopPath;
-
-    // Net worth line (on top of everything) - straight lines
-    const netWorthLine = straightPath(netWorthPoints);
-
-    // Debt representation removed from stacked areas
-    const debtPath = '';
-    const debtLine = '';
-
-    return { cashPath, investPath, debtPath, cashLine, investLine, debtLine, netWorthLine };
+    return { netWorthLine, fillPath };
   }, [data, tmin, trange, minVal, maxVal, range, plotLeft, plotWidth, plotBottom, plotHeight, xFor, yFor]);
 
   // X-axis month ticks
@@ -351,17 +305,42 @@ export const StackedAreaChart: React.FC<Props> = ({
     [handleTouch, disableParent, enableParent]
   );
 
-  // Tooltip data
-  const hoverX = hasHover ? xFor(data[hoverIdx!].t) : 0;
-  const hoverY = hasHover ? yFor(data[hoverIdx!].cash + data[hoverIdx!].investments - data[hoverIdx!].debt) : 0;
-  const tipDate = hasHover ? new Date(data[hoverIdx!].t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-  const tipNetWorth = hasHover ? formatCurrency(data[hoverIdx!].cash + data[hoverIdx!].investments - data[hoverIdx!].debt) : '';
-  const tipCash = hasHover ? formatCurrency(data[hoverIdx!].cash) : '';
-  const tipInvest = hasHover ? formatCurrency(data[hoverIdx!].investments) : '';
-  const tipDebt = hasHover ? formatCurrency(data[hoverIdx!].debt) : '';
+  // Tooltip data with percentages
+  const tooltipData = useMemo(() => {
+    if (!hasHover) return null;
+
+    const d = data[hoverIdx!];
+    const cash = Number(d.cash) || 0;
+    const investments = Number(d.investments) || 0;
+    const debt = Number(d.debt) || 0;
+    const netWorth = cash + investments - debt;
+
+    // Calculate percentages (based on total assets, not net worth)
+    const totalAssets = cash + investments;
+    const cashPercent = totalAssets > 0 ? Math.round((cash / totalAssets) * 100) : 0;
+    const investPercent = totalAssets > 0 ? Math.round((investments / totalAssets) * 100) : 0;
+    const debtPercent = netWorth > 0 ? Math.round((debt / (netWorth + debt)) * 100) : 0;
+
+    return {
+      x: xFor(d.t),
+      y: yFor(netWorth),
+      date: new Date(d.t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+      netWorth: formatCurrency(netWorth),
+      cash: formatCurrency(cash),
+      cashPercent,
+      investments: formatCurrency(investments),
+      investPercent,
+      debt: formatCurrency(debt),
+      debtPercent,
+      hasDebt: debt > 0
+    };
+  }, [hasHover, hoverIdx, data, xFor, yFor]);
+
+  const hoverX = tooltipData?.x || 0;
+  const hoverY = tooltipData?.y || 0;
 
   // Tooltip box positioning
-  const boxW = 160, boxH = 95, padBox = 10;
+  const boxW = 180, boxH = 105, padBox = 10;
   let tipX = hoverX + 12;
   const tipY = plotTop + 12;
   if (tipX + boxW > plotRight) tipX = hoverX - boxW - 12;
@@ -389,57 +368,44 @@ export const StackedAreaChart: React.FC<Props> = ({
     <View onLayout={onLayout}>
       <Svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`}>
         <Defs>
-          {/* Theme-aware gradients - more subtle for dark mode */}
+          {/* Gradients matching the card colors and opacities */}
           <LinearGradient id="cashGrad" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={cashColor} stopOpacity={isDark ? 0.12 : 0.5} />
-            <Stop offset="0.5" stopColor={cashColor} stopOpacity={isDark ? 0.08 : 0.3} />
-            <Stop offset="1" stopColor={cashColor} stopOpacity={isDark ? 0.04 : 0.1} />
+            <Stop offset="0" stopColor={cashColor} stopOpacity={isDark ? 0.25 : 0.35} />
+            <Stop offset="0.5" stopColor={cashColor} stopOpacity={isDark ? 0.15 : 0.25} />
+            <Stop offset="1" stopColor={cashColor} stopOpacity={isDark ? 0.08 : 0.12} />
           </LinearGradient>
           <LinearGradient id="investGrad" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={investColor} stopOpacity={isDark ? 0.14 : 0.5} />
-            <Stop offset="0.5" stopColor={investColor} stopOpacity={isDark ? 0.09 : 0.3} />
-            <Stop offset="1" stopColor={investColor} stopOpacity={isDark ? 0.05 : 0.1} />
+            <Stop offset="0" stopColor={investColor} stopOpacity={isDark ? 0.28 : 0.35} />
+            <Stop offset="0.5" stopColor={investColor} stopOpacity={isDark ? 0.18 : 0.25} />
+            <Stop offset="1" stopColor={investColor} stopOpacity={isDark ? 0.10 : 0.14} />
           </LinearGradient>
         </Defs>
 
         <G>
-          {/* Stacked areas with smooth curves */}
-          {/* Cash (bottom layer) */}
-          <Path d={paths.cashPath} fill="url(#cashGrad)" />
-          {paths.cashLine && (
-            <Path
-              d={paths.cashLine}
-              stroke={cashColor}
-              strokeWidth={1.5}
-              fill="none"
-              opacity={isDark ? 0.4 : 0.6}
-            />
+          {/* Subtle fill gradient below net worth line */}
+          <Defs>
+            <LinearGradient id="netWorthGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={accentPrimary} stopOpacity={isDark ? 0.15 : 0.2} />
+              <Stop offset="1" stopColor={accentPrimary} stopOpacity={0} />
+            </LinearGradient>
+          </Defs>
+
+          {/* Fill area below net worth line */}
+          {paths.fillPath && (
+            <Path d={paths.fillPath} fill="url(#netWorthGrad)" />
           )}
 
-          {/* Investments (top layer) */}
-          <Path d={paths.investPath} fill="url(#investGrad)" />
-          {paths.investLine && (
-            <Path
-              d={paths.investLine}
-              stroke={investColor}
-              strokeWidth={1.5}
-              fill="none"
-              opacity={isDark ? 0.4 : 0.6}
-            />
-          )}
-
-          {/* Net worth line (on top) - most prominent */}
-          {paths.netWorthLine ? (
+          {/* Net worth line - clean and prominent */}
+          {paths.netWorthLine && (
             <Path
               d={paths.netWorthLine}
-              stroke={netWorthLineColor}
-              strokeWidth={2.5}
+              stroke={accentPrimary}
+              strokeWidth={2}
               fill="none"
-              opacity={isDark ? 0.9 : 0.8}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-          ) : null}
+          )}
 
           {/* Current net worth horizontal dotted line */}
           {showCurrentLine && (
@@ -518,7 +484,7 @@ export const StackedAreaChart: React.FC<Props> = ({
           )}
 
           {/* Tooltip on touch */}
-          {hasHover && (
+          {hasHover && tooltipData && (
             <G>
               {/* Crosshair */}
               <Line
@@ -526,36 +492,36 @@ export const StackedAreaChart: React.FC<Props> = ({
                 x2={hoverX}
                 y1={plotTop}
                 y2={plotBottom}
-                stroke={netWorthLineColor}
+                stroke={accentPrimary}
                 strokeWidth={1.5}
                 strokeDasharray="3 3"
                 opacity={0.5}
               />
-              <Circle cx={hoverX} cy={hoverY} r={4} fill={netWorthLineColor} />
+              <Circle cx={hoverX} cy={hoverY} r={5} fill={accentPrimary} />
 
               {/* Tooltip box */}
               <Rect x={tipX} y={tipY} width={boxW} height={boxH} rx={8} fill={tipBg} opacity={0.97} />
 
               {/* Date */}
               <SvgText x={tipX + padBox} y={tipY + 16} fill={muted} fontSize="10" fontWeight="600">
-                {tipDate}
+                {tooltipData.date}
               </SvgText>
 
               {/* Net Worth */}
-              <SvgText x={tipX + padBox} y={tipY + 34} fill={text} fontSize="13" fontWeight="700">
-                {tipNetWorth}
+              <SvgText x={tipX + padBox} y={tipY + 34} fill={text} fontSize="14" fontWeight="700">
+                {tooltipData.netWorth}
               </SvgText>
 
-              {/* Breakdown */}
-              <SvgText x={tipX + padBox} y={tipY + 50} fill={cashColor} fontSize="10" fontWeight="600">
-                💰 {tipCash}
+              {/* Breakdown with percentages */}
+              <SvgText x={tipX + padBox} y={tipY + 52} fill={cashColor} fontSize="10" fontWeight="600">
+                💰 {tooltipData.cash} ({tooltipData.cashPercent}%)
               </SvgText>
-              <SvgText x={tipX + padBox} y={tipY + 64} fill={investColor} fontSize="10" fontWeight="600">
-                📈 {tipInvest}
+              <SvgText x={tipX + padBox} y={tipY + 68} fill={investColor} fontSize="10" fontWeight="600">
+                📈 {tooltipData.investments} ({tooltipData.investPercent}%)
               </SvgText>
-              {data[hoverIdx!].debt > 0 && (
-                <SvgText x={tipX + padBox} y={tipY + 78} fill={debtColor} fontSize="10" fontWeight="600">
-                  💳 -{tipDebt}
+              {tooltipData.hasDebt && (
+                <SvgText x={tipX + padBox} y={tipY + 84} fill={debtColor} fontSize="10" fontWeight="600">
+                  💳 {tooltipData.debt} ({tooltipData.debtPercent}%)
                 </SvgText>
               )}
             </G>

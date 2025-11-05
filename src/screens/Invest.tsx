@@ -1,5 +1,8 @@
 import React from 'react';
-import { Pressable, ScrollView, Text, View, Animated } from 'react-native';
+import { Pressable, ScrollView, Text, View, Animated as RNAnimated, Dimensions } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, useAnimatedScrollHandler, interpolate, Extrapolate } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenScroll } from '../components/ScreenScroll';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
@@ -37,10 +40,10 @@ const AnimatedPressable: React.FC<{
   children: React.ReactNode;
   style?: any;
 }> = ({ onPress, children, style }) => {
-  const scaleAnim = React.useRef(new Animated.Value(1)).current;
+  const scaleAnim = React.useRef(new RNAnimated.Value(1)).current;
 
   const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
+    RNAnimated.spring(scaleAnim, {
       toValue: 0.97,
       useNativeDriver: true,
       speed: 50,
@@ -49,7 +52,7 @@ const AnimatedPressable: React.FC<{
   };
 
   const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
+    RNAnimated.spring(scaleAnim, {
       toValue: 1,
       useNativeDriver: true,
       speed: 50,
@@ -59,9 +62,9 @@ const AnimatedPressable: React.FC<{
 
   return (
     <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
-      <Animated.View style={[style, { transform: [{ scale: scaleAnim }] }]}>
+      <RNAnimated.View style={[style, { transform: [{ scale: scaleAnim }] }]}>
         {children}
-      </Animated.View>
+      </RNAnimated.View>
     </Pressable>
   );
 };
@@ -69,6 +72,7 @@ const AnimatedPressable: React.FC<{
 export const Invest = React.memo(() => {
   const { get, isDark } = useThemeTokens();
   const nav = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const [pfTf, setPfTf] = React.useState<'1D'|'5D'|'1M'|'6M'|'YTD'|'1Y'|'ALL'>('6M');
   const [hideAmounts, setHideAmounts] = React.useState(false);
   const [showChart, setShowChart] = React.useState(true);
@@ -116,6 +120,12 @@ export const Invest = React.memo(() => {
   const activePortfolioId = useInvestStore(state => state.activePortfolioId);
   const { profile } = useProfileStore();
 
+  // Main Tab Title Animation
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+
   // Get invest currency from profile (fallback to primary currency)
   const investCurrency = (profile.investCurrency || profile.currency || 'USD').toUpperCase();
 
@@ -124,7 +134,8 @@ export const Invest = React.memo(() => {
   const effectiveHoldings: Record<string, any> = React.useMemo(() => {
     const out: Record<string, any> = {};
     Object.values(portfolios || {}).forEach((p:any) => {
-      if (!p || !p.holdings) return;
+      // Skip portfolios with tracking disabled
+      if (!p || !p.holdings || (p.trackingEnabled === false)) return;
       Object.values(p.holdings || {}).forEach((h:any) => {
         const sym = h.symbol;
         if (!out[sym]) out[sym] = { ...h, lots: [] };
@@ -142,7 +153,8 @@ export const Invest = React.memo(() => {
     let totalCash = 0;
 
     Object.values(portfolios || {}).forEach((p: any) => {
-      if (!p) return;
+      // Skip portfolios with tracking disabled
+      if (!p || (p.trackingEnabled === false)) return;
 
       // Calculate holdings value for this portfolio (converted to investment currency)
       let portfolioHoldingsValue = 0;
@@ -196,6 +208,17 @@ export const Invest = React.memo(() => {
   // For portfolioLine chart calculation compatibility
   const rate = 1; // Chart calculation will be updated later to handle multi-currency properly
 
+  /**
+   * CHART DATA: Portfolio value over time (holdings only, cash excluded)
+   *
+   * The chart tracks your holdings value historically:
+   * - For each date, calculates quantity held at that time (based on transaction dates)
+   * - Applies historical prices from quote bars data
+   * - Excludes cash balance to show pure investment performance
+   * - Leading zeros removed to avoid chart starting from 0 when no holdings exist
+   *
+   * This gives you a visual representation of how your investments (not cash) have performed.
+   */
   const portfolioLine = React.useMemo(() => {
     // Skip expensive calculation if chart is hidden
     if (!showChart) return [] as Array<{t:number; v:number}>;
@@ -237,6 +260,8 @@ export const Invest = React.memo(() => {
     try {
       const rates = fxRates?.rates || {} as Record<string, number>;
       Object.values(portfolios || {}).forEach((p: any) => {
+        // Skip portfolios with tracking disabled
+        if (!p || (p.trackingEnabled === false)) return;
         const base = String(p?.baseCurrency || 'USD').toUpperCase();
         const r = Number(rates[base] || 0);
         const toUSD = (amt: number) => base==='USD' || !r ? amt : (amt / r);
@@ -287,15 +312,96 @@ export const Invest = React.memo(() => {
           const lots = positionLots[sym];
           const cutTs = new Date(d).getTime();
           const qty = lots.reduce((s,l) => s + (l.date <= cutTs ? (l.side==='buy' ? l.qty : -l.qty) : 0), 0);
-          if (qty) total += qty * price;
+          if (qty > 0) {
+            // Get ticker currency and convert price to investment currency
+            const h = effectiveHoldings[sym];
+            let tickerCurrency = h?.currency;
+            if (!tickerCurrency) {
+              const s = sym.toUpperCase();
+              if (s.includes('-USD') || s.includes('USD')) tickerCurrency = 'USD';
+              else if (s.endsWith('.L')) tickerCurrency = 'GBP';
+              else if (s.endsWith('.T')) tickerCurrency = 'JPY';
+              else if (s.endsWith('.TO')) tickerCurrency = 'CAD';
+              else if (s.endsWith('.AX')) tickerCurrency = 'AUD';
+              else if (s.endsWith('.HK')) tickerCurrency = 'HKD';
+              else if (s.endsWith('.PA') || s.endsWith('.DE')) tickerCurrency = 'EUR';
+              else if (s.endsWith('.SW')) tickerCurrency = 'CHF';
+              else tickerCurrency = 'USD';
+            }
+            tickerCurrency = String(tickerCurrency).toUpperCase();
+
+            const priceInInvestCurrency = convertCurrency(fxRates, price, tickerCurrency, investCurrency);
+            total += qty * priceInInvestCurrency;
+          }
         }
       });
       // Exclude cash from chart - only track holdings performance
       // total += cashByDateUSD[d] || 0;
-      return { t: new Date(d).getTime(), v: (rate || 1) * total };
+      return { t: new Date(d).getTime(), v: total };
     });
-    return points.slice(-520);
-  }, [showChart, effectiveHoldings, quotes, rate, portfolios, fxRates]);
+
+    // Always add/update current value as the final point (using today's live prices)
+    const now = Date.now();
+    const todayKey = new Date(now).toISOString().slice(0, 10);
+    const lastHistoricalDate = dates.length > 0 ? dates[dates.length - 1] : '';
+
+    // Calculate current total value
+    let currentTotal = 0;
+    syms.forEach(sym => {
+      const q = quotes[sym];
+      const currentPrice = Number(q?.last || 0);
+      if (currentPrice > 0) {
+        const lots = positionLots[sym];
+        const qty = lots.reduce((s, l) => s + (l.side === 'buy' ? l.qty : -l.qty), 0);
+        if (qty > 0) {
+          // Get ticker currency and convert to investment currency
+          const h = effectiveHoldings[sym];
+          let tickerCurrency = h?.currency;
+          if (!tickerCurrency) {
+            const s = sym.toUpperCase();
+            if (s.includes('-USD') || s.includes('USD')) tickerCurrency = 'USD';
+            else if (s.endsWith('.L')) tickerCurrency = 'GBP';
+            else if (s.endsWith('.T')) tickerCurrency = 'JPY';
+            else if (s.endsWith('.TO')) tickerCurrency = 'CAD';
+            else if (s.endsWith('.AX')) tickerCurrency = 'AUD';
+            else if (s.endsWith('.HK')) tickerCurrency = 'HKD';
+            else if (s.endsWith('.PA') || s.endsWith('.DE')) tickerCurrency = 'EUR';
+            else if (s.endsWith('.SW')) tickerCurrency = 'CHF';
+            else tickerCurrency = 'USD';
+          }
+          tickerCurrency = String(tickerCurrency).toUpperCase();
+
+          const priceInInvestCurrency = convertCurrency(fxRates, currentPrice, tickerCurrency, investCurrency);
+          currentTotal += qty * priceInInvestCurrency;
+        }
+      }
+    });
+
+    // If today is different from last historical date, add a new point
+    // Otherwise, replace the last point with current value (for intraday updates)
+    if (lastHistoricalDate !== todayKey) {
+      points.push({ t: now, v: currentTotal });
+    } else if (points.length > 0) {
+      // Update the last point with current live price
+      points[points.length - 1] = { t: now, v: currentTotal };
+    } else {
+      // No historical data at all, just add current point
+      points.push({ t: now, v: currentTotal });
+    }
+
+    // Remove leading zeros to avoid chart starting from 0 when there's no data
+    let firstNonZeroIndex = 0;
+    for (let i = 0; i < points.length; i++) {
+      if (points[i].v > 0) {
+        firstNonZeroIndex = i;
+        break;
+      }
+    }
+
+    // Return only non-zero portion, limited to last 520 points
+    const nonZeroPoints = points.slice(firstNonZeroIndex);
+    return nonZeroPoints.slice(-520);
+  }, [showChart, effectiveHoldings, quotes, rate, portfolios, fxRates, investCurrency]);
 
   const displaySeries = React.useMemo(() => {
     if (portfolioLine && portfolioLine.length) return portfolioLine;
@@ -323,33 +429,93 @@ export const Invest = React.memo(() => {
       }
     })();
 
-    return pfTf === 'ALL' ? s : s.filter(p => p.t >= since);
+    const filtered = pfTf === 'ALL' ? s : s.filter(p => p.t >= since);
+
+    // Remove leading zeros from filtered series
+    let firstNonZero = 0;
+    for (let i = 0; i < filtered.length; i++) {
+      if (filtered[i].v > 0) {
+        firstNonZero = i;
+        break;
+      }
+    }
+
+    return filtered.slice(firstNonZero);
   }, [portfolioLine, pfTf]);
 
+  /**
+   * CALCULATION METHODOLOGY: Modified Money-Weighted Return (MWR)
+   *
+   * This implementation calculates portfolio performance using a modified money-weighted approach:
+   * - Includes the timing of your buy/sell transactions (when YOU bought/sold)
+   * - Excludes cash deposits/withdrawals (to show pure investment performance)
+   * - Shows YOUR actual returns, accounting for your entry/exit timing
+   *
+   * This differs from Time-Weighted Return (TWR) used by Yahoo Finance:
+   * - TWR eliminates all cash flow effects completely
+   * - TWR shows how the investments performed independent of timing
+   * - TWR is better for comparing to benchmarks
+   *
+   * Our approach is better for individual investors because it shows your ACTUAL returns,
+   * accounting for when you made your investment decisions.
+   *
+   * Example:
+   * - You buy 10 shares @ $100 = $1,000
+   * - Stock rises to $150 (+50%)
+   * - You buy 10 more @ $150 = $1,500
+   * - Stock drops to $120
+   *
+   * TWR (Yahoo): ~+20% (pure stock performance, ignoring your timing)
+   * MWR (Ours): ~+10% (YOUR actual return, accounting for buying more at $150)
+   */
+
   const todayInfo = React.useMemo(() => {
-    const s = portfolioLine || [];
-    if (!s || s.length < 2) return { color: get('text.muted') as string, text: `+${formatCurrency(0, cur)} (+0.0%)` };
-    const last = s[s.length - 1].v;
-    const prev = s[s.length - 2].v;
-    const delta = last - prev;
-    const pct = prev !== 0 ? (delta / Math.abs(prev)) * 100 : 0;
+    // Calculate today's change based on actual price movements, not chart data points
+    let totalDayChange = 0;
+
+    Object.values(portfolios || {}).forEach((p: any) => {
+      if (!p || (p.trackingEnabled === false)) return;
+
+      Object.values(p.holdings || {}).forEach((h: any) => {
+        const lots = h?.lots || [];
+        const qty = lots.reduce((s: number, l: any) => s + (l.side === 'buy' ? l.qty : -l.qty), 0);
+        if (qty <= 0) return;
+
+        const q = quotes[h.symbol];
+        const changeNative = Number(q?.change || 0);
+
+        // Get ticker currency
+        let tickerCurrency = h.currency;
+        if (!tickerCurrency) {
+          const s = h.symbol.toUpperCase();
+          if (s.includes('-USD') || s.includes('USD')) tickerCurrency = 'USD';
+          else if (s.endsWith('.L')) tickerCurrency = 'GBP';
+          else if (s.endsWith('.T')) tickerCurrency = 'JPY';
+          else if (s.endsWith('.TO')) tickerCurrency = 'CAD';
+          else if (s.endsWith('.AX')) tickerCurrency = 'AUD';
+          else if (s.endsWith('.HK')) tickerCurrency = 'HKD';
+          else if (s.endsWith('.PA') || s.endsWith('.DE')) tickerCurrency = 'EUR';
+          else if (s.endsWith('.SW')) tickerCurrency = 'CHF';
+          else tickerCurrency = 'USD';
+        }
+        tickerCurrency = String(tickerCurrency).toUpperCase();
+
+        // Convert change from ticker currency to investment currency
+        const change = convertCurrency(fxRates, changeNative, tickerCurrency, investCurrency);
+        totalDayChange += change * qty;
+      });
+    });
+
+    const delta = totalDayChange;
+    const valueYesterday = holdingsValue - delta;
+    const pct = valueYesterday !== 0 ? (delta / Math.abs(valueYesterday)) * 100 : 0;
     const color = delta > 0 ? (get('semantic.success') as string) : delta < 0 ? (get('semantic.danger') as string) : (get('text.muted') as string);
     const sign = delta > 0 ? '+' : '';
     const text = `${sign}${formatCurrency(Math.abs(delta), cur)} (${sign}${Math.abs(pct).toFixed(2)}%)`;
     return { color, text };
-  }, [portfolioLine, get, cur]);
+  }, [portfolios, quotes, fxRates, investCurrency, holdingsValue, get, cur]);
 
   const rangeInfo = React.useMemo(() => {
-    const s = (visibleSeries && visibleSeries.length >= 2) ? visibleSeries : displaySeries;
-    if (!s || s.length < 2) return { color: get('text.muted') as string, text: `+${formatCurrency(0, cur)} (+0.0%)`, label: 'All-Time Gain/Loss' };
-    const first = s[0].v;
-    const last = s[s.length - 1].v;
-    const delta = last - first;
-    const pct = first !== 0 ? (delta / Math.abs(first)) * 100 : 0;
-    const color = delta > 0 ? (get('semantic.success') as string) : delta < 0 ? (get('semantic.danger') as string) : (get('text.muted') as string);
-    const sign = delta > 0 ? '+' : '';
-    const text = `${sign}${formatCurrency(Math.abs(delta), cur)} (${sign}${Math.abs(pct).toFixed(2)}%)`;
-
     const labels: Record<typeof pfTf, string> = {
       '1D': '1 Day Gain/Loss',
       '5D': '5 Day Gain/Loss',
@@ -360,8 +526,163 @@ export const Invest = React.memo(() => {
       'ALL': 'All-Time Gain/Loss',
     };
 
+    // For ALL interval, show total P&L (realized + unrealized)
+    if (pfTf === 'ALL') {
+      let totalGain = 0;
+      let totalCost = 0;
+
+      Object.values(portfolios || {}).forEach((p: any) => {
+        if (!p || (p.trackingEnabled === false)) return;
+
+        Object.values(p.holdings || {}).forEach((h: any) => {
+          const lots = h?.lots || [];
+          if (!lots.length) return;
+
+          // Get ticker currency
+          let tickerCurrency = h.currency;
+          if (!tickerCurrency) {
+            const s = h.symbol.toUpperCase();
+            if (s.includes('-USD') || s.includes('USD')) tickerCurrency = 'USD';
+            else if (s.endsWith('.L')) tickerCurrency = 'GBP';
+            else if (s.endsWith('.T')) tickerCurrency = 'JPY';
+            else if (s.endsWith('.TO')) tickerCurrency = 'CAD';
+            else if (s.endsWith('.AX')) tickerCurrency = 'AUD';
+            else if (s.endsWith('.HK')) tickerCurrency = 'HKD';
+            else if (s.endsWith('.PA') || s.endsWith('.DE')) tickerCurrency = 'EUR';
+            else if (s.endsWith('.SW')) tickerCurrency = 'CHF';
+            else tickerCurrency = 'USD';
+          }
+          tickerCurrency = String(tickerCurrency).toUpperCase();
+
+          const q = quotes[h.symbol];
+          const lastNative = Number(q?.last || 0);
+          const last = convertCurrency(fxRates, lastNative, tickerCurrency, investCurrency);
+
+          // Convert lot prices to investment currency
+          const normalizedLots = lots.map((l: any) => ({
+            ...l,
+            price: convertCurrency(fxRates, l.price || 0, tickerCurrency, investCurrency),
+            fee: convertCurrency(fxRates, (l.fee ?? l.fees) || 0, tickerCurrency, investCurrency)
+          }));
+
+          const pnl = computePnL(normalizedLots, last);
+          totalGain += (pnl.realized || 0) + (pnl.unrealized || 0);
+
+          // Calculate cost basis
+          const currentQty = lots.reduce((acc: number, lot: any) => acc + (lot.side === 'buy' ? lot.qty : -lot.qty), 0);
+          if (currentQty > 0) {
+            totalCost += pnl.qty * pnl.avgCost;
+          }
+        });
+      });
+
+      const pct = totalCost > 0 ? (totalGain / totalCost) * 100 : 0;
+      const color = totalGain > 0 ? (get('semantic.success') as string) : totalGain < 0 ? (get('semantic.danger') as string) : (get('text.muted') as string);
+      const sign = totalGain > 0 ? '+' : '';
+      const text = `${sign}${formatCurrency(Math.abs(totalGain), cur)} (${sign}${Math.abs(pct).toFixed(2)}%)`;
+      return { color, text, label: labels[pfTf] };
+    }
+
+    // For time-based intervals, calculate P&L change during that period (excluding cash deposits/withdrawals)
+    const now = Date.now();
+    let days = 30;
+    switch (pfTf) {
+      case '1D': days = 1; break;
+      case '5D': days = 5; break;
+      case '1M': days = 30; break;
+      case '6M': days = 180; break;
+      case 'YTD': {
+        const startOfYear = new Date(new Date().getFullYear(), 0, 1).getTime();
+        days = Math.ceil((now - startOfYear) / (24 * 60 * 60 * 1000));
+        break;
+      }
+      case '1Y': days = 365; break;
+    }
+
+    const startTime = now - (days * 24 * 60 * 60 * 1000);
+
+    // Calculate P&L at start and current, tracking cost basis
+    let pnlAtStart = 0;
+    let currentPnL = 0;
+    let currentCostBasis = 0;
+
+    Object.values(portfolios || {}).forEach((p: any) => {
+      if (!p || (p.trackingEnabled === false)) return;
+
+      Object.values(p.holdings || {}).forEach((h: any) => {
+        if (!h || !h.lots) return;
+
+        // Get ticker currency
+        let tickerCurrency = h.currency;
+        if (!tickerCurrency) {
+          const s = h.symbol.toUpperCase();
+          if (s.includes('-USD') || s.includes('USD')) tickerCurrency = 'USD';
+          else if (s.endsWith('.L')) tickerCurrency = 'GBP';
+          else if (s.endsWith('.T')) tickerCurrency = 'JPY';
+          else if (s.endsWith('.TO')) tickerCurrency = 'CAD';
+          else if (s.endsWith('.AX')) tickerCurrency = 'AUD';
+          else if (s.endsWith('.HK')) tickerCurrency = 'HKD';
+          else if (s.endsWith('.PA') || s.endsWith('.DE')) tickerCurrency = 'EUR';
+          else if (s.endsWith('.SW')) tickerCurrency = 'CHF';
+          else tickerCurrency = 'USD';
+        }
+        tickerCurrency = String(tickerCurrency).toUpperCase();
+
+        const q = quotes[h.symbol];
+        if (!q) return;
+
+        // Calculate current P&L
+        const currentQty = h.lots.reduce((acc: number, lot: any) => acc + (lot.side === 'buy' ? lot.qty : -lot.qty), 0);
+        if (currentQty > 0) {
+          const lastNative = Number(q.last || 0);
+          const last = convertCurrency(fxRates, lastNative, tickerCurrency, investCurrency);
+
+          const normalizedLots = h.lots.map((l: any) => ({
+            ...l,
+            price: convertCurrency(fxRates, l.price || 0, tickerCurrency, investCurrency),
+            fee: convertCurrency(fxRates, (l.fee ?? l.fees) || 0, tickerCurrency, investCurrency)
+          }));
+
+          const pnl = computePnL(normalizedLots, last);
+          currentPnL += (pnl.realized || 0) + (pnl.unrealized || 0);
+          currentCostBasis += pnl.qty * pnl.avgCost;
+        }
+
+        // Calculate P&L at start time
+        const lotsAtStart = h.lots.filter((lot: any) => new Date(lot.date).getTime() <= startTime);
+        if (lotsAtStart.length === 0) return;
+
+        // Get price at start time from bars
+        let priceAtStartNative = q.last; // fallback to current
+        if (q.bars && q.bars.length > 0) {
+          for (let j = q.bars.length - 1; j >= 0; j--) {
+            if (q.bars[j].t <= startTime) {
+              priceAtStartNative = q.bars[j].c;
+              break;
+            }
+          }
+        }
+        const priceAtStart = convertCurrency(fxRates, priceAtStartNative, tickerCurrency, investCurrency);
+
+        const normLotsAtStart = lotsAtStart.map((l: any) => ({
+          ...l,
+          price: convertCurrency(fxRates, l.price || 0, tickerCurrency, investCurrency),
+          fee: convertCurrency(fxRates, (l.fee ?? l.fees) || 0, tickerCurrency, investCurrency)
+        }));
+
+        const pnlStart = computePnL(normLotsAtStart, priceAtStart);
+        pnlAtStart += (pnlStart.realized || 0) + (pnlStart.unrealized || 0);
+      });
+    });
+
+    const pnlChange = currentPnL - pnlAtStart;
+    const pct = currentCostBasis > 0 ? (pnlChange / currentCostBasis) * 100 : 0;
+    const color = pnlChange > 0 ? (get('semantic.success') as string) : pnlChange < 0 ? (get('semantic.danger') as string) : (get('text.muted') as string);
+    const sign = pnlChange > 0 ? '+' : '';
+    const text = `${sign}${formatCurrency(Math.abs(pnlChange), cur)} (${sign}${Math.abs(pct).toFixed(2)}%)`;
+
     return { color, text, label: labels[pfTf] };
-  }, [visibleSeries, displaySeries, get, cur, pfTf]);
+  }, [pfTf, portfolios, quotes, fxRates, investCurrency, get, cur]);
 
   const xTickStrategy = React.useMemo(() => {
     if (pfTf === '1D' || pfTf === '5D') {
@@ -395,6 +716,8 @@ export const Invest = React.memo(() => {
   const watchlistCount = React.useMemo(() => {
     let n = 0;
     Object.values(portfolios || {}).forEach((p: any) => {
+      // Skip portfolios with tracking disabled
+      if (!p || (p.trackingEnabled === false)) return;
       n += (p?.watchlist || []).length;
     });
     return n;
@@ -428,6 +751,55 @@ export const Invest = React.memo(() => {
   const borderSubtle = get('border.subtle') as string;
   const accentPrimary = get('accent.primary') as string;
   const accentSecondary = get('accent.secondary') as string;
+  const bgDefault = get('background.default') as string;
+
+  // Main Tab Title Animation - Animated Styles
+  const originalTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: 1 - progress,
+    };
+  });
+
+  const floatingTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    const fontSize = interpolate(progress, [0, 1], [28, 20]);
+    const fontWeight = interpolate(progress, [0, 1], [800, 700]);
+
+    return {
+      fontSize,
+      fontWeight: fontWeight.toString() as any,
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
 
   const highlightCards = React.useMemo(() => {
     const best = perfStats.best;
@@ -462,6 +834,8 @@ export const Invest = React.memo(() => {
     try {
       const positions: Record<string, number> = {};
       Object.values(portfolios || {}).forEach((p: any) => {
+        // Skip portfolios with tracking disabled
+        if (!p || (p.trackingEnabled === false)) return;
         Object.values((p?.holdings || {}) as any).forEach((h: any) => {
           const qty = (h?.lots || []).reduce((s: number, l: any) => s + (l.side === 'buy' ? l.qty : -l.qty), 0);
           if (qty > 0) positions[h.symbol] = (positions[h.symbol] || 0) + qty;
@@ -475,6 +849,8 @@ export const Invest = React.memo(() => {
       let cashAll = 0;
       const rates = fxRates?.rates || {} as Record<string, number>;
       Object.values(portfolios || {}).forEach((p: any) => {
+        // Skip portfolios with tracking disabled
+        if (!p || (p.trackingEnabled === false)) return;
         const cash = Number(p?.cash || 0);
         if (!cash) return;
         const base = String(p?.baseCurrency || 'USD').toUpperCase();
@@ -508,17 +884,71 @@ export const Invest = React.memo(() => {
   });
 
   return (
-    <ScreenScroll
-      refreshing={refreshing}
-      onRefresh={async () => { try { await refreshFx(); const syms = allSymbols(); await refreshQuotes(syms && syms.length ? syms : undefined); } catch (e) {} }}
-      inTab
-    >
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s32 }}>
+    <>
+      {/* Main Tab Title Animation - Floating Gradient Header (Fixed at top, outside scroll) */}
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            pointerEvents: 'none',
+          },
+          gradientAnimatedStyle,
+        ]}
+      >
+        <LinearGradient
+          colors={[
+            bgDefault,
+            bgDefault,
+            withAlpha(bgDefault, 0.95),
+            withAlpha(bgDefault, 0.8),
+            withAlpha(bgDefault, 0.5),
+            withAlpha(bgDefault, 0)
+          ]}
+          style={{
+            paddingTop: insets.top + spacing.s16,
+            paddingBottom: spacing.s32 + spacing.s20,
+            paddingHorizontal: spacing.s16,
+          }}
+        >
+          <Animated.Text
+            style={[
+              {
+                color: textPrimary,
+                fontSize: 20,
+                fontWeight: '700',
+                letterSpacing: -0.5,
+                textAlign: 'center',
+              },
+              floatingTitleAnimatedStyle,
+            ]}
+          >
+            Invest
+          </Animated.Text>
+        </LinearGradient>
+      </Animated.View>
+
+      <ScreenScroll
+        refreshing={refreshing}
+        onRefresh={async () => { try { await refreshFx(); const syms = allSymbols(); await refreshQuotes(syms && syms.length ? syms : undefined); } catch (e) {} }}
+        inTab
+        fullScreen
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        contentStyle={{
+          paddingTop: insets.top + spacing.s16,
+          paddingBottom: spacing.s32,
+        }}
+      >
+      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12 }}>
         {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s4 }}>
-          <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.5 }}>
+          <Animated.Text style={[{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 }, originalTitleAnimatedStyle]}>
             Invest
-          </Text>
+          </Animated.Text>
           <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
             <AnimatedPressable onPress={() => setShowChart(v => !v)}>
               <View
@@ -611,6 +1041,7 @@ export const Invest = React.memo(() => {
                   <Pressable
                     key={k}
                     onPress={() => setPfTf(k)}
+                    style={{ paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}
                   >
                     <Text
                       style={{
@@ -762,7 +1193,8 @@ export const Invest = React.memo(() => {
         />
       )}
 
-    </ScreenScroll>
+      </ScreenScroll>
+    </>
   );
 });
 

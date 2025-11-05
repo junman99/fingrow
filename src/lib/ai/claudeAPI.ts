@@ -52,6 +52,17 @@ export async function callClaude(
   }
 ): Promise<ClaudeResponse | ClaudeError> {
   try {
+    // CRITICAL: Enforce HAIKU-only policy to control costs
+    const model = AI_CONFIG.API.MODEL;
+    if (!model.includes('haiku')) {
+      console.error('[Claude] BLOCKED: Attempted to use non-Haiku model:', model);
+      throw new Error(
+        `COST CONTROL: Only Haiku models are allowed. Attempted to use: ${model}. ` +
+        `Haiku costs $420/month for 1000 users, while Sonnet costs $1,260/month (3x more). ` +
+        `Change MODEL in src/config/ai.ts back to 'claude-3-5-haiku-20241022'.`
+      );
+    }
+
     // Check rate limits
     const rateLimitError = checkRateLimit();
     if (rateLimitError) {

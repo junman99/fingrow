@@ -29,7 +29,7 @@ export function calculateHistoricalNetWorth(
 
   // Initialize with current state
   const cashAccounts = currentAccounts.filter(
-    acc => acc.kind !== 'credit' && acc.includeInNetWorth !== false
+    acc => acc.kind !== 'credit' && acc.kind !== 'investment' && acc.kind !== 'retirement' && acc.includeInNetWorth !== false
   );
   const creditCards = currentAccounts.filter(
     acc => acc.kind === 'credit' && acc.includeInNetWorth !== false
@@ -54,6 +54,12 @@ export function calculateHistoricalNetWorth(
   let cash = currentCash;
   let debt = currentCreditDebt;
 
+  // Track investment account transactions to estimate historical portfolio value
+  let investmentValue = currentPortfolioValue;
+  const investmentAccounts = currentAccounts.filter(
+    acc => (acc.kind === 'investment' || acc.kind === 'retirement')
+  );
+
   for (const tx of relevantTxs) {
     const txDate = new Date(tx.date);
     const txTime = txDate.getTime();
@@ -69,6 +75,13 @@ export function calculateHistoricalNetWorth(
             debt -= tx.amount; // Expense increased debt, so subtract to reverse
           } else {
             debt += tx.amount; // Income decreased debt, so add to reverse
+          }
+        } else if (account.kind === 'investment' || account.kind === 'retirement') {
+          // Investment/retirement account: track transfers in/out
+          if (tx.type === 'income') {
+            investmentValue -= tx.amount; // Deposit increased investment, so subtract to reverse
+          } else if (tx.type === 'expense') {
+            investmentValue += tx.amount; // Withdrawal decreased investment, so add to reverse
           }
         } else {
           // Regular account
@@ -86,7 +99,7 @@ export function calculateHistoricalNetWorth(
       dailyData.set(dateKey, {
         t: txTime,
         cash: Math.max(0, cash),
-        investments: currentPortfolioValue, // TODO: Could be improved with actual historical portfolio data
+        investments: Math.max(0, investmentValue),
         debt: Math.max(0, debt),
       });
     }
@@ -111,11 +124,11 @@ export function calculateHistoricalNetWorth(
           debt: lastPoint.debt,
         });
       } else {
-        // No data yet, use starting values
+        // No data yet, use current ending values (we're going backwards, so these are the oldest values)
         result.push({
           t: date.getTime(),
           cash: Math.max(0, cash),
-          investments: currentPortfolioValue,
+          investments: Math.max(0, investmentValue),
           debt: Math.max(0, debt),
         });
       }

@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { View, Text, Pressable, ScrollView, Dimensions } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, useAnimatedScrollHandler, interpolate, Extrapolate } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { ScreenScroll } from '../../components/ScreenScroll';
 import Icon from '../../components/Icon';
@@ -119,6 +120,12 @@ const GoalsRoot: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('milestone');
   const [showWealthJourney, setShowWealthJourney] = useState(false);
 
+  // Main Tab Title Animation
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+
   useEffect(() => {
     hydrate();
     hydrateStreaks();
@@ -204,6 +211,55 @@ const GoalsRoot: React.FC = () => {
   const accentSecondary = get('accent.secondary') as string;
   const successColor = get('semantic.success') as string;
   const warningColor = get('semantic.warning') as string;
+  const bgDefault = get('background.default') as string;
+
+  // Main Tab Title Animation - Animated Styles
+  const originalTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: 1 - progress,
+    };
+  });
+
+  const floatingTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    const fontSize = interpolate(progress, [0, 1], [28, 20]);
+    const fontWeight = interpolate(progress, [0, 1], [800, 700]);
+
+    return {
+      fontSize,
+      fontWeight: fontWeight.toString() as any,
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
 
   const renderGoalCard = (goal: Goal) => {
     const progress = goal.targetAmount > 0
@@ -338,14 +394,71 @@ const GoalsRoot: React.FC = () => {
   };
 
   return (
-    <ScreenScroll inTab contentStyle={{ paddingBottom: Math.max(insets.bottom, spacing.s24) }}>
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s16 }}>
+    <>
+      {/* Main Tab Title Animation - Floating Gradient Header (Fixed at top, outside scroll) */}
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            pointerEvents: 'none',
+          },
+          gradientAnimatedStyle,
+        ]}
+      >
+        <LinearGradient
+          colors={[
+            bgDefault,
+            bgDefault,
+            withAlpha(bgDefault, 0.95),
+            withAlpha(bgDefault, 0.8),
+            withAlpha(bgDefault, 0.5),
+            withAlpha(bgDefault, 0)
+          ]}
+          style={{
+            paddingTop: insets.top + spacing.s16,
+            paddingBottom: spacing.s32 + spacing.s20,
+            paddingHorizontal: spacing.s16,
+          }}
+        >
+          <Animated.Text
+            style={[
+              {
+                color: text,
+                fontSize: 20,
+                fontWeight: '700',
+                letterSpacing: -0.5,
+                textAlign: 'center',
+              },
+              floatingTitleAnimatedStyle,
+            ]}
+          >
+            Goals
+          </Animated.Text>
+        </LinearGradient>
+      </Animated.View>
+
+      <ScreenScroll
+        inTab
+        fullScreen
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        contentStyle={{
+          paddingHorizontal: 0,
+          paddingTop: insets.top + spacing.s24,
+          paddingBottom: Math.max(insets.bottom, spacing.s24),
+        }}
+      >
+      <View style={{ paddingHorizontal: spacing.s16, gap: spacing.s16 }}>
 
         {/* Header like Money tab */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text style={{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.5 }}>
+          <Animated.Text style={[{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.5 }, originalTitleAnimatedStyle]}>
             Goals
-          </Text>
+          </Animated.Text>
           <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
             {/* Wealth Journey Button */}
             <AnimatedPressable onPress={() => setShowWealthJourney(true)}>
@@ -617,7 +730,8 @@ const GoalsRoot: React.FC = () => {
         totalDebt={totalDebt}
         netWorthHistory={netWorthHistoryData.map(d => ({ t: d.t, v: d.cash + d.investments - d.debt }))}
       />
-    </ScreenScroll>
+      </ScreenScroll>
+    </>
   );
 };
 

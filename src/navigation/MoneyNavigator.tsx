@@ -14,9 +14,11 @@ import PaycheckSetup from '../screens/PaycheckSetup';
 import PaycheckSettings from '../screens/PaycheckSettings';
 import PaycheckHistory from '../screens/PaycheckHistory';
 import BillsList from '../screens/BillsList';
+import InvestmentsList from '../screens/InvestmentsList';
 import PortfolioList from '../screens/PortfolioList';
 import SelectInstitution from '../screens/SelectInstitution';
 import SelectAccountType from '../screens/SelectAccountType';
+import PayCreditCard from '../screens/PayCreditCard';
 
 const Stack = createNativeStackNavigator();
 
@@ -44,13 +46,27 @@ export default function MoneyNavigator() {
         }}
       />
       <Stack.Screen name="PayoffSimulator" component={PayoffSimulator} />
-      <Stack.Screen name="PaycheckBreakdown" component={PaycheckBreakdown} />
+      <Stack.Screen
+        name="PaycheckBreakdown"
+        component={PaycheckBreakdown}
+        options={{
+          animation: 'slide_from_right',
+          animationDuration: 200,
+        }}
+      />
       <Stack.Screen name="PaycheckSetup" component={PaycheckSetup} />
       <Stack.Screen name="PaycheckSettings" component={PaycheckSettings} />
       <Stack.Screen name="PaycheckHistory" component={PaycheckHistory} />
       <Stack.Screen
         name="BillsList"
         component={BillsList}
+        options={{
+          animation: 'default',
+        }}
+      />
+      <Stack.Screen
+        name="InvestmentsList"
+        component={InvestmentsList}
         options={{
           animation: 'default',
         }}
@@ -64,6 +80,7 @@ export default function MoneyNavigator() {
       />
       <Stack.Screen name="SelectInstitution" component={SelectInstitution} />
       <Stack.Screen name="SelectAccountType" component={SelectAccountType} />
+      <Stack.Screen name="PayCreditCard" component={PayCreditCard} />
     </Stack.Navigator>
   );
 }

@@ -11,7 +11,7 @@ import LineChart from '../components/LineChart';
 import { Card } from '../components/Card';
 import TransactionEditorSheet from '../components/invest/TransactionEditorSheet';
 import TransactionRow from '../components/invest/TransactionRow';
-import { formatCurrency, formatPercent } from '../lib/format';
+import { formatCurrency, formatPercent, formatMarketCap } from '../lib/format';
 import { computePnL } from '../lib/positions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { convertCurrency } from '../lib/fx';
@@ -307,6 +307,7 @@ export const AddLot = React.memo(() => {
                 <Pressable
                   key={k}
                   onPress={() => setTf(k)}
+                  style={{ paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}
                 >
                   <Text style={{
                     color: on ? (get('accent.primary') as string) : muted,
@@ -410,7 +411,7 @@ export const AddLot = React.memo(() => {
                     MARKET CAP
                   </Text>
                   <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>
-                    {fundamentals.marketCap !== undefined ? formatCurrency(fundamentals.marketCap, cur, { compact: true }) : '-'}
+                    {fundamentals.marketCap !== undefined ? formatMarketCap(fundamentals.marketCap, cur) : '-'}
                   </Text>
                 </View>
 

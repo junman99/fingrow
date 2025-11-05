@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, Pressable, Image, Animated, Easing, InteractionManager } from 'react-native';
+import { View, Text, Pressable, Image, Animated as RNAnimated, Easing, InteractionManager } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, useAnimatedScrollHandler, interpolate, Extrapolate, runOnJS } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -13,10 +15,10 @@ import { useTxStore } from '../store/transactions';
 import { useProfileStore } from '../store/profile';
 import { useGroupsStore } from '../store/groups';
 
-const AnimatedText = Animated.createAnimatedComponent(Text);
+const AnimatedText = RNAnimated.createAnimatedComponent(Text);
 
 type AddFabProps = {
-  anim: Animated.Value;
+  anim: RNAnimated.Value;
   accent: string;
   textColor: string;
   onPress: () => void;
@@ -34,7 +36,7 @@ const AddFabButton: React.FC<AddFabProps> = ({ anim, accent, textColor, onPress 
   const height = 56;
 
   return (
-    <Animated.View style={{
+    <RNAnimated.View style={{
       width,
       height,
       borderRadius: height / 2,
@@ -51,7 +53,7 @@ const AddFabButton: React.FC<AddFabProps> = ({ anim, accent, textColor, onPress 
           opacity: pressed ? 0.9 : 1
         })}
       >
-        <Animated.View style={{
+        <RNAnimated.View style={{
           flex: 1,
           flexDirection: 'row',
           alignItems: 'center',
@@ -60,7 +62,7 @@ const AddFabButton: React.FC<AddFabProps> = ({ anim, accent, textColor, onPress 
           gap,
         }}>
           <Icon name="plus-rounded" size={24} colorToken="text.onPrimary" />
-          <Animated.View style={{ width: textWidth, overflow: 'hidden' }}>
+          <RNAnimated.View style={{ width: textWidth, overflow: 'hidden' }}>
             <AnimatedText
               numberOfLines={1}
               style={{
@@ -72,10 +74,10 @@ const AddFabButton: React.FC<AddFabProps> = ({ anim, accent, textColor, onPress 
             >
               Add transaction
             </AnimatedText>
-          </Animated.View>
-        </Animated.View>
+          </RNAnimated.View>
+        </RNAnimated.View>
       </Pressable>
-    </Animated.View>
+    </RNAnimated.View>
   );
 };
 
@@ -85,10 +87,10 @@ const AnimatedPressable: React.FC<{
   children: React.ReactNode;
   style?: any;
 }> = ({ onPress, children, style }) => {
-  const scaleAnim = React.useRef(new Animated.Value(1)).current;
+  const scaleAnim = React.useRef(new RNAnimated.Value(1)).current;
 
   const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
+    RNAnimated.spring(scaleAnim, {
       toValue: 0.96,
       useNativeDriver: true,
       speed: 50,
@@ -97,7 +99,7 @@ const AnimatedPressable: React.FC<{
   };
 
   const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
+    RNAnimated.spring(scaleAnim, {
       toValue: 1,
       useNativeDriver: true,
       speed: 50,
@@ -107,9 +109,9 @@ const AnimatedPressable: React.FC<{
 
   return (
     <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
-      <Animated.View style={[style, { transform: [{ scale: scaleAnim }] }]}>
+      <RNAnimated.View style={[style, { transform: [{ scale: scaleAnim }] }]}>
         {children}
-      </Animated.View>
+      </RNAnimated.View>
     </Pressable>
   );
 };
@@ -143,8 +145,67 @@ export const Home: React.FC = () => {
   const surface1 = get('surface.level1') as string;
   const borderSubtle = get('border.subtle') as string;
   const textOnPrimary = get('text.onPrimary') as string;
+  const bgDefault = get('background.default') as string;
 
-  const collapseAnim = useRef(new Animated.Value(1)).current;
+  // Helper function for alpha
+  const withAlpha = (hex: string, alpha: number) => {
+    if (!hex) return hex;
+    const raw = hex.replace('#', '');
+    const bigint = parseInt(raw.length === 3 ? raw.repeat(2) : raw, 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return `rgba(${r},${g},${b},${alpha})`;
+  };
+
+  // Main Tab Title Animation
+  const scrollY = useSharedValue(0);
+
+  // Main Tab Title Animation - Animated Styles
+  const originalTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+    return {
+      opacity: 1 - progress,
+    };
+  });
+
+  const floatingTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+    const fontSize = interpolate(progress, [0, 1], [28, 20]);
+    const fontWeight = interpolate(progress, [0, 1], [800, 700]);
+    return {
+      fontSize,
+      fontWeight: fontWeight.toString() as any,
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
+  const collapseAnim = useRef(new RNAnimated.Value(1)).current;
   const fabTargetRef = useRef(1);
   const collapseTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const interactionHandleRef = useRef<ReturnType<typeof InteractionManager.runAfterInteractions> | null>(null);
@@ -168,7 +229,7 @@ export const Home: React.FC = () => {
     if (fabTargetRef.current === to) return;
     fabTargetRef.current = to;
     collapseAnim.stopAnimation();
-    Animated.timing(collapseAnim, {
+    RNAnimated.timing(collapseAnim, {
       toValue: to,
       duration: to === 0 ? 220 : 200,
       easing: to === 0 ? Easing.out(Easing.cubic) : Easing.out(Easing.quad),
@@ -178,13 +239,20 @@ export const Home: React.FC = () => {
     });
   }, [collapseAnim]);
 
-  const onHomeScroll = useCallback((event: any) => {
+  const onHomeScrollJS = useCallback((event: any) => {
     animateFab(0);
     if (collapseTimeout.current) clearTimeout(collapseTimeout.current);
     collapseTimeout.current = setTimeout(() => {
       animateFab(1);
     }, 160);
   }, [animateFab]);
+
+  const combinedScrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+      runOnJS(onHomeScrollJS)(event);
+    },
+  });
 
   useEffect(() => {
     return () => {
@@ -260,26 +328,78 @@ export const Home: React.FC = () => {
   })();
 
   return (
-    <View style={{ flex: 1 }}>
-      <ScreenScroll
-        inTab
-        onScroll={onHomeScroll}
-        scrollEventThrottle={16}
-        contentStyle={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, paddingBottom: spacing.s32 }}
+    <>
+      {/* Main Tab Title Animation - Floating Gradient Header (Fixed at top, outside scroll) */}
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            pointerEvents: 'none',
+          },
+          gradientAnimatedStyle,
+        ]}
       >
-        {/* Header with profile */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s16 }}>
-          <Text style={{ fontSize: 32, fontWeight: '800', color: textPrimary, letterSpacing: -0.5 }}>
+        <LinearGradient
+          colors={[
+            bgDefault,
+            bgDefault,
+            withAlpha(bgDefault, 0.95),
+            withAlpha(bgDefault, 0.8),
+            withAlpha(bgDefault, 0.5),
+            withAlpha(bgDefault, 0)
+          ]}
+          style={{
+            paddingTop: insets.top + spacing.s16,
+            paddingBottom: spacing.s32 + spacing.s20,
+            paddingHorizontal: spacing.s16,
+          }}
+        >
+          <Animated.Text
+            style={[
+              {
+                color: textPrimary,
+                fontSize: 20,
+                fontWeight: '700',
+                letterSpacing: -0.5,
+                textAlign: 'center',
+              },
+              floatingTitleAnimatedStyle,
+            ]}
+          >
             Spending
-          </Text>
+          </Animated.Text>
+        </LinearGradient>
+      </Animated.View>
+
+      <View style={{ flex: 1 }}>
+        <ScreenScroll
+          inTab
+          fullScreen
+          onScroll={combinedScrollHandler}
+          scrollEventThrottle={16}
+          contentStyle={{
+            paddingHorizontal: spacing.s16,
+            paddingTop: insets.top + spacing.s24,
+            paddingBottom: spacing.s32
+          }}
+        >
+          {/* Header with profile */}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <Animated.Text style={[{ fontSize: 28, fontWeight: '800', color: textPrimary, letterSpacing: -0.5 }, originalTitleAnimatedStyle]}>
+              Spending
+            </Animated.Text>
           <AnimatedPressable
             onPress={() => nav.navigate('ProfileModal')}
           >
             <View
               style={{
-                width: 48,
-                height: 48,
-                borderRadius: radius.xl,
+                width: 40,
+                height: 40,
+                borderRadius: radius.lg,
                 overflow: 'hidden',
                 backgroundColor: accentPrimary,
                 alignItems: 'center',
@@ -289,9 +409,9 @@ export const Home: React.FC = () => {
               }}
             >
               {profile?.avatarUri ? (
-                <Image source={{ uri: profile.avatarUri }} style={{ width: 48, height: 48 }} />
+                <Image source={{ uri: profile.avatarUri }} style={{ width: 40, height: 40 }} />
               ) : (
-                <Text style={{ color: textOnPrimary, fontWeight: '800', fontSize: 18 }}>
+                <Text style={{ color: textOnPrimary, fontWeight: '800', fontSize: 16 }}>
                   {avatarInitials}
                 </Text>
               )}
@@ -300,7 +420,7 @@ export const Home: React.FC = () => {
         </View>
 
         {/* Month Compare Chart - No Card */}
-        <View style={{ marginBottom: spacing.s16 }}>
+        <View style={{ marginTop: spacing.s16, marginBottom: spacing.s16 }}>
           <MonthCompareChart />
         </View>
 
@@ -381,6 +501,7 @@ export const Home: React.FC = () => {
         />
       </View>
     </View>
+    </>
   );
 };
 

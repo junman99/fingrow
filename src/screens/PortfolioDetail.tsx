@@ -38,6 +38,7 @@ export default function PortfolioDetail() {
 
   const portfolioId = route.params?.portfolioId as string;
   const { portfolios, quotes, lastUpdated, refreshQuotes, fxRates } = useInvestStore();
+  const setPortfolioTracking = useInvestStore(state => state.setPortfolioTracking);
   const { profile } = useProfileStore();
   const p = portfolios[portfolioId];
 
@@ -367,7 +368,17 @@ export default function PortfolioDetail() {
       }
     }
 
-    return points.length > 1 ? points : [{ t: startTime, v: summary.holdingsValue }, { t: now, v: summary.holdingsValue }];
+    // Remove leading zeros from chart data
+    let firstNonZero = 0;
+    for (let i = 0; i < points.length; i++) {
+      if (points[i].v > 0) {
+        firstNonZero = i;
+        break;
+      }
+    }
+
+    const nonZeroPoints = points.slice(firstNonZero);
+    return nonZeroPoints.length > 1 ? nonZeroPoints : [{ t: startTime, v: summary.holdingsValue }, { t: now, v: summary.holdingsValue }];
   }, [p, quotes, selectedInterval, summary.holdingsValue, fxRates, portfolioCurrency]);
 
   // Calculate interval-based gain/loss (excluding cash deposits/withdrawals)
@@ -536,6 +547,12 @@ export default function PortfolioDetail() {
     nav.navigate('CreatePortfolio', { portfolioId: p.id });
   };
 
+  const handleToggleTracking = async () => {
+    if (!p) return;
+    setMenuVisible(false);
+    await setPortfolioTracking(p.id, !(p.trackingEnabled ?? true));
+  };
+
   return (
     <ScreenScroll inTab contentStyle={{ paddingBottom: spacing.s32 }}>
       {/* Header with Back Button */}
@@ -654,6 +671,7 @@ export default function PortfolioDetail() {
             <Pressable
               key={interval}
               onPress={() => setSelectedInterval(interval)}
+              style={{ paddingHorizontal: spacing.s12, paddingVertical: spacing.s8 }}
             >
               <Text style={{
                 color: selectedInterval === interval ? accentPrimary : textMuted,
@@ -887,6 +905,16 @@ export default function PortfolioDetail() {
             icon: 'edit',
             iconToken: 'accent.primary',
             onPress: handleEditPortfolio,
+          },
+          {
+            key: 'tracking',
+            label: (p?.trackingEnabled ?? true) ? 'Disable tracking' : 'Enable tracking',
+            description: (p?.trackingEnabled ?? true)
+              ? 'Exclude from total portfolio value'
+              : 'Include in total portfolio value',
+            icon: (p?.trackingEnabled ?? true) ? 'eye-off' : 'eye',
+            iconToken: (p?.trackingEnabled ?? true) ? 'text.muted' : 'accent.secondary',
+            onPress: handleToggleTracking,
           },
         ]}
       />

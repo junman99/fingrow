@@ -5,8 +5,13 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
+  useAnimatedScrollHandler,
+  interpolate,
+  Extrapolate,
 } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenScroll } from '../components/ScreenScroll';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
@@ -61,6 +66,7 @@ const AnimatedPressable: React.FC<{
 
 const BillsList: React.FC = () => {
   const nav = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const { get, isDark } = useThemeTokens();
   const { items: recurring, hydrate, update, skipOnce, snooze, remove } = useRecurringStore();
   const addTx = useTxStore(s => s.add);
@@ -79,6 +85,7 @@ const BillsList: React.FC = () => {
   const successColor = get('semantic.success') as string;
   const warningColor = get('semantic.warning') as string;
   const accentPrimary = get('accent.primary') as string;
+  const bgDefault = get('background.default') as string;
 
   const now = new Date();
 
@@ -98,6 +105,62 @@ const BillsList: React.FC = () => {
 
   const total30 = upcoming30.reduce((sum, entry) => sum + (Number(entry.item.amount) || 0), 0);
   const total7 = upcoming7.reduce((sum, entry) => sum + (Number(entry.item.amount) || 0), 0);
+
+  // Main Tab Title Animation
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+
+  // Original title animation (fades out)
+  const originalTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: 1 - progress,
+    };
+  });
+
+  // Floating title animation (fades in, shrinks)
+  const floatingTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    const fontSize = interpolate(progress, [0, 1], [28, 20]);
+    const fontWeight = interpolate(progress, [0, 1], [800, 700]);
+
+    return {
+      fontSize,
+      fontWeight: fontWeight.toString() as any,
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
+  // Gradient background animation
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
 
   // Animations
   const fadeAnim = useSharedValue(0);
@@ -144,354 +207,425 @@ const BillsList: React.FC = () => {
   };
 
   return (
-    <ScreenScroll
-      inTab
-      contentStyle={{ padding: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s32, gap: spacing.s20 }}
-    >
-      {/* Header */}
-      <Animated.View style={[{ gap: spacing.s8 }, fadeStyle]}>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8 }}>
-          <Pressable
-            onPress={() => nav.goBack()}
-            style={({ pressed }) => ({
-              padding: spacing.s8,
-              marginLeft: -spacing.s8,
-              marginTop: -spacing.s4,
-              borderRadius: radius.md,
-              backgroundColor: pressed ? cardBg : 'transparent',
-            })}
-            hitSlop={8}
-          >
-            <Icon name="chevron-left" size={28} color={text} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: muted, fontSize: 14, fontWeight: '600' }}>
-              Recurring Bills
-            </Text>
-            <Text style={{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.8, marginTop: spacing.s2 }}>
-              Bills Overview
-            </Text>
-            <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s4 }}>
-              Track and manage recurring expenses
-            </Text>
-          </View>
-        </View>
-      </Animated.View>
-
-      {/* Summary Card */}
-      <Animated.View style={fadeStyle}>
-        <Card
+    <>
+      {/* Main Tab Title Animation - Floating Gradient Header (Fixed at top, outside scroll) */}
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            pointerEvents: 'none',
+          },
+          gradientAnimatedStyle,
+        ]}
+      >
+        <LinearGradient
+          colors={[
+            bgDefault,
+            bgDefault,
+            withAlpha(bgDefault, 0.95),
+            withAlpha(bgDefault, 0.8),
+            withAlpha(bgDefault, 0.5),
+            withAlpha(bgDefault, 0)
+          ]}
           style={{
-            backgroundColor: withAlpha(successColor, isDark ? 0.2 : 0.14),
-            padding: spacing.s20,
-            borderWidth: 2,
-            borderColor: withAlpha(successColor, 0.3),
+            paddingTop: insets.top + spacing.s16,
+            paddingBottom: spacing.s32 + spacing.s20,
+            paddingHorizontal: spacing.s16,
           }}
         >
-          <View style={{ gap: spacing.s16 }}>
-            <View>
-              <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>Next 30 days</Text>
-              <Text style={{ color: text, fontSize: 32, fontWeight: '800', marginTop: spacing.s6, letterSpacing: -0.8 }}>
-                {formatCurrency(total30)}
-              </Text>
-              <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s6 }}>
-                {upcoming30.length} bill{upcoming30.length === 1 ? '' : 's'} due • {activeEntries.length} total active
-              </Text>
-            </View>
-
-            <View style={{ height: 1, backgroundColor: withAlpha(border, 0.3) }} />
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <View>
-                <Text style={{ color: muted, fontSize: 12 }}>Next 7 days</Text>
-                <Text style={{ color: onSurface, fontSize: 18, fontWeight: '700', marginTop: 4 }}>
-                  {formatCurrency(total7)}
-                </Text>
-                <Text style={{ color: muted, fontSize: 11, marginTop: 2 }}>
-                  {upcoming7.length} bill{upcoming7.length === 1 ? '' : 's'}
-                </Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={{ color: muted, fontSize: 12 }}>All bills</Text>
-                <Text style={{ color: onSurface, fontSize: 18, fontWeight: '700', marginTop: 4 }}>
-                  {enriched.length}
-                </Text>
-                <Text style={{ color: muted, fontSize: 11, marginTop: 2 }}>
-                  {enriched.length - activeEntries.length} paused
-                </Text>
-              </View>
-            </View>
-          </View>
-        </Card>
+          <Animated.Text
+            style={[
+              {
+                color: text,
+                fontSize: 20,
+                fontWeight: '700',
+                letterSpacing: -0.5,
+                textAlign: 'center',
+              },
+              floatingTitleAnimatedStyle,
+            ]}
+          >
+            Shared Bills
+          </Animated.Text>
+        </LinearGradient>
       </Animated.View>
 
-      {/* Quick Actions */}
-      <Animated.View style={[{ gap: spacing.s12 }, fadeStyle]}>
-        <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-          <Button
-            title="Add bill"
-            onPress={() => nav.navigate('BillEditor')}
-            style={{ flex: 1 }}
-            icon="plus"
-          />
-          <Button
-            title="Advanced"
-            onPress={() => nav.navigate('Bills')}
-            variant="secondary"
-            style={{ flex: 1 }}
-            icon="settings"
-          />
-        </View>
-      </Animated.View>
-
-      {/* Bills List */}
-      {activeEntries.length === 0 ? (
-        <Animated.View style={fadeStyle}>
-          <Card style={{ backgroundColor: cardBg, padding: spacing.s20 }}>
-            <View style={{ gap: spacing.s16, alignItems: 'center' }}>
-              <View
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: radius.xl,
-                  backgroundColor: withAlpha(successColor, 0.15),
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+      <ScreenScroll
+        inTab
+        fullScreen
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        contentStyle={{
+          paddingHorizontal: 0,
+          paddingTop: insets.top + spacing.s24,
+          paddingBottom: spacing.s32,
+          gap: spacing.s20,
+        }}
+      >
+        {/* Header */}
+        <View style={{ paddingHorizontal: spacing.s16, gap: spacing.s20 }}>
+          <Animated.View style={[{ gap: spacing.s8 }, fadeStyle]}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8 }}>
+              <Pressable
+                onPress={() => nav.goBack()}
+                style={({ pressed }) => ({
+                  padding: spacing.s8,
+                  marginLeft: -spacing.s8,
+                  marginTop: -spacing.s4,
+                  borderRadius: radius.md,
+                  backgroundColor: pressed ? cardBg : 'transparent',
+                })}
+                hitSlop={8}
               >
-                <Icon name="receipt" size={32} color={successColor} />
-              </View>
-              <View style={{ alignItems: 'center', gap: spacing.s8 }}>
-                <Text style={{ color: text, fontSize: 18, fontWeight: '700', textAlign: 'center' }}>
-                  No active bills
+                <Icon name="chevron-left" size={28} color={text} />
+              </Pressable>
+              <View style={{ flex: 1 }}>
+                <Animated.Text
+                  style={[
+                    {
+                      color: text,
+                      fontSize: 28,
+                      fontWeight: '800',
+                      letterSpacing: -0.5,
+                    },
+                    originalTitleAnimatedStyle,
+                  ]}
+                >
+                  Shared Bills
+                </Animated.Text>
+                <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s4 }}>
+                  Track and manage recurring expenses
                 </Text>
-                <Text style={{ color: muted, textAlign: 'center', lineHeight: 20 }}>
-                  Add your first recurring bill to start tracking
-                </Text>
               </View>
+            </View>
+          </Animated.View>
+
+          {/* Summary Card */}
+          <Animated.View style={fadeStyle}>
+            <Card
+              style={{
+                backgroundColor: withAlpha(successColor, isDark ? 0.2 : 0.14),
+                padding: spacing.s20,
+                borderWidth: 2,
+                borderColor: withAlpha(successColor, 0.3),
+              }}
+            >
+              <View style={{ gap: spacing.s16 }}>
+                <View>
+                  <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>Next 30 days</Text>
+                  <Text style={{ color: text, fontSize: 32, fontWeight: '800', marginTop: spacing.s6, letterSpacing: -0.8 }}>
+                    {formatCurrency(total30)}
+                  </Text>
+                  <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s6 }}>
+                    {upcoming30.length} bill{upcoming30.length === 1 ? '' : 's'} due • {activeEntries.length} total active
+                  </Text>
+                </View>
+
+                <View style={{ height: 1, backgroundColor: withAlpha(border, 0.3) }} />
+
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <View>
+                    <Text style={{ color: muted, fontSize: 12 }}>Next 7 days</Text>
+                    <Text style={{ color: onSurface, fontSize: 18, fontWeight: '700', marginTop: 4 }}>
+                      {formatCurrency(total7)}
+                    </Text>
+                    <Text style={{ color: muted, fontSize: 11, marginTop: 2 }}>
+                      {upcoming7.length} bill{upcoming7.length === 1 ? '' : 's'}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={{ color: muted, fontSize: 12 }}>All bills</Text>
+                    <Text style={{ color: onSurface, fontSize: 18, fontWeight: '700', marginTop: 4 }}>
+                      {enriched.length}
+                    </Text>
+                    <Text style={{ color: muted, fontSize: 11, marginTop: 2 }}>
+                      {enriched.length - activeEntries.length} paused
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </Card>
+          </Animated.View>
+
+          {/* Quick Actions */}
+          <Animated.View style={[{ gap: spacing.s12 }, fadeStyle]}>
+            <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
               <Button
                 title="Add bill"
                 onPress={() => nav.navigate('BillEditor')}
-                style={{ width: '100%' }}
+                style={{ flex: 1 }}
+                icon="plus"
+              />
+              <Button
+                title="Advanced"
+                onPress={() => nav.navigate('Bills')}
+                variant="secondary"
+                style={{ flex: 1 }}
+                icon="settings"
               />
             </View>
-          </Card>
-        </Animated.View>
-      ) : (
-        <>
-          {/* Due This Week */}
-          {upcoming7.length > 0 && (
-            <Animated.View style={[{ gap: spacing.s12 }, fadeStyle]}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>
-                  Due This Week
-                </Text>
-                <View
-                  style={{
-                    paddingHorizontal: spacing.s10,
-                    paddingVertical: spacing.s4,
-                    borderRadius: radius.pill,
-                    backgroundColor: withAlpha(warningColor, 0.15),
-                  }}
-                >
-                  <Text style={{ color: warningColor, fontSize: 12, fontWeight: '700' }}>
-                    {upcoming7.length} urgent
-                  </Text>
-                </View>
-              </View>
-              <View style={{ gap: spacing.s10 }}>
-                {upcoming7.map(({ item, next }) => {
-                  const isExpanded = expandedId === item.id;
-                  const daysUntil = next ? getDaysUntil(next) : null;
-                  const isOverdue = next && next < now;
+          </Animated.View>
+        </View>
 
-                  return (
-                    <Card
-                      key={item.id}
-                      style={{
-                        backgroundColor: cardBg,
-                        padding: spacing.s16,
-                        borderWidth: 1,
-                        borderColor: isOverdue ? warningColor : border,
-                      }}
-                    >
-                      <View style={{ gap: spacing.s12 }}>
-                        <AnimatedPressable
-                          onPress={() => setExpandedId(isExpanded ? null : item.id)}
-                          style={{}}
-                        >
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12, flex: 1 }}>
-                              <View
-                                style={{
-                                  width: 48,
-                                  height: 48,
-                                  borderRadius: radius.lg,
-                                  backgroundColor: withAlpha(isOverdue ? warningColor : accentPrimary, isDark ? 0.2 : 0.15),
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                }}
-                              >
-                                <Icon name={isOverdue ? "alert-circle" : "receipt"} size={24} color={isOverdue ? warningColor : accentPrimary} />
-                              </View>
-                              <View style={{ flex: 1 }}>
-                                <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>{item.label || item.category}</Text>
-                                <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
-                                  {item.freq} • {next ? next.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date'} {daysUntil && `• ${daysUntil}`}
-                                </Text>
-                              </View>
-                            </View>
-                            <Text style={{ color: text, fontWeight: '800', fontSize: 20 }}>
-                              {formatCurrency(item.amount)}
-                            </Text>
-                          </View>
-                        </AnimatedPressable>
-
-                        {isExpanded && (
-                          <View style={{ gap: spacing.s8, marginTop: spacing.s4 }}>
-                            <View style={{ flexDirection: 'row', gap: spacing.s8, flexWrap: 'wrap' }}>
-                              <Button
-                                title="Mark paid"
-                                size="sm"
-                                variant="primary"
-                                onPress={() => handleMarkPaid(item, next)}
-                              />
-                              <Button
-                                title="Edit"
-                                size="sm"
-                                variant="secondary"
-                                onPress={() => nav.navigate('BillEditor', { id: item.id })}
-                              />
-                              <Button
-                                title="Skip once"
-                                size="sm"
-                                variant="secondary"
-                                onPress={() => skipOnce(item.id)}
-                              />
-                              <Button
-                                title="Snooze 3d"
-                                size="sm"
-                                variant="secondary"
-                                onPress={() => snooze(item.id, 3)}
-                              />
-                              <Button
-                                title="Delete"
-                                size="sm"
-                                variant="secondary"
-                                onPress={() => handleDelete(item)}
-                              />
-                            </View>
-                          </View>
-                        )}
-                      </View>
-                    </Card>
-                  );
-                })}
-              </View>
-            </Animated.View>
-          )}
-
-          {/* All Active Bills */}
-          <Animated.View style={[{ gap: spacing.s12 }, fadeStyle]}>
-            <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>
-              All Active Bills ({activeEntries.length})
-            </Text>
-            <View style={{ gap: spacing.s10 }}>
-              {activeEntries.map(({ item, next }) => {
-                const isExpanded = expandedId === item.id;
-                const daysUntil = next ? getDaysUntil(next) : null;
-                const isDueThisWeek = upcoming7.some(e => e.item.id === item.id);
-
-                // Skip if already shown in "Due This Week"
-                if (isDueThisWeek) return null;
-
-                return (
-                  <Card
-                    key={item.id}
+        {/* Bills List */}
+        {activeEntries.length === 0 ? (
+          <View style={{ paddingHorizontal: spacing.s16 }}>
+            <Animated.View style={fadeStyle}>
+              <Card style={{ backgroundColor: cardBg, padding: spacing.s20 }}>
+                <View style={{ gap: spacing.s16, alignItems: 'center' }}>
+                  <View
                     style={{
-                      backgroundColor: cardBg,
-                      padding: spacing.s16,
-                      borderWidth: 1,
-                      borderColor: border,
+                      width: 64,
+                      height: 64,
+                      borderRadius: radius.xl,
+                      backgroundColor: withAlpha(successColor, 0.15),
+                      alignItems: 'center',
+                      justifyContent: 'center',
                     }}
                   >
-                    <View style={{ gap: spacing.s12 }}>
-                      <AnimatedPressable
-                        onPress={() => setExpandedId(isExpanded ? null : item.id)}
-                        style={{}}
-                      >
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12, flex: 1 }}>
-                            <View
-                              style={{
-                                width: 48,
-                                height: 48,
-                                borderRadius: radius.lg,
-                                backgroundColor: withAlpha(successColor, isDark ? 0.2 : 0.15),
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
+                    <Icon name="receipt" size={32} color={successColor} />
+                  </View>
+                  <View style={{ alignItems: 'center', gap: spacing.s8 }}>
+                    <Text style={{ color: text, fontSize: 18, fontWeight: '700', textAlign: 'center' }}>
+                      No active bills
+                    </Text>
+                    <Text style={{ color: muted, textAlign: 'center', lineHeight: 20 }}>
+                      Add your first recurring bill to start tracking
+                    </Text>
+                  </View>
+                  <Button
+                    title="Add bill"
+                    onPress={() => nav.navigate('BillEditor')}
+                    style={{ width: '100%' }}
+                  />
+                </View>
+              </Card>
+            </Animated.View>
+          </View>
+        ) : (
+          <>
+            {/* Due This Week */}
+            {upcoming7.length > 0 && (
+              <View style={{ paddingHorizontal: spacing.s16 }}>
+                <Animated.View style={[{ gap: spacing.s12 }, fadeStyle]}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>
+                      Due This Week
+                    </Text>
+                    <View
+                      style={{
+                        paddingHorizontal: spacing.s10,
+                        paddingVertical: spacing.s4,
+                        borderRadius: radius.pill,
+                        backgroundColor: withAlpha(warningColor, 0.15),
+                      }}
+                    >
+                      <Text style={{ color: warningColor, fontSize: 12, fontWeight: '700' }}>
+                        {upcoming7.length} urgent
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{ gap: spacing.s10 }}>
+                    {upcoming7.map(({ item, next }) => {
+                      const isExpanded = expandedId === item.id;
+                      const daysUntil = next ? getDaysUntil(next) : null;
+                      const isOverdue = next && next < now;
+
+                      return (
+                        <Card
+                          key={item.id}
+                          style={{
+                            backgroundColor: cardBg,
+                            padding: spacing.s16,
+                            borderWidth: 1,
+                            borderColor: isOverdue ? warningColor : border,
+                          }}
+                        >
+                          <View style={{ gap: spacing.s12 }}>
+                            <AnimatedPressable
+                              onPress={() => setExpandedId(isExpanded ? null : item.id)}
+                              style={{}}
                             >
-                              <Icon name="receipt" size={24} color={successColor} />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                              <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>{item.label || item.category}</Text>
-                              <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
-                                {item.freq} • {next ? next.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date'} {daysUntil && `• ${daysUntil}`}
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12, flex: 1 }}>
+                                  <View
+                                    style={{
+                                      width: 48,
+                                      height: 48,
+                                      borderRadius: radius.lg,
+                                      backgroundColor: withAlpha(isOverdue ? warningColor : accentPrimary, isDark ? 0.2 : 0.15),
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                    }}
+                                  >
+                                    <Icon name={isOverdue ? "alert-circle" : "receipt"} size={24} color={isOverdue ? warningColor : accentPrimary} />
+                                  </View>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>{item.label || item.category}</Text>
+                                    <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
+                                      {item.freq} • {next ? next.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date'} {daysUntil && `• ${daysUntil}`}
+                                    </Text>
+                                  </View>
+                                </View>
+                                <Text style={{ color: text, fontWeight: '800', fontSize: 20 }}>
+                                  {formatCurrency(item.amount)}
+                                </Text>
+                              </View>
+                            </AnimatedPressable>
+
+                            {isExpanded && (
+                              <View style={{ gap: spacing.s8, marginTop: spacing.s4 }}>
+                                <View style={{ flexDirection: 'row', gap: spacing.s8, flexWrap: 'wrap' }}>
+                                  <Button
+                                    title="Mark paid"
+                                    size="sm"
+                                    variant="primary"
+                                    onPress={() => handleMarkPaid(item, next)}
+                                  />
+                                  <Button
+                                    title="Edit"
+                                    size="sm"
+                                    variant="secondary"
+                                    onPress={() => nav.navigate('BillEditor', { id: item.id })}
+                                  />
+                                  <Button
+                                    title="Skip once"
+                                    size="sm"
+                                    variant="secondary"
+                                    onPress={() => skipOnce(item.id)}
+                                  />
+                                  <Button
+                                    title="Snooze 3d"
+                                    size="sm"
+                                    variant="secondary"
+                                    onPress={() => snooze(item.id, 3)}
+                                  />
+                                  <Button
+                                    title="Delete"
+                                    size="sm"
+                                    variant="secondary"
+                                    onPress={() => handleDelete(item)}
+                                  />
+                                </View>
+                              </View>
+                            )}
+                          </View>
+                        </Card>
+                      );
+                    })}
+                  </View>
+                </Animated.View>
+              </View>
+            )}
+
+            {/* All Active Bills */}
+            <View style={{ paddingHorizontal: spacing.s16 }}>
+              <Animated.View style={[{ gap: spacing.s12 }, fadeStyle]}>
+                <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>
+                  All Active Bills ({activeEntries.length})
+                </Text>
+                <View style={{ gap: spacing.s10 }}>
+                  {activeEntries.map(({ item, next }) => {
+                    const isExpanded = expandedId === item.id;
+                    const daysUntil = next ? getDaysUntil(next) : null;
+                    const isDueThisWeek = upcoming7.some(e => e.item.id === item.id);
+
+                    // Skip if already shown in "Due This Week"
+                    if (isDueThisWeek) return null;
+
+                    return (
+                      <Card
+                        key={item.id}
+                        style={{
+                          backgroundColor: cardBg,
+                          padding: spacing.s16,
+                          borderWidth: 1,
+                          borderColor: border,
+                        }}
+                      >
+                        <View style={{ gap: spacing.s12 }}>
+                          <AnimatedPressable
+                            onPress={() => setExpandedId(isExpanded ? null : item.id)}
+                            style={{}}
+                          >
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12, flex: 1 }}>
+                                <View
+                                  style={{
+                                    width: 48,
+                                    height: 48,
+                                    borderRadius: radius.lg,
+                                    backgroundColor: withAlpha(successColor, isDark ? 0.2 : 0.15),
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}
+                                >
+                                  <Icon name="receipt" size={24} color={successColor} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>{item.label || item.category}</Text>
+                                  <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
+                                    {item.freq} • {next ? next.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date'} {daysUntil && `• ${daysUntil}`}
+                                  </Text>
+                                </View>
+                              </View>
+                              <Text style={{ color: text, fontWeight: '800', fontSize: 20 }}>
+                                {formatCurrency(item.amount)}
                               </Text>
                             </View>
-                          </View>
-                          <Text style={{ color: text, fontWeight: '800', fontSize: 20 }}>
-                            {formatCurrency(item.amount)}
-                          </Text>
-                        </View>
-                      </AnimatedPressable>
+                          </AnimatedPressable>
 
-                      {isExpanded && (
-                        <View style={{ gap: spacing.s8, marginTop: spacing.s4 }}>
-                          <View style={{ flexDirection: 'row', gap: spacing.s8, flexWrap: 'wrap' }}>
-                            <Button
-                              title="Mark paid"
-                              size="sm"
-                              variant="primary"
-                              onPress={() => handleMarkPaid(item, next)}
-                            />
-                            <Button
-                              title="Edit"
-                              size="sm"
-                              variant="secondary"
-                              onPress={() => nav.navigate('BillEditor', { id: item.id })}
-                            />
-                            <Button
-                              title="Skip once"
-                              size="sm"
-                              variant="secondary"
-                              onPress={() => skipOnce(item.id)}
-                            />
-                            <Button
-                              title="Snooze 3d"
-                              size="sm"
-                              variant="secondary"
-                              onPress={() => snooze(item.id, 3)}
-                            />
-                            <Button
-                              title="Delete"
-                              size="sm"
-                              variant="secondary"
-                              onPress={() => handleDelete(item)}
-                            />
-                          </View>
+                          {isExpanded && (
+                            <View style={{ gap: spacing.s8, marginTop: spacing.s4 }}>
+                              <View style={{ flexDirection: 'row', gap: spacing.s8, flexWrap: 'wrap' }}>
+                                <Button
+                                  title="Mark paid"
+                                  size="sm"
+                                  variant="primary"
+                                  onPress={() => handleMarkPaid(item, next)}
+                                />
+                                <Button
+                                  title="Edit"
+                                  size="sm"
+                                  variant="secondary"
+                                  onPress={() => nav.navigate('BillEditor', { id: item.id })}
+                                />
+                                <Button
+                                  title="Skip once"
+                                  size="sm"
+                                  variant="secondary"
+                                  onPress={() => skipOnce(item.id)}
+                                />
+                                <Button
+                                  title="Snooze 3d"
+                                  size="sm"
+                                  variant="secondary"
+                                  onPress={() => snooze(item.id, 3)}
+                                />
+                                <Button
+                                  title="Delete"
+                                  size="sm"
+                                  variant="secondary"
+                                  onPress={() => handleDelete(item)}
+                                />
+                              </View>
+                            </View>
+                          )}
                         </View>
-                      )}
-                    </View>
-                  </Card>
-                );
-              })}
+                      </Card>
+                    );
+                  })}
+                </View>
+              </Animated.View>
             </View>
-          </Animated.View>
-        </>
-      )}
-    </ScreenScroll>
+          </>
+        )}
+      </ScreenScroll>
+    </>
   );
 };
 

@@ -118,7 +118,8 @@ const SelectAccountType: React.FC = () => {
 
   return (
     <ScreenScroll
-      contentStyle={{ padding: spacing.s16, gap: spacing.s16 }}
+      inTab
+      contentStyle={{ padding: spacing.s16, gap: spacing.s16, paddingBottom: spacing.s32 }}
     >
       {/* Header */}
       <View style={{ gap: spacing.s8 }}>

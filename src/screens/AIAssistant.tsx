@@ -1,6 +1,9 @@
 import React from 'react';
-import { View, Text, TextInput, FlatList, Pressable, KeyboardAvoidingView, Platform, Animated, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, FlatList, Pressable, KeyboardAvoidingView, Platform, Animated, ActivityIndicator, Alert, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import MaskedView from '@react-native-masked-view/masked-view';
+import * as Clipboard from 'expo-clipboard';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
 import Icon from '../components/Icon';
@@ -60,10 +63,11 @@ export default function AIAssistant() {
         const stored = await AsyncStorage.getItem(MESSAGES_STORAGE_KEY);
         if (stored) {
           const parsed = JSON.parse(stored);
-          setMessages(parsed.map((m: any) => ({
+          const loadedMessages = parsed.map((m: any) => ({
             ...m,
             timestamp: new Date(m.timestamp)
-          })));
+          }));
+          setMessages(loadedMessages);
         }
       } catch (error) {
         console.error('[AIAssistant] Failed to load messages:', error);
@@ -121,11 +125,21 @@ export default function AIAssistant() {
 
   const text = get('text.primary') as string;
   const muted = get('text.muted') as string;
-  const bg = get('surface.base') as string;
+  const bg = get('background.default') as string;
   const surface1 = get('surface.level1') as string;
   const surface2 = get('surface.level2') as string;
   const accent = get('accent.primary') as string;
   const border = get('border.subtle') as string;
+
+  const withAlpha = (hex: string, alpha: number) => {
+    if (!hex) return hex;
+    const raw = hex.replace('#', '');
+    const bigint = parseInt(raw.length === 3 ? raw.repeat(2) : raw, 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return `rgba(${r},${g},${b},${alpha})`;
+  };
 
   const sendMessage = async (messageText?: string) => {
     const questionText = messageText || input.trim();
@@ -138,12 +152,12 @@ export default function AIAssistant() {
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMsg]);
+    setMessages(prev => [userMsg, ...prev]);
     setInput('');
     setIsLoading(true);
 
-    // Scroll to bottom after user message
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    // Scroll to bottom after user message (offset 0 for inverted list)
+    setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
 
     try {
       // Call real AI service
@@ -158,8 +172,8 @@ export default function AIAssistant() {
         metadata: response.message.metadata,
       };
 
-      setMessages(prev => [...prev, assistantMsg]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      setMessages(prev => [assistantMsg, ...prev]);
+      setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
 
       // Handle transaction confirmation if needed
       if (response.requiresConfirmation) {
@@ -182,7 +196,7 @@ export default function AIAssistant() {
         text: 'Sorry, I encountered an error. Please try again.',
         timestamp: new Date(),
       };
-      setMessages(prev => [...prev, errorMsg]);
+      setMessages(prev => [errorMsg, ...prev]);
     } finally {
       setIsLoading(false);
     }
@@ -192,56 +206,52 @@ export default function AIAssistant() {
     sendMessage(question);
   };
 
-  // Get most commonly used accounts for suggestions
-  // Only include cash, checking, savings, and credit accounts (exclude retirement, investment, etc.)
+  // Get ALL cash and credit card accounts for selection
   const suggestedAccounts = React.useMemo(() => {
-    const { transactions } = useTxStore.getState();
+    console.log('[AIAssistant] All accounts:', JSON.stringify(accounts.map(a => ({ name: a.name, kind: a.kind })), null, 2));
 
-    // Filter to only transaction-eligible accounts
-    const eligibleAccounts = accounts.filter(a =>
+    // Filter to show transaction accounts (same logic as Money tab's cashAccounts + credit cards)
+    // Includes: cash, checking, savings, credit (excludes: investment, retirement)
+    const transactionAccounts = accounts.filter(a =>
       a.kind === 'cash' ||
+      a.kind === 'credit' ||
       a.kind === 'checking' ||
-      a.kind === 'savings' ||
-      a.kind === 'credit'
+      a.kind === 'savings'
     );
 
-    // Count account usage in recent transactions (by account name)
+    console.log('[AIAssistant] Transaction accounts:', JSON.stringify(transactionAccounts.map(a => ({ name: a.name, kind: a.kind })), null, 2));
+
+    // Sort by usage in recent transactions
+    const { transactions } = useTxStore.getState();
     const accountUsage: Record<string, number> = {};
+
     (transactions || []).slice(0, 100).forEach(tx => {
       if (tx.account) {
-        // Only count if it's an eligible account
-        const isEligible = eligibleAccounts.find(a => a.name === tx.account);
-        if (isEligible) {
-          accountUsage[tx.account] = (accountUsage[tx.account] || 0) + 1;
-        }
+        accountUsage[tx.account] = (accountUsage[tx.account] || 0) + 1;
       }
     });
 
-    // Sort by usage and get top 2 (accountName is the key)
-    const sortedAccounts = Object.entries(accountUsage)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 2)
-      .map(([accountName]) => eligibleAccounts.find(a => a.name === accountName))
-      .filter(Boolean);
+    // Sort accounts: First by type (cash, checking, savings, credit), then by usage
+    const typeOrder: Record<string, number> = {
+      'cash': 1,
+      'checking': 2,
+      'savings': 3,
+      'credit': 4,
+    };
 
-    // If less than 2, add default accounts (checking first, then credit, then cash)
-    if (sortedAccounts.length < 2) {
-      const checking = eligibleAccounts.find(a => a.kind === 'checking');
-      const credit = eligibleAccounts.find(a => a.kind === 'credit');
-      const cash = eligibleAccounts.find(a => a.kind === 'cash');
+    const sortedAccounts = transactionAccounts.sort((a, b) => {
+      // First sort by type
+      const typeA = typeOrder[a.kind || ''] || 999;
+      const typeB = typeOrder[b.kind || ''] || 999;
+      if (typeA !== typeB) return typeA - typeB;
 
-      if (checking && !sortedAccounts.find(a => a?.name === checking.name)) {
-        sortedAccounts.push(checking);
-      }
-      if (credit && !sortedAccounts.find(a => a?.name === credit.name) && sortedAccounts.length < 2) {
-        sortedAccounts.push(credit);
-      }
-      if (cash && !sortedAccounts.find(a => a?.name === cash.name) && sortedAccounts.length < 2) {
-        sortedAccounts.push(cash);
-      }
-    }
+      // Then sort by usage within same type
+      const usageA = accountUsage[a.name] || 0;
+      const usageB = accountUsage[b.name] || 0;
+      return usageB - usageA;
+    });
 
-    return sortedAccounts.slice(0, 2);
+    return sortedAccounts;
   }, [accounts]);
 
   const handleConfirmTransaction = async (data: TransactionData | PortfolioTransactionData) => {
@@ -292,7 +302,7 @@ export default function AIAssistant() {
           text: `✅ Transaction added: $${txData.amount?.toFixed(2)}${txData.merchant ? ' at ' + txData.merchant : ''}. Check your Spending tab!`,
           timestamp: new Date(),
         };
-        setMessages(prev => [...prev, successMsg]);
+        setMessages(prev => [successMsg, ...prev]);
       } catch (error) {
         console.error('[AIAssistant] Error adding transaction:', error);
         const errorMsg: Message = {
@@ -301,7 +311,7 @@ export default function AIAssistant() {
           text: '❌ Failed to add transaction. Please try again.',
           timestamp: new Date(),
         };
-        setMessages(prev => [...prev, errorMsg]);
+        setMessages(prev => [errorMsg, ...prev]);
       }
     } else if (pendingConfirmation?.type === 'portfolio_transaction') {
       const portfolioData = data as PortfolioTransactionData;
@@ -316,12 +326,12 @@ export default function AIAssistant() {
           text: `✅ ${portfolioData.side === 'buy' ? 'Bought' : 'Sold'} ${portfolioData.amount} shares of ${portfolioData.symbol}`,
           timestamp: new Date(),
         };
-        setMessages(prev => [...prev, successMsg]);
+        setMessages(prev => [successMsg, ...prev]);
       }
     }
 
     setPendingConfirmation(null);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
   };
 
   const handleCancelTransaction = () => {
@@ -333,9 +343,9 @@ export default function AIAssistant() {
       text: "Transaction cancelled. Feel free to ask me anything else!",
       timestamp: new Date(),
     };
-    setMessages(prev => [...prev, cancelMsg]);
+    setMessages(prev => [cancelMsg, ...prev]);
     setPendingConfirmation(null);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
   };
 
   const handleClearChat = () => {
@@ -363,7 +373,8 @@ export default function AIAssistant() {
     const isUser = item.role === 'user';
     const isCached = item.metadata?.cached;
     const hasUsage = item.metadata?.usage;
-    const isLastMessage = index === messages.length - 1;
+    // With inverted list, index 0 is the newest message (at bottom)
+    const isLastMessage = index === 0;
     const showConfirmation = isLastMessage && pendingConfirmation;
 
     return (
@@ -375,7 +386,12 @@ export default function AIAssistant() {
             marginBottom: spacing.s16,
           }}
         >
-          <View
+          <Pressable
+            onLongPress={async () => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              await Clipboard.setStringAsync(item.text);
+              Alert.alert('Copied!', 'Message copied to clipboard');
+            }}
             style={{
               backgroundColor: isUser ? accent : surface1,
               borderRadius: radius.xl,
@@ -388,10 +404,10 @@ export default function AIAssistant() {
               elevation: 2,
             }}
           >
-            <Text style={{ color: isUser ? '#FFFFFF' : text, fontSize: 15, lineHeight: 22 }}>
+            <Text style={{ color: isUser ? '#FFFFFF' : text, fontSize: 15, lineHeight: 22 }} selectable>
               {item.text}
             </Text>
-          </View>
+          </Pressable>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.s6, marginHorizontal: spacing.s8, alignSelf: isUser ? 'flex-end' : 'flex-start', gap: spacing.s6 }}>
             <Text style={{ color: muted, fontSize: 11 }}>
               {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -412,7 +428,24 @@ export default function AIAssistant() {
               data={pendingConfirmation.data}
               onConfirm={handleConfirmTransaction}
               onCancel={handleCancelTransaction}
-              suggestedAccounts={suggestedAccounts}
+              suggestedAccounts={(() => {
+                // Ensure AI-extracted account is always in the list
+                if (pendingConfirmation.type === 'transaction') {
+                  const txData = pendingConfirmation.data as any;
+                  if (txData.account) {
+                    const extractedAccount = accounts.find(a => a.name === txData.account);
+                    if (extractedAccount) {
+                      // Check if it's already in suggested accounts
+                      const alreadyIncluded = suggestedAccounts.some(a => a?.name === extractedAccount.name);
+                      if (!alreadyIncluded) {
+                        // Add it at the beginning
+                        return [extractedAccount, ...suggestedAccounts.filter(a => a)].slice(0, 2);
+                      }
+                    }
+                  }
+                }
+                return suggestedAccounts.filter(a => a);
+              })()}
             />
           </View>
         )}
@@ -430,71 +463,88 @@ export default function AIAssistant() {
         opacity: bubbleOpacity,
       }}
     >
-      <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={['top']}>
-        {/* Header - No Card */}
-        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, paddingBottom: spacing.s16 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12 }}>
-            <Pressable
-              onPress={() => nav.goBack()}
-              style={({ pressed }) => ({
-                padding: spacing.s8,
-                marginLeft: -spacing.s8,
-                marginTop: -spacing.s4,
-                borderRadius: radius.md,
-                backgroundColor: pressed ? surface1 : 'transparent',
-              })}
-              hitSlop={8}
-            >
-              <Icon name="x" size={28} colorToken="text.primary" />
-            </Pressable>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: text, fontSize: 28, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 }}>
-                AI Assistant
-              </Text>
-              <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s4 }}>
-                Ask about your spending and portfolio
-              </Text>
+      <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top']}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
+          <View style={{ flex: 1, backgroundColor: bg }}>
+            {/* Floating Gradient Header - positioned absolutely over content */}
+            <LinearGradient
+            colors={[
+              bg,
+              bg,
+              withAlpha(bg, 0.95),
+              withAlpha(bg, 0.8),
+              withAlpha(bg, 0.5),
+              withAlpha(bg, 0)
+            ]}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: 10,
+              paddingTop: spacing.s8,
+              paddingBottom: spacing.s32,
+            }}
+            pointerEvents="box-none"
+          >
+            {/* Drag Handle */}
+            <View style={{ alignItems: 'center', paddingBottom: spacing.s4 }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: muted, opacity: 0.3 }} />
             </View>
-            {messages.length > 0 && (
-              <Pressable
-                onPress={handleClearChat}
-                style={({ pressed }) => ({
-                  padding: spacing.s8,
-                  marginRight: -spacing.s8,
-                  marginTop: -spacing.s4,
-                  borderRadius: radius.md,
-                  backgroundColor: pressed ? surface1 : 'transparent',
-                })}
-                hitSlop={8}
-              >
-                <Icon name="trash" size={22} colorToken="text.primary" />
-              </Pressable>
-            )}
-          </View>
-        </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
-      >
-        {/* Messages */}
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{
-            padding: spacing.s16,
-            paddingBottom: spacing.s24,
-          }}
-          ListFooterComponent={
+            {/* Header */}
+            <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                <Text style={{ color: text, fontSize: 20, fontWeight: '700', letterSpacing: -0.3 }}>
+                  FinGrow AI
+                </Text>
+                {messages.length > 0 && (
+                  <Pressable
+                    onPress={handleClearChat}
+                    style={({ pressed }) => ({
+                      padding: spacing.s6,
+                      borderRadius: radius.md,
+                      backgroundColor: pressed ? surface1 : 'transparent',
+                      position: 'absolute',
+                      right: 0,
+                    })}
+                    hitSlop={8}
+                  >
+                    <Icon name="trash" size={20} colorToken="text.primary" />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          </LinearGradient>
+
+          {/* Messages */}
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={(item) => item.id}
+            inverted
+            scrollEnabled={true}
+            bounces={true}
+            showsVerticalScrollIndicator={true}
+            overScrollMode="always"
+            nestedScrollEnabled={true}
+            contentContainerStyle={{
+              paddingTop: 180,
+              paddingHorizontal: spacing.s16,
+              paddingBottom: 80,
+            }}
+          ListHeaderComponent={
             isLoading ? (
               <View
                 style={{
                   alignSelf: 'flex-start',
                   maxWidth: '80%',
-                  marginBottom: spacing.s16,
+                  marginTop: spacing.s16,
                 }}
               >
                 <View
@@ -519,9 +569,9 @@ export default function AIAssistant() {
               </View>
             ) : null
           }
-          ListHeaderComponent={
+          ListFooterComponent={
             showWelcome ? (
-              <View style={{ marginBottom: spacing.s20 }}>
+              <View style={{ marginTop: spacing.s20 }}>
                 <View style={{ alignItems: 'center', paddingVertical: spacing.s24 }}>
                   <View
                     style={{
@@ -574,14 +624,33 @@ export default function AIAssistant() {
           }
         />
 
-        {/* Floating Input Area */}
-        <View
-          style={{
-            paddingHorizontal: spacing.s16,
-            paddingVertical: spacing.s12,
-            paddingBottom: Platform.OS === 'ios' ? spacing.s24 : spacing.s12,
-          }}
-        >
+          {/* Floating Input Area with gradient background - positioned absolutely at bottom */}
+          <View
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              zIndex: 10,
+            }}
+          >
+            <LinearGradient
+              colors={[
+                withAlpha(bg, 0),
+                withAlpha(bg, 0.5),
+                withAlpha(bg, 0.8),
+                withAlpha(bg, 0.95),
+                bg,
+                bg
+              ]}
+              style={{
+                paddingTop: spacing.s48,
+                paddingHorizontal: spacing.s16,
+                paddingVertical: spacing.s12,
+                paddingBottom: Platform.OS === 'ios' ? spacing.s32 : spacing.s16,
+              }}
+              pointerEvents="box-none"
+            >
           {/* Rotating Suggestion Chip (only show when conversation has started) */}
           {messages.length > 0 && (
             <Animated.View
@@ -680,22 +749,24 @@ export default function AIAssistant() {
             </Pressable>
           </View>
 
-          {/* Privacy Disclaimer */}
-          <View style={{ marginTop: spacing.s12, alignItems: 'center' }}>
-            <Text style={{ color: muted, fontSize: 11, textAlign: 'center' }}>
-              Powered by Claude •{' '}
-              <Pressable
-                onPress={() => nav.navigate('AIPrivacyInfo')}
-                style={{ paddingHorizontal: spacing.s4 }}
-              >
-                <Text style={{ color: accent, fontSize: 11, fontWeight: '600', textDecorationLine: 'underline' }}>
-                  See how your data is handled
+              {/* Privacy Disclaimer */}
+              <View style={{ marginTop: spacing.s12, alignItems: 'center' }}>
+                <Text style={{ color: muted, fontSize: 11, textAlign: 'center' }}>
+                  Powered by Claude •{' '}
+                  <Pressable
+                    onPress={() => nav.navigate('AIPrivacyInfo')}
+                    style={{ paddingHorizontal: spacing.s4 }}
+                  >
+                    <Text style={{ color: accent, fontSize: 11, fontWeight: '600', textDecorationLine: 'underline' }}>
+                      See how your data is handled
+                    </Text>
+                  </Pressable>
                 </Text>
-              </Pressable>
-            </Text>
+              </View>
+            </LinearGradient>
           </View>
-        </View>
-      </KeyboardAvoidingView>
+          </View>
+        </KeyboardAvoidingView>
     </SafeAreaView>
     </Animated.View>
   );

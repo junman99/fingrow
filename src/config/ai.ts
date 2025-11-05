@@ -3,6 +3,15 @@
  * Controls rate limits, token limits, and feature access for different tiers
  */
 
+// ALLOWED MODELS - ONLY HAIKU FOR COST CONTROL
+const ALLOWED_MODELS = [
+  'claude-3-haiku-20240307',      // Old Haiku 3
+  'claude-3-5-haiku-20241022',    // Current Haiku 3.5 (RECOMMENDED)
+] as const;
+
+// Validate model at compile time
+type AllowedModel = typeof ALLOWED_MODELS[number];
+
 export const AI_CONFIG = {
   // Testing mode - set to false in production
   TESTING_MODE: true,
@@ -10,9 +19,14 @@ export const AI_CONFIG = {
   // API Configuration
   API: {
     PROVIDER: 'anthropic',
-    MODEL: 'claude-3-5-haiku-20241022', // Cheapest, fastest model
+    // CRITICAL: ONLY USE HAIKU MODELS - NEVER SONNET OR OPUS (TOO EXPENSIVE)
+    // For 1000 users @ 20 prompts/day:
+    // - Haiku 3.5: ~$420/month
+    // - Sonnet 3.5: ~$1,260/month (3x more expensive)
+    // - Opus: ~$6,300/month (15x more expensive)
+    MODEL: 'claude-3-5-haiku-20241022', // ONLY HAIKU - DO NOT CHANGE TO SONNET
     MAX_INPUT_TOKENS: 2000,
-    TEMPERATURE: 0.7,
+    TEMPERATURE: 0.8, // Higher for more natural responses (does NOT affect pricing)
     CACHE_TTL_SECONDS: 3600, // 1 hour
   },
 
@@ -75,21 +89,27 @@ export const AI_CONFIG = {
 };
 
 // System prompt - defines AI behavior and constraints
-export const SYSTEM_PROMPT = `You are a financial assistant for the Fingrow personal finance app. Your role is to help users understand their financial data and log transactions.
+export const SYSTEM_PROMPT = `You are a financial assistant for the Fingrow personal finance app. Your role is to help users understand their financial data and log transactions naturally.
 
 CAPABILITIES:
 1. Answer questions about spending, budgets, and transactions
 2. Provide insights on investment portfolios and net worth
 3. Help log new transactions or trades with structured data extraction
-4. Offer brief, actionable financial insights
+4. Understand natural language and context (time references, account nicknames, casual language)
+5. Offer brief, actionable financial insights
+
+INTERACTION STYLE:
+- Be conversational and understand context
+- Interpret time references naturally ("this afternoon" = 3PM, "lunch time" = 12:30PM, "just now" = current time)
+- Recognize casual language and abbreviations
+- Keep responses concise (2-3 sentences) unless detailed analysis is requested
+- Be friendly and helpful, not robotic
 
 CONSTRAINTS:
 - ONLY answer questions about the user's Fingrow data
 - DO NOT provide general financial advice, investment recommendations, or predictions
 - DO NOT answer questions unrelated to personal finance or this app
-- Keep responses under 100 words unless detailed analysis is requested
-- Be concise, friendly, and data-focused
-- Always cite specific numbers from the user's data
+- Always cite specific numbers from the user's data when available
 
 DATA PRIVACY:
 - User data is pre-aggregated before reaching you
@@ -101,10 +121,21 @@ If asked about anything outside your scope, respond:
 
 For transaction logging, extract:
 - amount (required)
-- merchant/description
-- category (Food & Drink, Shopping, Transport, etc.)
-- date (default to today if not specified)
+- merchant/description (what they bought, NOT the account name)
+- category (Food, Groceries, Transport, Fuel, Shopping, Entertainment, Bills, Utilities, Health, Fitness, Home, Education, Pets, Travel, Subscriptions, Gifts)
+- date/time (interpret natural language: "afternoon"=3PM, "lunch"=12:30PM, "morning"=9AM, "evening"=6PM, "night"=9PM)
+- account (if mentioned, extract the account name only)
 Return as JSON for confirmation.`;
+
+// Runtime validation - check model is allowed
+if (!ALLOWED_MODELS.includes(AI_CONFIG.API.MODEL as any)) {
+  throw new Error(
+    `❌ COST CONTROL VIOLATION: Invalid model "${AI_CONFIG.API.MODEL}"\n` +
+    `Only Haiku models are allowed: ${ALLOWED_MODELS.join(', ')}\n` +
+    `Current model would cost 3-15x more than Haiku.\n` +
+    `Change MODEL in src/config/ai.ts to 'claude-3-5-haiku-20241022'`
+  );
+}
 
 // Intent types for local classification
 export enum IntentType {

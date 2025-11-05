@@ -15,6 +15,8 @@ import { Card } from '../components/Card';
 import Button from '../components/Button';
 import { useInvestStore } from '../store/invest';
 import { formatCurrency } from '../lib/format';
+import { convertCurrency } from '../lib/fx';
+import { useProfileStore } from '../store/profile';
 
 function withAlpha(color: string, alpha: number) {
   if (!color) return `rgba(0,0,0,${alpha})`;
@@ -61,7 +63,8 @@ const AnimatedPressable: React.FC<{
 const PortfolioList: React.FC = () => {
   const nav = useNavigation<any>();
   const { get, isDark } = useThemeTokens();
-  const { holdings, quotes, hydrate } = useInvestStore();
+  const { portfolios, quotes, fxRates, hydrate } = useInvestStore();
+  const { profile } = useProfileStore();
 
   useEffect(() => {
     hydrate();
@@ -72,50 +75,97 @@ const PortfolioList: React.FC = () => {
   const onSurface = get('text.onSurface') as string;
   const cardBg = get('surface.level1') as string;
   const border = get('border.subtle') as string;
+  const accentPrimary = get('accent.primary') as string;
   const accentSecondary = get('accent.secondary') as string;
   const successColor = get('semantic.success') as string;
-  const errorColor = get('semantic.error') as string;
+  const warningColor = get('semantic.warning') as string;
 
   const portfolioCalc = useMemo(() => {
-    const symbols = Object.keys(holdings || {});
-    let changeUSD = 0;
+    const primaryCurrency = (profile.currency || 'USD').toUpperCase();
+    const investCurrency = (profile.investCurrency || primaryCurrency).toUpperCase();
+
+    // Build aggregated holdings across ALL tracked portfolios
+    const aggregatedHoldings: Record<string, any> = {};
+    Object.values(portfolios || {}).forEach((p: any) => {
+      // Skip portfolios with tracking disabled
+      if (!p || !p.holdings || (p.trackingEnabled === false)) return;
+      Object.values(p.holdings || {}).forEach((h: any) => {
+        const sym = h.symbol;
+        if (!aggregatedHoldings[sym]) {
+          aggregatedHoldings[sym] = { ...h, lots: [] };
+        }
+        aggregatedHoldings[sym].lots = aggregatedHoldings[sym].lots.concat(h.lots || []);
+      });
+    });
+
+    const symbols = Object.keys(aggregatedHoldings);
+    let totalChangeConverted = 0;
     const rows: { sym: string; value: number; qty: number; last: number; change: number; changePct: number }[] = [];
 
     for (const sym of symbols) {
+      const h = aggregatedHoldings[sym];
       const q = quotes[sym]?.last || 0;
       const ch = quotes[sym]?.change || 0;
-      const changePct = quotes[sym]?.changePercent || 0;
-      const qty = (holdings[sym]?.lots || []).reduce(
-        (acc, l) => acc + (l.side === 'buy' ? l.qty : -l.qty),
+      const changePct = quotes[sym]?.changePct || 0;
+      const qty = (h?.lots || []).reduce(
+        (acc: number, l: any) => acc + (l.side === 'buy' ? l.qty : -l.qty),
         0
       );
-      const value = q * qty;
-      changeUSD += ch * qty;
 
-      if (value !== 0 || qty !== 0) {
-        rows.push({ sym, value, qty, last: q, change: ch, changePct });
+      if (qty <= 0) continue;
+
+      // Get ticker currency
+      let tickerCurrency = h?.currency;
+      if (!tickerCurrency) {
+        const s = sym.toUpperCase();
+        if (s.includes('-USD') || s.includes('USD')) tickerCurrency = 'USD';
+        else if (s.endsWith('.L')) tickerCurrency = 'GBP';
+        else if (s.endsWith('.T')) tickerCurrency = 'JPY';
+        else if (s.endsWith('.TO')) tickerCurrency = 'CAD';
+        else if (s.endsWith('.AX')) tickerCurrency = 'AUD';
+        else if (s.endsWith('.HK')) tickerCurrency = 'HKD';
+        else if (s.endsWith('.PA') || s.endsWith('.DE')) tickerCurrency = 'EUR';
+        else if (s.endsWith('.SW')) tickerCurrency = 'CHF';
+        else tickerCurrency = 'USD';
+      }
+      tickerCurrency = String(tickerCurrency).toUpperCase();
+
+      // Convert to investment currency first, then to primary
+      const priceInInvestCurrency = convertCurrency(fxRates, q, tickerCurrency, investCurrency);
+      const priceConverted = convertCurrency(fxRates, priceInInvestCurrency, investCurrency, primaryCurrency);
+      const changeConvertedPerShare = convertCurrency(fxRates, ch, tickerCurrency, primaryCurrency);
+
+      const value = priceConverted * qty;
+      const change = changeConvertedPerShare * qty;
+      totalChangeConverted += change;
+
+      if (value !== 0) {
+        rows.push({ sym, value, qty, last: priceConverted, change: changeConvertedPerShare, changePct });
       }
     }
 
-    let cash = 0;
-    try {
-      const portfolio = (useInvestStore.getState().activePortfolio?.() as any);
-      if (portfolio && typeof portfolio.cash === 'number') {
-        cash = Number(portfolio.cash) || 0;
-      }
-    } catch {}
+    // Sum cash from ALL tracked portfolios
+    let totalCashConverted = 0;
+    Object.values(portfolios || {}).forEach((p: any) => {
+      // Skip portfolios with tracking disabled
+      if (!p || typeof p.cash !== 'number' || (p.trackingEnabled === false)) return;
+      const portfolioBaseCurrency = String(p.baseCurrency || 'USD').toUpperCase();
+      const cashNative = Number(p.cash) || 0;
+      // Convert to primary currency
+      totalCashConverted += convertCurrency(fxRates, cashNative, portfolioBaseCurrency, primaryCurrency);
+    });
 
-    const totalUSD = rows.reduce((acc, row) => acc + row.value, 0) + cash;
+    const totalUSD = rows.reduce((acc, row) => acc + row.value, 0) + totalCashConverted;
     const allocations =
       totalUSD > 0
         ? [
             ...rows.map(row => ({ sym: row.sym, wt: row.value / totalUSD, value: row.value })),
-            ...(cash ? [{ sym: 'CASH', wt: cash / totalUSD, value: cash }] : []),
+            ...(totalCashConverted ? [{ sym: 'CASH', wt: totalCashConverted / totalUSD, value: totalCashConverted }] : []),
           ].sort((a, b) => b.wt - a.wt)
         : [];
 
-    return { totalUSD, changeUSD, allocations, rows, cash };
-  }, [holdings, quotes]);
+    return { totalUSD, changeUSD: totalChangeConverted, allocations, rows, cash: totalCashConverted };
+  }, [portfolios, quotes, fxRates, profile.currency, profile.investCurrency]);
 
   // Animations
   const fadeAnim = useSharedValue(0);
@@ -159,14 +209,14 @@ const PortfolioList: React.FC = () => {
             <Icon name="chevron-left" size={28} color={text} />
           </Pressable>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: muted, fontSize: 14, fontWeight: '600' }}>
-              Your Portfolio
+            <Text style={{ color: muted, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Combined Portfolio
             </Text>
             <Text style={{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.8, marginTop: spacing.s2 }}>
               Investments
             </Text>
             <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s4 }}>
-              Track your investments and performance
+              All your tracked portfolios in one view
             </Text>
           </View>
         </View>
@@ -176,82 +226,117 @@ const PortfolioList: React.FC = () => {
       <Animated.View style={fadeStyle}>
         <Card
           style={{
-            backgroundColor: withAlpha(accentSecondary, isDark ? 0.22 : 0.14),
+            backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.12),
             padding: spacing.s20,
-            borderWidth: 2,
-            borderColor: withAlpha(accentSecondary, 0.3),
+            gap: spacing.s16,
           }}
         >
-          <View style={{ gap: spacing.s16 }}>
-            <View>
-              <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>Total value</Text>
-              <Text style={{ color: text, fontSize: 32, fontWeight: '800', marginTop: spacing.s6, letterSpacing: -0.8 }}>
+          <View>
+            <Text style={{ color: muted, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Total Portfolio Value
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: spacing.s6 }}>
+              <Text style={{ color: text, fontSize: 36, fontWeight: '800', letterSpacing: -1 }}>
                 {formatCurrency(portfolioCalc.totalUSD)}
               </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, marginTop: spacing.s8 }}>
+              <Text style={{ color: muted, fontSize: 14, marginLeft: spacing.s6, fontWeight: '600' }}>
+                {(profile.currency || 'USD').toUpperCase()}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, marginTop: spacing.s10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6 }}>
                 <Text style={{
-                  color: portfolioCalc.changeUSD >= 0 ? successColor : errorColor,
+                  color: portfolioCalc.changeUSD > 0 ? successColor : portfolioCalc.changeUSD < 0 ? warningColor : muted,
                   fontSize: 16,
                   fontWeight: '700'
                 }}>
-                  {portfolioChangeLabel}
+                  {portfolioCalc.changeUSD > 0 ? '+' : ''}{formatCurrency(portfolioCalc.changeUSD)}
                 </Text>
                 {changePct !== 0 && (
                   <Text style={{
-                    color: changePct >= 0 ? successColor : errorColor,
+                    color: changePct > 0 ? successColor : changePct < 0 ? warningColor : muted,
                     fontSize: 14,
                     fontWeight: '600'
                   }}>
-                    ({changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%)
+                    ({changePct > 0 ? '+' : ''}{changePct.toFixed(2)}%)
                   </Text>
                 )}
               </View>
+              <Text style={{ color: muted, fontSize: 14 }}>•</Text>
+              <Text style={{ color: muted, fontSize: 13 }}>Today</Text>
             </View>
-
-            {portfolioCalc.allocations.length > 0 && (
-              <>
-                <View style={{ height: 1, backgroundColor: withAlpha(border, 0.3) }} />
-                <View>
-                  <Text style={{ color: muted, fontSize: 13, fontWeight: '600', marginBottom: spacing.s10 }}>
-                    Top Holdings
-                  </Text>
-                  <View style={{ gap: spacing.s8 }}>
-                    {portfolioCalc.allocations.slice(0, 5).map((item, idx) => (
-                      <View key={idx} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, flex: 1 }}>
-                          <View
-                            style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: radius.sm,
-                              backgroundColor: withAlpha(accentSecondary, 0.3),
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                          >
-                            <Text style={{ color: text, fontWeight: '700', fontSize: 12 }}>
-                              {item.sym === 'CASH' ? '$' : item.sym.slice(0, 2)}
-                            </Text>
-                          </View>
-                          <Text style={{ color: onSurface, fontWeight: '600', fontSize: 14 }}>{item.sym}</Text>
-                        </View>
-                        <View style={{ alignItems: 'flex-end' }}>
-                          <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>
-                            {(item.wt * 100).toFixed(1)}%
-                          </Text>
-                          <Text style={{ color: muted, fontSize: 12 }}>
-                            {formatCurrency(item.value)}
-                          </Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              </>
-            )}
           </View>
+
+          {/* Breakdown */}
+          {portfolioCalc.totalUSD > 0 && (
+            <>
+              <View style={{ height: 1, backgroundColor: withAlpha(border, isDark ? 0.2 : 0.3) }} />
+              <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                    Holdings
+                  </Text>
+                  <Text style={{ color: text, fontSize: 20, fontWeight: '800', marginTop: spacing.s4 }}>
+                    {formatCurrency(portfolioCalc.totalUSD - portfolioCalc.cash)}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                    Cash
+                  </Text>
+                  <Text style={{ color: text, fontSize: 20, fontWeight: '800', marginTop: spacing.s4 }}>
+                    {formatCurrency(portfolioCalc.cash)}
+                  </Text>
+                </View>
+              </View>
+            </>
+          )}
         </Card>
       </Animated.View>
+
+      {/* Top Holdings */}
+      {portfolioCalc.allocations.filter(a => a.sym !== 'CASH').length > 0 && (
+        <Animated.View style={[{ gap: spacing.s12 }, fadeStyle]}>
+          <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>
+            Top Holdings
+          </Text>
+          <Card style={{ backgroundColor: cardBg, padding: spacing.s16, gap: spacing.s10 }}>
+            {portfolioCalc.allocations.filter(item => item.sym !== 'CASH').slice(0, 5).map((item, idx) => (
+              <View
+                key={idx}
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  paddingVertical: spacing.s8,
+                  borderBottomWidth: idx < Math.min(4, portfolioCalc.allocations.filter(a => a.sym !== 'CASH').length - 1) ? 1 : 0,
+                  borderBottomColor: withAlpha(border, 0.4),
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12, flex: 1 }}>
+                  <View
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 4,
+                      backgroundColor: idx === 0 ? accentPrimary : idx === 1 ? accentSecondary : successColor,
+                    }}
+                  />
+                  <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>{item.sym}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>
+                    {(item.wt * 100).toFixed(1)}%
+                  </Text>
+                  <Text style={{ color: muted, fontSize: 12, marginTop: 2 }}>
+                    {formatCurrency(item.value)}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </Card>
+        </Animated.View>
+      )}
 
       {/* Holdings List */}
       {portfolioCalc.rows.length === 0 ? (
@@ -334,12 +419,12 @@ const PortfolioList: React.FC = () => {
                         </Text>
                         {holding.change !== 0 && (
                           <Text style={{
-                            color: holding.change >= 0 ? successColor : errorColor,
+                            color: holding.change > 0 ? successColor : holding.change < 0 ? warningColor : muted,
                             fontSize: 13,
                             fontWeight: '600',
                             marginTop: 2
                           }}>
-                            {holding.change >= 0 ? '+' : ''}{formatCurrency(holding.change * holding.qty)} ({holding.changePct >= 0 ? '+' : ''}{holding.changePct.toFixed(2)}%)
+                            {holding.change > 0 ? '+' : ''}{formatCurrency(holding.change * holding.qty)} ({holding.changePct > 0 ? '+' : ''}{holding.changePct.toFixed(2)}%)
                           </Text>
                         )}
                       </View>

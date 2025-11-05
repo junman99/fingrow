@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, Pressable, Dimensions } from 'react-native';
+import { View, Text, Pressable, Dimensions, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -16,6 +16,7 @@ import { ScreenScroll } from '../components/ScreenScroll';
 import { Card } from '../components/Card';
 import Button from '../components/Button';
 import Icon from '../components/Icon';
+import BottomSheet from '../components/BottomSheet';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { useAccountsStore } from '../store/accounts';
@@ -148,9 +149,16 @@ export default function AccountDetail() {
   const dangerColor = get('semantic.danger') as string;
   const bgDefault = get('background.default') as string;
 
-  const { accounts } = useAccountsStore();
-  const { transactions } = useTxStore();
+  const { accounts, updateAccountBalance } = useAccountsStore();
+  const { transactions, add: addTx } = useTxStore();
   const acc = useMemo(() => (accounts || []).find(a => a.id === (route.params as RouteParams)?.id), [accounts, route.params]);
+
+  // Transaction form state
+  const [showTransactionSheet, setShowTransactionSheet] = useState(false);
+  const [transactionType, setTransactionType] = useState<'deposit' | 'withdraw'>('deposit');
+  const [amount, setAmount] = useState('');
+  const [transactionDate, setTransactionDate] = useState(new Date());
+  const [note, setNote] = useState('');
 
   const [chartPeriod, setChartPeriod] = useState<'week' | 'month'>('week');
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
@@ -307,6 +315,43 @@ export default function AccountDetail() {
       .slice(0, 5);
   }, [transactions, acc?.name]);
 
+  // Handle opening transaction sheet
+  const openTransactionSheet = (type: 'deposit' | 'withdraw') => {
+    setTransactionType(type);
+    setAmount('');
+    setNote('');
+    setTransactionDate(new Date());
+    setShowTransactionSheet(true);
+  };
+
+  // Handle transaction submission
+  const handleSubmitTransaction = async () => {
+    if (!acc || !amount || parseFloat(amount) <= 0) return;
+
+    const amountNum = parseFloat(amount);
+    const isDeposit = transactionType === 'deposit';
+
+    // Create transaction
+    await addTx({
+      type: isDeposit ? 'income' : 'expense',
+      amount: amountNum,
+      category: isDeposit ? 'Deposit' : 'Withdrawal',
+      account: acc.name,
+      date: transactionDate.toISOString(),
+      note: note || undefined,
+    });
+
+    // Update account balance
+    // For deposits (income), isExpense = false; for withdrawals (expense), isExpense = true
+    await updateAccountBalance(acc.name, amountNum, !isDeposit);
+
+    // Close sheet and reset
+    setShowTransactionSheet(false);
+    setAmount('');
+    setNote('');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
   if (!acc) {
     return (
       <ScreenScroll inTab contentStyle={{ padding: spacing.s16 }}>
@@ -412,11 +457,11 @@ export default function AccountDetail() {
               <Icon
                 name={stats.monthlyChange >= 0 ? 'trending-up' : 'trending-down'}
                 size={16}
-                color={stats.monthlyChange >= 0 ? successColor : errorColor}
+                color={stats.monthlyChange >= 0 ? successColor : dangerColor}
               />
               <Text
                 style={{
-                  color: stats.monthlyChange >= 0 ? successColor : errorColor,
+                  color: stats.monthlyChange >= 0 ? successColor : dangerColor,
                   fontSize: 18,
                   fontWeight: '800',
                 }}
@@ -429,7 +474,7 @@ export default function AccountDetail() {
             <Text style={{ color: muted, fontSize: 12, fontWeight: '600' }}>Change %</Text>
             <Text
               style={{
-                color: stats.monthlyChange >= 0 ? successColor : errorColor,
+                color: stats.monthlyChange >= 0 ? successColor : dangerColor,
                 fontSize: 18,
                 fontWeight: '800',
                 marginTop: spacing.s4,
@@ -439,6 +484,78 @@ export default function AccountDetail() {
             </Text>
           </View>
         </View>
+
+        {/* Action Buttons - Deposit/Withdraw or Pay Off for Credit Cards */}
+        {acc.kind === 'credit' ? (
+          <AnimatedPressable onPress={() => nav.navigate('PayCreditCard', { creditCardId: acc.id })} style={{ marginTop: spacing.s4 }}>
+            <View
+              style={{
+                backgroundColor: withAlpha(successColor, isDark ? 0.2 : 0.15),
+                borderRadius: radius.lg,
+                paddingVertical: spacing.s12,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 1,
+                borderColor: withAlpha(successColor, isDark ? 0.3 : 0.2),
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+                <Icon name="credit-card" size={18} color={successColor} />
+                <Text style={{ color: successColor, fontSize: 15, fontWeight: '700' }}>
+                  Pay Off Credit Card
+                </Text>
+              </View>
+            </View>
+          </AnimatedPressable>
+        ) : (
+          <View style={{ flexDirection: 'row', gap: spacing.s12, marginTop: spacing.s4, width: '100%' }}>
+            <View style={{ flex: 1 }}>
+              <AnimatedPressable onPress={() => openTransactionSheet('deposit')}>
+                <View
+                  style={{
+                    backgroundColor: withAlpha(successColor, isDark ? 0.2 : 0.15),
+                    borderRadius: radius.lg,
+                    paddingVertical: spacing.s12,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: spacing.s8,
+                    borderWidth: 1,
+                    borderColor: withAlpha(successColor, isDark ? 0.3 : 0.2),
+                  }}
+                >
+                  <Icon name="arrow-down-circle" size={18} color={successColor} />
+                  <Text style={{ color: successColor, fontSize: 15, fontWeight: '700' }}>
+                    Deposit
+                  </Text>
+                </View>
+              </AnimatedPressable>
+            </View>
+
+            <View style={{ flex: 1 }}>
+              <AnimatedPressable onPress={() => openTransactionSheet('withdraw')}>
+                <View
+                  style={{
+                    backgroundColor: withAlpha(dangerColor, isDark ? 0.2 : 0.15),
+                    borderRadius: radius.lg,
+                    paddingVertical: spacing.s12,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: spacing.s8,
+                    borderWidth: 1,
+                    borderColor: withAlpha(dangerColor, isDark ? 0.3 : 0.2),
+                  }}
+                >
+                  <Icon name="arrow-up-circle" size={18} color={dangerColor} />
+                  <Text style={{ color: dangerColor, fontSize: 15, fontWeight: '700' }}>
+                    Withdraw
+                  </Text>
+                </View>
+              </AnimatedPressable>
+            </View>
+          </View>
+        )}
       </View>
 
       {/* Balance Chart */}
@@ -562,6 +679,8 @@ export default function AccountDetail() {
 
           <GestureDetector
             gesture={Gesture.Pan()
+              .activeOffsetX([-10, 10])
+              .failOffsetY([-10, 10])
               .onEnd((e) => {
                 'worklet';
                 if (e.velocityX > 500) {
@@ -661,13 +780,13 @@ export default function AccountDetail() {
                 width: 32,
                 height: 32,
                 borderRadius: radius.sm,
-                backgroundColor: withAlpha(errorColor, 0.15),
+                backgroundColor: withAlpha(dangerColor, 0.15),
                 alignItems: 'center',
                 justifyContent: 'center',
                 marginBottom: spacing.s8,
               }}
             >
-              <Icon name="arrow-up" size={16} color={errorColor} />
+              <Icon name="arrow-up" size={16} color={dangerColor} />
             </View>
             <Text style={{ color: muted, fontSize: 12, fontWeight: '600' }}>Money Out</Text>
             <Text style={{ color: text, fontSize: 20, fontWeight: '800', marginTop: spacing.s4 }}>
@@ -759,6 +878,132 @@ export default function AccountDetail() {
           </Card>
         </View>
       )}
+
+      {/* Transaction Bottom Sheet */}
+      <BottomSheet
+        visible={showTransactionSheet}
+        onClose={() => setShowTransactionSheet(false)}
+      >
+        <View style={{ gap: spacing.s20, paddingBottom: spacing.s16 }}>
+          {/* Header */}
+          <View>
+            <Text style={{ color: text, fontSize: 24, fontWeight: '700' }}>
+              {transactionType === 'deposit' ? 'Deposit Money' : 'Withdraw Money'}
+            </Text>
+            <Text style={{ color: muted, marginTop: spacing.s6 }}>
+              {transactionType === 'deposit'
+                ? 'Add money to your account'
+                : 'Withdraw money from your account'}
+            </Text>
+          </View>
+
+          {/* Amount Input */}
+          <View style={{ gap: spacing.s8 }}>
+            <Text style={{ color: text, fontSize: 14, fontWeight: '600' }}>Amount</Text>
+            <View
+              style={{
+                backgroundColor: cardBg,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: outline,
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingHorizontal: spacing.s16,
+              }}
+            >
+              <Text style={{ color: muted, fontSize: 20, fontWeight: '600' }}>$</Text>
+              <TextInput
+                value={amount}
+                onChangeText={setAmount}
+                placeholder="0.00"
+                placeholderTextColor={muted}
+                keyboardType="decimal-pad"
+                autoFocus
+                style={{
+                  flex: 1,
+                  color: text,
+                  fontSize: 24,
+                  fontWeight: '700',
+                  paddingVertical: spacing.s16,
+                  paddingLeft: spacing.s8,
+                }}
+              />
+            </View>
+          </View>
+
+          {/* Date Picker */}
+          <View style={{ gap: spacing.s8 }}>
+            <Text style={{ color: text, fontSize: 14, fontWeight: '600' }}>Date</Text>
+            <Pressable
+              onPress={() => {
+                // For now, we'll use a simple date display
+                // You can add a proper date picker later
+              }}
+              style={{
+                backgroundColor: cardBg,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: outline,
+                padding: spacing.s16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.s12,
+              }}
+            >
+              <Icon name="calendar" size={20} color={accent} />
+              <Text style={{ color: text, fontSize: 16, fontWeight: '600' }}>
+                {transactionDate.toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric'
+                })}
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Note Input */}
+          <View style={{ gap: spacing.s8 }}>
+            <Text style={{ color: text, fontSize: 14, fontWeight: '600' }}>
+              Note <Text style={{ color: muted }}>(optional)</Text>
+            </Text>
+            <TextInput
+              value={note}
+              onChangeText={setNote}
+              placeholder="Add a note..."
+              placeholderTextColor={muted}
+              multiline
+              numberOfLines={3}
+              style={{
+                backgroundColor: cardBg,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: outline,
+                color: text,
+                fontSize: 15,
+                padding: spacing.s16,
+                minHeight: 80,
+                textAlignVertical: 'top',
+              }}
+            />
+          </View>
+
+          {/* Submit Button */}
+          <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
+            <Button
+              title="Cancel"
+              onPress={() => setShowTransactionSheet(false)}
+              variant="secondary"
+              style={{ flex: 1 }}
+            />
+            <Button
+              title={transactionType === 'deposit' ? 'Deposit' : 'Withdraw'}
+              onPress={handleSubmitTransaction}
+              disabled={!amount || parseFloat(amount) <= 0}
+              style={{ flex: 1 }}
+            />
+          </View>
+        </View>
+      </BottomSheet>
     </ScreenScroll>
   );
 }

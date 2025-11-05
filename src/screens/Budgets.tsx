@@ -1,11 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { View, Text, Switch, Alert, Share, Pressable, ScrollView, Animated, Modal, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, Switch, Alert, Share, Pressable, ScrollView, Animated as RNAnimated, Modal, TouchableWithoutFeedback } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { useAnimatedStyle, useSharedValue, useAnimatedScrollHandler, interpolate, Extrapolate } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenScroll } from '../components/ScreenScroll';
-import { detectRecurring, forecastUpcoming } from '../lib/recurrence';
 import { useEnvelopesStore } from '../store/envelopes';
 import { useRecurringStore, computeNextDue } from '../store/recurring';
 import { ensureWeeklyDigest, maybeFirePaceAlert, maybeFireThresholdAlerts, toggleWeeklyDigest } from '../lib/budgetAlerts';
@@ -56,14 +57,21 @@ function withAlpha(hex: string, alpha: number) {
 export const Budgets: React.FC = () => {
   const { get, isDark } = useThemeTokens();
   const nav = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const { monthlyBudget, setMonthlyBudget, warnThreshold, setWarnThreshold, hydrate, ready } = useBudgetsStore();
   const { overrides, hydrate: hydrateEnv, ready: readyEnv } = useEnvelopesStore();
   useEffect(()=>{ if(!readyEnv) hydrateEnv(); }, [readyEnv]);
 
+  // Main Tab Title Animation
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+
   // Fade animation
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new RNAnimated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(fadeAnim, {
+    RNAnimated.timing(fadeAnim, {
       toValue: 1,
       duration: 400,
       useNativeDriver: true,
@@ -72,13 +80,13 @@ export const Budgets: React.FC = () => {
 
   // Tip tooltip state
   const [showTip, setShowTip] = useState(false);
-  const tipOpacity = useRef(new Animated.Value(0)).current;
+  const tipOpacity = useRef(new RNAnimated.Value(0)).current;
   const tipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const toggleTip = () => {
     if (showTip) {
       // Hide immediately
-      Animated.timing(tipOpacity, {
+      RNAnimated.timing(tipOpacity, {
         toValue: 0,
         duration: 200,
         useNativeDriver: true,
@@ -87,13 +95,13 @@ export const Budgets: React.FC = () => {
     } else {
       // Show and auto-hide after 5 seconds
       setShowTip(true);
-      Animated.timing(tipOpacity, {
+      RNAnimated.timing(tipOpacity, {
         toValue: 1,
         duration: 300,
         useNativeDriver: true,
       }).start();
       tipTimeoutRef.current = setTimeout(() => {
-        Animated.timing(tipOpacity, {
+        RNAnimated.timing(tipOpacity, {
           toValue: 0,
           duration: 200,
           useNativeDriver: true,
@@ -175,18 +183,15 @@ export const Budgets: React.FC = () => {
   const projected = spent + avgDaily*daysLeft;
   const projectedOver = budget>0 ? (projected - budget) : 0;
   let overrunEta: Date | null = null;
-  // Upcoming bills hold (detect recurring from last 6+ months data)
+  // Get all transactions for chart and analysis
   const allTx = require('../store/transactions').useTxStore.getState().transactions || [];
-  const recSeries = detectRecurring(allTx, today);
 
-  // Prefer explicit templates (user-managed bills); fall back to detection if none
+  // Upcoming bills hold (explicit bills only from recurring store)
   const { items: tmpl } = require('../store/recurring').useRecurringStore.getState();
-  const tmplItems = (tmpl || []).map((t:any)=>{
+  const holdItems = (tmpl || []).map((t:any)=>{
     const next = computeNextDue(t, today);
     return next && next <= period.end ? { key: t.id, label: t.label || t.category, category: t.category, amount: t.amount, due: next } : null;
   }).filter(Boolean) as any[];
-  const useTemplates = tmplItems.length > 0;
-  const holdItems = useTemplates ? tmplItems : forecastUpcoming(recSeries, today, period.end, today);
 
   const holdAmount = holdItems.reduce((s,it)=> s + (Number(it.amount)||0), 0);
 
@@ -262,6 +267,51 @@ export const Budgets: React.FC = () => {
   const warningColor = get('semantic.warning') as string;
   const dangerColor = get('semantic.danger') as string;
   const successColor = get('semantic.success') as string;
+  const bgDefault = get('background.default') as string;
+
+  // Main Tab Title Animation - Animated Styles
+  const originalTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+    return {
+      opacity: 1 - progress,
+    };
+  });
+
+  const floatingTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+    const fontSize = interpolate(progress, [0, 1], [28, 20]);
+    const fontWeight = interpolate(progress, [0, 1], [800, 700]);
+    return {
+      fontSize,
+      fontWeight: fontWeight.toString() as any,
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
 
   const heroGradient: [string, string] = isDark ? ['#0b1026', '#1a163a'] : [accentPrimary, accentSecondary];
   const heroText = isDark ? textPrimary : textOnPrimary;
@@ -353,9 +403,16 @@ export const Budgets: React.FC = () => {
         value: biggestTx ? fmtMoney(Number(biggestTx.amount)) : '$0',
         caption: biggestTx ? `${biggestTx.category || 'Uncategorized'}` : 'No expenses yet',
         accent: withAlpha(dangerColor, isDark ? 0.2 : 0.14)
+      },
+      {
+        key: 'safe-after-holds',
+        label: 'Safe after holds',
+        value: remainingAfterHoldsLabel,
+        caption: daysLeft > 0 ? `${fmtMoney(safePerDayAdj)}/day for ${daysLeft}d` : periodRangeLabel,
+        accent: withAlpha(successColor, isDark ? 0.2 : 0.14)
       }
     ];
-  }, [budget, cats, isDark, spent, successColor, warningColor, accentPrimary, dangerColor, transactions, period]);
+  }, [budget, cats, isDark, spent, successColor, warningColor, accentPrimary, dangerColor, transactions, period, remainingAfterHoldsLabel, safePerDayAdj, daysLeft, periodRangeLabel]);
 
   const nudges = useMemo(() => {
     const items: string[] = [];
@@ -393,8 +450,64 @@ export const Budgets: React.FC = () => {
   };
 
   return (
-    <ScreenScroll inTab contentStyle={{ paddingBottom: spacing.s24 }}>
-      <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
+    <>
+      {/* Main Tab Title Animation - Floating Gradient Header (Fixed at top, outside scroll) */}
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            pointerEvents: 'none',
+          },
+          gradientAnimatedStyle,
+        ]}
+      >
+        <LinearGradient
+          colors={[
+            bgDefault,
+            bgDefault,
+            withAlpha(bgDefault, 0.95),
+            withAlpha(bgDefault, 0.8),
+            withAlpha(bgDefault, 0.5),
+            withAlpha(bgDefault, 0)
+          ]}
+          style={{
+            paddingTop: insets.top + spacing.s16,
+            paddingBottom: spacing.s32 + spacing.s20,
+            paddingHorizontal: spacing.s16,
+          }}
+        >
+          <Animated.Text
+            style={[
+              {
+                color: textPrimary,
+                fontSize: 20,
+                fontWeight: '700',
+                letterSpacing: -0.5,
+                textAlign: 'center',
+              },
+              floatingTitleAnimatedStyle,
+            ]}
+          >
+            Budgets
+          </Animated.Text>
+        </LinearGradient>
+      </Animated.View>
+
+      <ScreenScroll
+        inTab
+        fullScreen
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        contentStyle={{
+          paddingTop: insets.top + spacing.s16,
+          paddingBottom: spacing.s24
+        }}
+      >
+        <RNAnimated.View style={{ opacity: fadeAnim, flex: 1 }}>
         <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s16 }}>
           {/* Header with back button */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12, marginBottom: spacing.s8 }}>
@@ -412,7 +525,7 @@ export const Budgets: React.FC = () => {
               <Icon name="chevron-left" size={28} color={textPrimary} />
             </Pressable>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 }}>Budget</Text>
+              <Animated.Text style={[{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 }, originalTitleAnimatedStyle]}>Budgets</Animated.Text>
             </View>
 
             <Pressable
@@ -611,19 +724,6 @@ export const Budgets: React.FC = () => {
             </View>
           )}
 
-          {/* Additional Info */}
-          <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-            <View style={{ flex: 1, padding: spacing.s12, borderRadius: radius.lg, backgroundColor: surface1, borderWidth: 1, borderColor: borderSubtle }}>
-              <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>Held for bills</Text>
-              <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 18 }}>{fmtMoney(holdAmount)}</Text>
-              <Text style={{ color: textMuted, fontSize: 11, marginTop: spacing.s2 }}>{holdSummaryLabel}</Text>
-            </View>
-            <View style={{ flex: 1, padding: spacing.s12, borderRadius: radius.lg, backgroundColor: surface1, borderWidth: 1, borderColor: borderSubtle }}>
-              <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>Safe after holds</Text>
-              <Text style={{ color: successColor, fontWeight: '800', fontSize: 18 }}>{remainingAfterHoldsLabel}</Text>
-              <Text style={{ color: textMuted, fontSize: 11, marginTop: spacing.s2 }}>{periodRangeLabel}</Text>
-            </View>
-          </View>
         </View>
 
         {/* Quick Access Cards */}
@@ -811,7 +911,7 @@ export const Budgets: React.FC = () => {
         </View>
 
         </View>
-      </Animated.View>
+      </RNAnimated.View>
 
       {/* Month Picker Modal */}
       <Modal visible={monthPickerOpen} transparent animationType="fade" onRequestClose={() => setMonthPickerOpen(false)}>
@@ -889,6 +989,7 @@ export const Budgets: React.FC = () => {
         </TouchableWithoutFeedback>
       </Modal>
     </ScreenScroll>
+    </>
   );
 };
 

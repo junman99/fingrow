@@ -471,8 +471,11 @@ const PortfolioListCard = React.memo(({ selectionMode, selectedIds, onToggleSele
             >
                   {/* Header Row */}
                   <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                    <View style={{ flex: 1 }}>
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
                       <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }} numberOfLines={1}>{p.name}</Text>
+                      {(p.trackingEnabled === false) && (
+                        <Icon name="eye-off" size={16} color={textMuted} />
+                      )}
                     </View>
                     {annotation || (
                       <View style={{ alignItems: 'flex-end', gap: spacing.s2 }}>

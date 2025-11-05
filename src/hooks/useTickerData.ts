@@ -1,10 +1,11 @@
 import { useQuery, useQueries, UseQueryResult } from '@tanstack/react-query';
 import { fetchDailyHistoryYahoo, fetchYahooFundamentals } from '../lib/yahoo';
 import { fetchDailyHistoryFMP, fetchFMPFundamentals, fetchFMPBatchQuotes } from '../lib/fmp';
+import { fetchFinnhubCandles, fetchFinnhubProfile } from '../lib/finnhub';
 import { isCryptoSymbol, fetchCrypto, baseCryptoSymbol, fetchCryptoOhlc } from '../lib/coingecko';
 import type { Quote } from '../store/invest';
 
-type DataSource = 'yahoo' | 'fmp';
+type DataSource = 'yahoo' | 'fmp' | 'finnhub';
 
 interface TickerDataOptions {
   symbol: string;
@@ -20,7 +21,7 @@ interface TickerDataOptions {
  * - Background refetch on app reconnect
  * - Deduplication of requests
  * - Automatic retry on failure
- * - Reduced API calls to FMP/Yahoo
+ * - Reduced API calls to FMP/Yahoo/Finnhub
  */
 export function useTickerData({ symbol, dataSource = 'yahoo', enabled = true }: TickerDataOptions): UseQueryResult<Quote, Error> {
   const isCrypto = isCryptoSymbol(symbol);
@@ -54,11 +55,46 @@ export function useTickerData({ symbol, dataSource = 'yahoo', enabled = true }: 
         };
       }
 
-      // Equity symbols use FMP or Yahoo based on dataSource
+      // Equity symbols use FMP, Yahoo, or Finnhub based on dataSource
       if (dataSource === 'fmp') {
         const [rawBars, fundamentals] = await Promise.all([
           fetchDailyHistoryFMP(symbol, '5y'),
           fetchFMPFundamentals(symbol).catch(() => null),
+        ]);
+
+        if (!rawBars || rawBars.length === 0) {
+          throw new Error(`No data found for ${symbol}`);
+        }
+
+        const last = rawBars.length ? rawBars[rawBars.length - 1].close : 0;
+        const prev = rawBars.length > 1 ? rawBars[rawBars.length - 2].close : last;
+        const change = last - prev;
+        const changePct = prev ? ((change / prev) * 100) : 0;
+        const line = rawBars.map(b => ({ t: b.date, v: Number(b.close.toFixed(2)) }));
+        const cbars = rawBars.map(b => ({
+          t: b.date,
+          o: b.open,
+          h: b.high,
+          l: b.low,
+          c: b.close,
+          v: b.volume
+        }));
+
+        return {
+          symbol,
+          last,
+          change,
+          changePct,
+          ts: Date.now(),
+          line,
+          bars: cbars,
+          fundamentals: fundamentals || undefined
+        };
+      } else if (dataSource === 'finnhub') {
+        // Finnhub
+        const [rawBars, fundamentals] = await Promise.all([
+          fetchFinnhubCandles(symbol, '5y'),
+          fetchFinnhubProfile(symbol).catch(() => null),
         ]);
 
         if (!rawBars || rawBars.length === 0) {
@@ -204,6 +240,40 @@ export function useMultipleTickerData(symbols: string[], dataSource: DataSource 
             bars: cbars,
             fundamentals: fundamentals || undefined
           };
+        } else if (dataSource === 'finnhub') {
+          const [rawBars, fundamentals] = await Promise.all([
+            fetchFinnhubCandles(symbol, '5y'),
+            fetchFinnhubProfile(symbol).catch(() => null),
+          ]);
+
+          if (!rawBars || rawBars.length === 0) {
+            throw new Error(`No data found for ${symbol}`);
+          }
+
+          const last = rawBars.length ? rawBars[rawBars.length - 1].close : 0;
+          const prev = rawBars.length > 1 ? rawBars[rawBars.length - 2].close : last;
+          const change = last - prev;
+          const changePct = prev ? ((change / prev) * 100) : 0;
+          const line = rawBars.map(b => ({ t: b.date, v: Number(b.close.toFixed(2)) }));
+          const cbars = rawBars.map(b => ({
+            t: b.date,
+            o: b.open,
+            h: b.high,
+            l: b.low,
+            c: b.close,
+            v: b.volume
+          }));
+
+          return {
+            symbol,
+            last,
+            change,
+            changePct,
+            ts: Date.now(),
+            line,
+            bars: cbars,
+            fundamentals: fundamentals || undefined
+          };
         } else {
           const [rawBars, fundamentals] = await Promise.all([
             fetchDailyHistoryYahoo(symbol, '5y'),
@@ -263,6 +333,8 @@ export function useHistoricalData(symbol: string, range: '1y' | '5y' = '5y', dat
         return await fetchCrypto(base || symbol, days);
       } else if (dataSource === 'fmp') {
         return await fetchDailyHistoryFMP(symbol, range);
+      } else if (dataSource === 'finnhub') {
+        return await fetchFinnhubCandles(symbol, range);
       } else {
         return await fetchDailyHistoryYahoo(symbol, range);
       }

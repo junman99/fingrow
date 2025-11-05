@@ -1,6 +1,7 @@
 import { ScrollContext } from './ScrollContext';
 import React, { useState, useCallback, useMemo } from 'react';
 import { Platform, KeyboardAvoidingView, View, ScrollView, RefreshControl } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeTokens } from '../theme/ThemeProvider';
 
@@ -34,21 +35,32 @@ type ScrollProps = {
   inTab?: boolean;
   refreshing?: boolean;
   onRefresh?: () => void;
+  /** Set true to disable top safe area and allow full screen */
+  fullScreen?: boolean;
 };
 
-export const ScreenScroll: React.FC<ScrollProps> = ({  children, style, contentStyle, allowBounce = true, stickyHeaderIndices, onScroll, scrollEventThrottle = 16, inTab, refreshing, onRefresh  }) => {
+export const ScreenScroll: React.FC<ScrollProps> = ({  children, style, contentStyle, allowBounce = true, stickyHeaderIndices, onScroll, scrollEventThrottle = 16, inTab, refreshing, onRefresh, fullScreen  }) => {
   const { get } = useThemeTokens();
   const insets = useSafeAreaInsets();
   const tabBarHeight = 0; // Bottom tab bar height (if needed, import from @react-navigation/bottom-tabs)
   const bottomPad = inTab ? 0 : Math.max(insets.bottom, 16);
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
+  // Determine if we should use Animated.ScrollView (for animated scroll handlers)
+  const isAnimatedScroll = onScroll && typeof onScroll === 'object';
+  const ScrollComponent = isAnimatedScroll ? Animated.ScrollView : ScrollView;
+
+  // Determine safe area edges based on fullScreen and inTab
+  const safeAreaEdges = fullScreen
+    ? (inTab ? ['left', 'right'] : ['left', 'right', 'bottom'])
+    : (inTab ? ['top', 'left', 'right'] : ['top', 'left', 'right', 'bottom']);
+
   return (
     <ScrollContext.Provider value={{ setScrollEnabled }}>
-    <SafeAreaView edges={inTab ? ['top','left','right'] : ['top','left','right','bottom']} style={{ flex: 1, backgroundColor: get('background.default') as string }}>
+    <SafeAreaView edges={safeAreaEdges as any} style={{ flex: 1, backgroundColor: get('background.default') as string }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <View style={[{ flex: 1 }, style]}>
-          <ScrollView directionalLockEnabled scrollEnabled={scrollEnabled}
+          <ScrollComponent directionalLockEnabled scrollEnabled={scrollEnabled}
             overScrollMode="always"
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
@@ -62,7 +74,7 @@ export const ScreenScroll: React.FC<ScrollProps> = ({  children, style, contentS
             scrollEventThrottle={scrollEventThrottle}
           >
             {children}
-          </ScrollView>
+          </ScrollComponent>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

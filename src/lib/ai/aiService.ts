@@ -24,6 +24,7 @@ import {
 } from './conversationManager';
 import { AI_CONFIG, IntentType } from '../../config/ai';
 import { useProfileStore } from '../../store/profile';
+import { useAccountsStore } from '../../store/accounts';
 
 export type AIMessage = {
   id: string;
@@ -70,26 +71,55 @@ export async function processQuery(
 
     console.log('[AI Service] Using AI extraction for transaction...');
 
-    // Always use Claude to extract transaction details for better accuracy
-    const extractionPrompt = `Extract transaction details from this query: "${query}"
+    // Get user's accounts for matching (include ALL accounts - cash, credit, investment, etc.)
+    const { accounts } = useAccountsStore.getState();
+    const accountNames = accounts?.map(acc => `${acc.name} (${acc.kind})`) || [];
 
-Return ONLY a JSON object with these fields:
+    // Get current time for context
+    const now = new Date();
+    const currentHour = now.getHours();
+
+    // Always use Claude to extract transaction details for better accuracy
+    const extractionPrompt = `You are a transaction data extraction assistant. Extract transaction details from the user's natural language query.
+
+Query: "${query}"
+
+Context:
+- Current time: ${now.toLocaleString()}
+- Current hour: ${currentHour}
+- Available accounts: ${accountNames.join(', ')}
+
+Instructions:
+1. Extract the AMOUNT the user spent (required, must be a number)
+2. Extract the MERCHANT or item description (what they bought, e.g., "Shopee", "McDonald's", "Pizza" - NOT the account name)
+3. Extract the CATEGORY from this list: Food, Groceries, Transport, Fuel, Shopping, Entertainment, Bills, Utilities, Health, Fitness, Home, Education, Pets, Travel, Subscriptions, Gifts
+4. Extract the TIME if mentioned (convert phrases like "afternoon" to 15:00, "lunch time" to 12:30, "morning" to 09:00, "just now" to ${currentHour}:00)
+5. Extract the ACCOUNT name if mentioned (match against available accounts above, return ONLY the account name without the type in parentheses)
+
+CRITICAL: If user says "Trust account" or "Trust card" and you see "Trust (credit)" in the available accounts, return "Trust" as the account, NOT "Trust (credit)".
+CRITICAL: The merchant field should be what they bought (e.g., "Pizza", "Uber ride"), NOT the payment method or account.
+
+Return ONLY valid JSON (no markdown, no code blocks, no explanations):
 {
   "amount": number (required),
-  "merchant": string (description/merchant name, extract the actual item/merchant, NOT words like "today" or "just now"),
-  "category": string (one of: Food, Groceries, Transport, Fuel, Shopping, Entertainment, Bills, Utilities, Health, Fitness, Home, Education, Pets, Travel, Subscriptions, Gifts),
-  "date": string ("today", "yesterday", or ISO date)
+  "merchant": string (what they bought),
+  "category": string (from list above),
+  "time": string (HH:MM format in 24hr),
+  "account": string or null (just the account name, or null)
 }
 
 Examples:
-Query: "I spent 5.7 for pizza just now"
-{"amount": 5.7, "merchant": "Pizza", "category": "Food", "date": "today"}
+Query: "I bought Shopee for 5 dollars this afternoon"
+{"amount": 5, "merchant": "Shopee", "category": "Shopping", "time": "15:00", "account": null}
 
-Query: "Uber ride cost me $15 yesterday"
-{"amount": 15, "merchant": "Uber", "category": "Transport", "date": "yesterday"}
+Query: "Had lunch at McDonald's for $12 using my Trust account"
+{"amount": 12, "merchant": "McDonald's", "category": "Food", "time": "12:30", "account": "Trust"}
 
-Query: "I bought shoes for 119 today"
-{"amount": 119, "merchant": "Shoes", "category": "Shopping", "date": "today"}`;
+Query: "Uber ride cost me $15 yesterday morning"
+{"amount": 15, "merchant": "Uber", "category": "Transport", "time": "09:00", "account": null}
+
+Query: "Spent $50 on groceries just now"
+{"amount": 50, "merchant": "Groceries", "category": "Groceries", "time": "${currentHour}:00", "account": null}`;
 
     const aiResult = await callClaude(
       [{ role: 'user', content: extractionPrompt }],
@@ -100,25 +130,80 @@ Query: "I bought shoes for 119 today"
       amount: 0,
       merchant: 'Transaction',
       category: 'Shopping',
-      date: 'today'
+      date: now.toISOString(),
+      account: null
     };
 
     if (!('error' in aiResult)) {
       try {
-        // Parse AI response
-        const jsonMatch = aiResult.content.match(/\{[\s\S]*\}/);
+        console.log('[AI Service] Raw AI response:', aiResult.content);
+
+        // Parse AI response - handle both raw JSON and JSON in markdown blocks
+        let jsonText = aiResult.content.trim();
+
+        // Remove markdown code blocks if present
+        if (jsonText.startsWith('```')) {
+          jsonText = jsonText.replace(/```(?:json)?\n?/g, '');
+        }
+
+        // Extract JSON object
+        const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
+          console.log('[AI Service] Parsed JSON:', parsed);
+
+          // Parse time and combine with date
+          let transactionDate = new Date();
+          if (parsed.time) {
+            const [hours, minutes] = parsed.time.split(':').map(Number);
+            if (!isNaN(hours) && !isNaN(minutes)) {
+              transactionDate.setHours(hours, minutes, 0, 0);
+            }
+          }
+
+          // Validate account name - be VERY flexible with matching
+          let accountName = parsed.account;
+          if (accountName && typeof accountName === 'string') {
+            // Clean up account name (remove quotes, trim whitespace, remove "card", "account")
+            accountName = accountName
+              .trim()
+              .replace(/['"]/g, '')
+              .replace(/\s+(card|account)$/i, '') // Remove trailing "card" or "account"
+              .trim();
+
+            console.log('[AI Service] Account matching - cleaned input:', accountName);
+
+            // Try exact match first
+            let matchedAccount = accounts?.find(acc =>
+              acc.name.toLowerCase() === accountName.toLowerCase()
+            );
+
+            // If no exact match, try partial match
+            if (!matchedAccount) {
+              matchedAccount = accounts?.find(acc =>
+                acc.name.toLowerCase().includes(accountName.toLowerCase()) ||
+                accountName.toLowerCase().includes(acc.name.toLowerCase())
+              );
+            }
+
+            accountName = matchedAccount ? matchedAccount.name : null;
+            console.log('[AI Service] Account matching - input:', parsed.account, 'cleaned:', accountName, 'matched:', matchedAccount?.name);
+          }
+
           extractedData = {
-            amount: parsed.amount,
+            amount: parsed.amount || 0,
             merchant: parsed.merchant || 'Transaction',
             category: parsed.category || 'Shopping',
-            date: parsed.date || 'today'
+            date: transactionDate.toISOString(),
+            account: accountName
           };
           console.log('[AI Service] AI extraction successful:', extractedData);
+        } else {
+          console.error('[AI Service] No JSON found in response:', aiResult.content);
         }
       } catch (error) {
         console.error('[AI Service] Failed to parse AI extraction:', error);
+        console.error('[AI Service] Raw response was:', aiResult.content);
         // Use fallback data
       }
     } else {
@@ -126,8 +211,18 @@ Query: "I bought shoes for 119 today"
       // Use fallback data
     }
 
+    // Build confirmation message
+    let confirmationText = `I'll help you log that transaction. Please review the details and confirm.`;
+    if (extractedData.account) {
+      const matchedAccount = accounts?.find(acc => acc.name === extractedData.account);
+      if (matchedAccount) {
+        const accountType = matchedAccount.kind === 'credit' ? 'credit card' : matchedAccount.kind + ' account';
+        confirmationText = `Found your ${extractedData.account} (${accountType})! Please review the details and confirm.`;
+      }
+    }
+
     const confirmationMsg = conversationManager.addAssistantMessage(
-      `I'll help you log that transaction. Please review the details and confirm.`,
+      confirmationText,
       { intent }
     );
 
@@ -327,8 +422,8 @@ function aggregateDataForIntent(intent: Intent): AggregatedData | null {
       return getNetWorthData(intent.params?.period);
 
     case IntentType.SIMPLE_QUERY:
-      if (intent.directResponse === 'balance') {
-        // Get total cash balance
+      // Check if it's a balance/cash query
+      if (intent.params?.queryType === 'balance' || intent.directResponse === 'balance') {
         return getNetWorthData();
       }
       if (intent.directResponse === 'net_worth') {

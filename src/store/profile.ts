@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FMP_API_KEY } from '../config/secrets';
+import type { CountryCode } from '../lib/countryConfig';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
@@ -12,6 +13,7 @@ export type Profile = {
   handle?: string;
   email: string;
   avatarUri?: string;
+  country?: CountryCode; // User's country for region-specific features
   currency: string;
   investCurrency?: string; // Separate currency for investment portfolios
   budgetCycleDay: number;
@@ -27,8 +29,10 @@ export type Profile = {
   analyticsOptIn: boolean;
   tier: 'Starter' | 'Plus';
   aiTier: AITier; // AI Assistant tier
-  dataSource?: 'yahoo' | 'fmp';
+  dataSource?: 'yahoo' | 'fmp' | 'finnhub';
   fmpApiKey?: string;
+  finnhubApiKey?: string;
+  includeRetirementInInvestments?: boolean; // Toggle to include retirement accounts in investment totals
   createdAt: string;
   updatedAt: string;
 };
@@ -56,6 +60,7 @@ const defaultProfile: Profile = {
   aiTier: 'free', // Default AI tier
   dataSource: 'fmp',
   fmpApiKey: FMP_API_KEY,
+  includeRetirementInInvestments: true, // Default to including retirement accounts
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };

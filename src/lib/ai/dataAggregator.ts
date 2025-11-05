@@ -9,6 +9,8 @@ import { useAccountsStore } from '../../store/accounts';
 import { useInvestStore } from '../../store/invest';
 import { useBudgetsStore } from '../../store/budgets';
 import { useDebtsStore } from '../../store/debts';
+import { useProfileStore } from '../../store/profile';
+import { convertCurrency, type FxRates } from '../fx';
 
 export type AggregatedData = {
   summary: string; // Human-readable summary for AI
@@ -86,17 +88,26 @@ export function getSpendingData(category?: string, period?: string): AggregatedD
 }
 
 /**
- * Get portfolio data
+ * Get portfolio data - calculates total across ALL portfolios with currency conversion
  */
 export function getPortfolioData(symbol?: string): AggregatedData {
-  const { holdings, quotes, activePortfolio } = useInvestStore.getState();
-  const { accounts } = useAccountsStore.getState();
+  const { portfolios, quotes, fxRates } = useInvestStore.getState();
+  const { profile } = useProfileStore.getState();
+  const investCurrency = String(profile.investCurrency || 'SGD').toUpperCase();
 
-  const portfolio = activePortfolio?.();
+  console.log('[DataAggregator] Total portfolios:', Object.keys(portfolios || {}).length);
+  console.log('[DataAggregator] Portfolios:', JSON.stringify(Object.entries(portfolios || {}).map(([id, p]: [string, any]) => ({
+    id,
+    name: p.name,
+    trackingEnabled: p.trackingEnabled,
+    baseCurrency: p.baseCurrency,
+    cash: p.cash,
+    holdingsCount: Object.keys(p.holdings || {}).length
+  })), null, 2));
 
-  if (!portfolio) {
+  if (!portfolios || Object.keys(portfolios).length === 0) {
     return {
-      summary: "User has no active portfolio",
+      summary: "User has no portfolios",
       metadata: { totalValue: 0, positions: [] }
     };
   }
@@ -108,78 +119,164 @@ export function getPortfolioData(symbol?: string): AggregatedData {
     costBasis: number;
     gainLoss: number;
     gainLossPercent: number;
+    portfolioName: string;
+  }> = [];
+
+  const portfolioBreakdown: Array<{
+    name: string;
+    value: number;
+    cash: number;
+    gainLoss: number;
+    holdings: Array<{ symbol: string; shares: number; value: number }>;
   }> = [];
 
   let totalValue = 0;
   let totalCost = 0;
+  let totalCash = 0;
 
-  // Calculate positions
-  Object.entries(holdings || {}).forEach(([sym, holding]) => {
-    if (symbol && sym !== symbol.toUpperCase()) return;
+  // Calculate total value by summing ALL portfolios (each converted to investment currency)
+  Object.values(portfolios || {}).forEach((p: any) => {
+    // Skip portfolios with tracking disabled or corrupted data
+    if (!p || (p.trackingEnabled === false) || !p.name || !p.baseCurrency) {
+      console.log('[DataAggregator] Skipping portfolio:', p?.name, 'trackingEnabled:', p?.trackingEnabled, 'corrupted:', !p?.name || !p?.baseCurrency);
+      return;
+    }
 
-    const lots = holding.lots || [];
-    const shares = lots.reduce((sum, lot) => {
-      return sum + (lot.side === 'buy' ? lot.qty : -lot.qty);
-    }, 0);
+    console.log('[DataAggregator] Processing portfolio:', p.name, 'baseCurrency:', p.baseCurrency, 'cash:', p.cash);
 
-    if (shares === 0) return;
+    // Calculate holdings value for this portfolio (converted to investment currency)
+    let portfolioHoldingsValue = 0;
+    let portfolioHoldingsCost = 0;
+    const portfolioHoldings: Array<{ symbol: string; shares: number; value: number }> = [];
 
-    const currentPrice = quotes[sym]?.last || 0;
-    const value = shares * currentPrice;
-    const costBasis = lots
-      .filter(lot => lot.side === 'buy')
-      .reduce((sum, lot) => sum + (lot.qty * lot.price), 0);
+    console.log('[DataAggregator] Portfolio holdings:', Object.keys(p.holdings || {}).length, 'symbols:', Object.keys(p.holdings || {}));
 
-    const gainLoss = value - costBasis;
-    const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
+    Object.entries(p.holdings || {}).forEach(([sym, h]: [string, any]) => {
+      if (symbol && sym !== symbol.toUpperCase()) return;
 
-    positions.push({
-      symbol: sym,
-      shares,
-      value,
-      costBasis,
-      gainLoss,
-      gainLossPercent
+      const lots = h?.lots || [];
+      console.log('[DataAggregator] Processing holding:', sym, 'lots:', lots.length);
+      const qty = lots.reduce((s: number, l: any) => s + (l.side === 'buy' ? l.qty : -l.qty), 0);
+      console.log('[DataAggregator]', sym, 'total qty:', qty);
+      if (qty <= 0) {
+        console.log('[DataAggregator] Skipping', sym, '- zero or negative quantity');
+        return;
+      }
+
+      const q = quotes[sym];
+      const lastNative = Number(q?.last || 0);
+
+      // Skip if quote is missing or 0 (stale/failed quote)
+      if (!lastNative || lastNative <= 0) {
+        console.log('[DataAggregator] Skipping', sym, '- no valid quote (last:', lastNative, ')');
+        return;
+      }
+
+      // Get ticker currency
+      let tickerCurrency = h.currency;
+      if (!tickerCurrency) {
+        const s = sym.toUpperCase();
+        if (s.includes('-USD') || s.includes('USD')) tickerCurrency = 'USD';
+        else if (s.endsWith('.L')) tickerCurrency = 'GBP';
+        else if (s.endsWith('.T')) tickerCurrency = 'JPY';
+        else if (s.endsWith('.TO')) tickerCurrency = 'CAD';
+        else if (s.endsWith('.AX')) tickerCurrency = 'AUD';
+        else if (s.endsWith('.HK')) tickerCurrency = 'HKD';
+        else if (s.endsWith('.PA') || s.endsWith('.DE')) tickerCurrency = 'EUR';
+        else if (s.endsWith('.SW')) tickerCurrency = 'CHF';
+        else tickerCurrency = 'USD';
+      }
+      tickerCurrency = String(tickerCurrency).toUpperCase();
+
+      // Convert ticker price to investment currency
+      const last = convertCurrency(fxRates, lastNative, tickerCurrency, investCurrency);
+      const value = qty * last;
+
+      // Calculate cost basis (also convert to investment currency)
+      const costBasis = lots
+        .filter((lot: any) => lot.side === 'buy')
+        .reduce((sum: number, lot: any) => {
+          const lotCost = lot.qty * lot.price;
+          return sum + convertCurrency(fxRates, lotCost, tickerCurrency, investCurrency);
+        }, 0);
+
+      portfolioHoldingsValue += value;
+      portfolioHoldingsCost += costBasis;
+
+      // Add to portfolio holdings for breakdown
+      portfolioHoldings.push({ symbol: sym, shares: qty, value });
+
+      // Add to positions array for summary
+      const gainLoss = value - costBasis;
+      const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
+
+      console.log('[DataAggregator]', sym, 'value:', value, 'costBasis:', costBasis, 'gainLoss:', gainLoss, 'qty:', qty, 'last:', last);
+
+      positions.push({
+        symbol: sym,
+        shares: qty,
+        value,
+        costBasis,
+        gainLoss,
+        gainLossPercent,
+        portfolioName: p.name
+      });
     });
 
-    totalValue += value;
-    totalCost += costBasis;
+    // Convert cash from portfolio currency to investment currency
+    const portfolioBaseCurrency = String(p.baseCurrency || 'USD').toUpperCase();
+    const cash = Number(p.cash || 0);
+    const portfolioCashValue = convertCurrency(fxRates, cash, portfolioBaseCurrency, investCurrency);
+
+    // Add portfolio breakdown
+    const portfolioGainLoss = portfolioHoldingsValue - portfolioHoldingsCost;
+    portfolioBreakdown.push({
+      name: p.name,
+      value: portfolioHoldingsValue + portfolioCashValue,
+      cash: portfolioCashValue,
+      gainLoss: portfolioGainLoss,
+      holdings: portfolioHoldings
+    });
+
+    totalValue += portfolioHoldingsValue + portfolioCashValue;
+    totalCost += portfolioHoldingsCost;
+    totalCash += portfolioCashValue;
   });
 
-  // Add cash
-  const cash = typeof portfolio.cash === 'number' ? portfolio.cash : 0;
-
-  // Add investment account balances
-  const investmentAccounts = accounts.filter(
-    acc => (acc.kind === 'investment' || acc.kind === 'retirement') && acc.includeInNetWorth !== false
-  );
-  const investmentAccountBalance = investmentAccounts.reduce((sum, acc) => sum + (acc.balance || 0), 0);
-
-  totalValue += cash + investmentAccountBalance;
-
-  const totalGainLoss = totalValue - totalCost - cash - investmentAccountBalance;
+  const totalGainLoss = totalValue - totalCost - totalCash;
   const totalGainLossPercent = totalCost > 0 ? (totalGainLoss / totalCost) * 100 : 0;
 
-  // Build summary
-  let summary = `User's portfolio value is $${totalValue.toFixed(2)}`;
+  console.log('[DataAggregator] FINAL TOTALS:', {
+    totalValue,
+    totalCost,
+    totalCash,
+    totalGainLoss,
+    totalGainLossPercent,
+    positionsCount: positions.length,
+    calculation: `${totalValue} - ${totalCost} - ${totalCash} = ${totalGainLoss}`
+  });
 
-  if (symbol && positions.length > 0) {
-    const pos = positions[0];
-    summary = `User holds ${pos.shares} shares of ${pos.symbol} worth $${pos.value.toFixed(2)}. `;
-    summary += `Cost basis: $${pos.costBasis.toFixed(2)}. `;
-    summary += pos.gainLoss >= 0
-      ? `Gain: $${pos.gainLoss.toFixed(2)} (+${pos.gainLossPercent.toFixed(1)}%)`
-      : `Loss: $${Math.abs(pos.gainLoss).toFixed(2)} (${pos.gainLossPercent.toFixed(1)}%)`;
-  } else if (positions.length > 0) {
-    summary += `. Total ${totalGainLoss >= 0 ? 'gain' : 'loss'}: $${Math.abs(totalGainLoss).toFixed(2)} `;
-    summary += `(${totalGainLoss >= 0 ? '+' : ''}${totalGainLossPercent.toFixed(1)}%). `;
-    summary += `Top holdings: `;
-    summary += positions
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 3)
-      .map(p => `${p.symbol} $${p.value.toFixed(2)}`)
-      .join(', ');
-    if (cash > 0) summary += `. Cash: $${cash.toFixed(2)}`;
+  // Build summary (all values in investCurrency) with per-portfolio breakdown
+  let summary = `User's total investment portfolio value: ${investCurrency} $${totalValue.toFixed(2)}. `;
+  summary += `Total ${totalGainLoss >= 0 ? 'profit' : 'loss'}: ${investCurrency} $${Math.abs(totalGainLoss).toFixed(2)} `;
+  summary += `(${totalGainLoss >= 0 ? '+' : ''}${totalGainLossPercent.toFixed(1)}%).\n\n`;
+
+  // Add breakdown by portfolio
+  if (portfolioBreakdown.length > 0) {
+    summary += `Portfolio Breakdown:\n`;
+    portfolioBreakdown.forEach((pf, idx) => {
+      summary += `${idx + 1}. ${pf.name}: ${investCurrency} $${pf.value.toFixed(2)}`;
+      if (pf.cash > 0) summary += ` (includes ${investCurrency} $${pf.cash.toFixed(2)} cash)`;
+      summary += `. ${pf.gainLoss >= 0 ? 'Profit' : 'Loss'}: ${investCurrency} $${Math.abs(pf.gainLoss).toFixed(2)}.\n`;
+      if (pf.holdings.length > 0) {
+        summary += `   Holdings: `;
+        summary += pf.holdings
+          .sort((a, b) => b.value - a.value)
+          .map(h => `${h.symbol} (${h.shares} shares, ${investCurrency} $${h.value.toFixed(2)})`)
+          .join(', ');
+        summary += `\n`;
+      }
+    });
   }
 
   return {
@@ -189,8 +286,11 @@ export function getPortfolioData(symbol?: string): AggregatedData {
       totalGainLoss,
       totalGainLossPercent,
       positions,
-      cash,
-      positionCount: positions.length
+      portfolioBreakdown,
+      cash: totalCash,
+      currency: investCurrency,
+      positionCount: positions.length,
+      portfolioCount: portfolioBreakdown.length
     }
   };
 }
@@ -204,8 +304,9 @@ export function getNetWorthData(period?: string): AggregatedData {
   const portfolioData = getPortfolioData();
 
   // Calculate current net worth
+  // Cash accounts = checking, savings, cash (exclude credit, investment, retirement - same as Money tab)
   const cashAccounts = accounts.filter(
-    acc => acc.kind !== 'credit' && acc.includeInNetWorth !== false
+    acc => acc.kind !== 'credit' && acc.kind !== 'investment' && acc.kind !== 'retirement' && acc.includeInNetWorth !== false
   );
   const totalCash = cashAccounts.reduce((sum, acc) => sum + (acc.balance || 0), 0);
 
@@ -223,7 +324,17 @@ export function getNetWorthData(period?: string): AggregatedData {
   let summary = `User's current net worth is $${currentNetWorth.toFixed(2)}. `;
   summary += `Breakdown: Cash $${totalCash.toFixed(2)}, `;
   summary += `Investments $${portfolioValue.toFixed(2)}, `;
-  summary += `Debt $${totalDebt.toFixed(2)}`;
+  summary += `Debt $${totalDebt.toFixed(2)}. `;
+
+  // Add individual cash account balances
+  if (cashAccounts.length > 0) {
+    summary += `Cash accounts: `;
+    const accountDetails = cashAccounts.map(acc => {
+      const type = acc.kind === 'checking' ? 'checking' : acc.kind === 'savings' ? 'savings' : acc.kind;
+      return `${acc.name} (${type}) $${(acc.balance || 0).toFixed(2)}`;
+    }).join(', ');
+    summary += accountDetails;
+  }
 
   // TODO: Compare with previous period if requested
   // This would require querying historical net worth data
@@ -234,7 +345,12 @@ export function getNetWorthData(period?: string): AggregatedData {
       netWorth: currentNetWorth,
       cash: totalCash,
       investments: portfolioValue,
-      debt: totalDebt
+      debt: totalDebt,
+      cashAccounts: cashAccounts.map(acc => ({
+        name: acc.name,
+        kind: acc.kind,
+        balance: acc.balance || 0
+      }))
     }
   };
 }

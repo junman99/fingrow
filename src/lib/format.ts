@@ -69,3 +69,38 @@ export function round2(n: number): number {
 export function sum(arr: number[] = []): number {
   return (arr || []).reduce((a, b) => a + ((typeof b === 'number' ? b : Number(b)) || 0), 0);
 }
+
+/**
+ * Format large numbers with B/M/T suffixes
+ * Examples: 1,500,000,000 -> 1.50B, 50,000,000 -> 50.00M, 2,300,000,000,000 -> 2.30T
+ */
+export function formatLargeNumber(value: number, decimals: number = 2): string {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+
+  if (abs >= 1_000_000_000_000) {
+    // Trillions
+    return `${sign}${(value / 1_000_000_000_000).toFixed(decimals)}T`;
+  } else if (abs >= 1_000_000_000) {
+    // Billions
+    return `${sign}${(value / 1_000_000_000).toFixed(decimals)}B`;
+  } else if (abs >= 1_000_000) {
+    // Millions
+    return `${sign}${(value / 1_000_000).toFixed(decimals)}M`;
+  } else if (abs >= 1_000) {
+    // Thousands
+    return `${sign}${(value / 1_000).toFixed(decimals)}K`;
+  } else {
+    return `${sign}${value.toFixed(decimals)}`;
+  }
+}
+
+/**
+ * Format market cap with currency symbol and B/M/T suffix
+ * Example: 1,500,000,000 USD -> $1.50B
+ */
+export function formatMarketCap(value: number, currency?: string): string {
+  const code = (currency || preferredCurrency() || 'USD').toUpperCase();
+  const symbol = symbolFor(code);
+  return `${symbol}${formatLargeNumber(value, 2)}`;
+}
