@@ -27,6 +27,7 @@ import { useIncomeSplittingStore } from '../store/incomeSplitting';
 import { calculateHistoricalNetWorth, aggregateNetWorthData } from '../lib/netWorthHistory';
 import { convertCurrency } from '../lib/fx';
 import { useProfileStore } from '../store/profile';
+import { WealthJourneySheet } from '../components/WealthJourneySheet';
 
 function withAlpha(color: string, alpha: number) {
   if (!color) return color;
@@ -300,6 +301,7 @@ const Money: React.FC = () => {
   const insets = useSafeAreaInsets();
   const [showAccountsSheet, setShowAccountsSheet] = useState(false);
   const [showDebtsSheet, setShowDebtsSheet] = useState(false);
+  const [showWealthJourney, setShowWealthJourney] = useState(false);
 
   // Main Tab Title Animation
   const scrollY = useSharedValue(0);
@@ -888,21 +890,41 @@ const Money: React.FC = () => {
               <Text style={{ color: text, fontSize: 36, fontWeight: '800', letterSpacing: -1 }}>
                 {formatCurrency(netWorth)}
               </Text>
-              {/* Change indicator */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6, marginTop: spacing.s6 }}>
+              {/* Change indicator and View Journey Button */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.s6, marginRight: -spacing.s4 }}>
                 <Text style={{
                   color: netWorthChange >= 0 ? successColor : warningColor,
                   fontSize: 13,
-                  fontWeight: '600'
+                  fontWeight: '600',
                 }}>
                   {netWorthChange >= 0 ? '+' : ''}{formatCurrency(Math.abs(netWorthChange))} ({netWorthChange >= 0 ? '+' : ''}{netWorthChangePercent.toFixed(1)}%)
                 </Text>
+
+                {/* View Journey Button */}
+                <Pressable
+                  onPress={() => setShowWealthJourney(true)}
+                  style={({ pressed }) => ({
+                    opacity: pressed ? 0.7 : 1,
+                  })}
+                >
+                  <View style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: spacing.s6,
+                  }}>
+                    <Icon name="trending-up" size={14} color={accentSecondary} />
+                    <Text style={{ color: accentSecondary, fontSize: 14, fontWeight: '700' }}>
+                      View Journey
+                    </Text>
+                    <Icon name="arrow-right" size={14} color={accentSecondary} />
+                  </View>
+                </Pressable>
               </View>
             </>
           )}
 
           {/* Stacked Area Chart */}
-          <View style={{ marginTop: spacing.s12, marginLeft: -spacing.s16, marginRight: -spacing.s16, gap: spacing.s8 }}>
+          <View style={{ marginTop: spacing.s12, gap: spacing.s8 }}>
             {aggregatedChartData.length > 0 ? (
               <StackedAreaChart
                 data={aggregatedChartData.map(point => ({
@@ -1443,6 +1465,17 @@ const Money: React.FC = () => {
           )}
         </ScrollView>
       </BottomSheet>
+
+      {/* Wealth Journey Sheet */}
+      <WealthJourneySheet
+        visible={showWealthJourney}
+        onClose={() => setShowWealthJourney(false)}
+        netWorth={netWorth}
+        totalCash={totalCash}
+        totalInvestments={portfolioCalc.totalUSD}
+        totalDebt={totalDebt}
+        netWorthHistory={netWorthHistoryData.map(d => ({ t: d.t, v: d.cash + d.investments - d.debt }))}
+      />
 
     </ScreenScroll>
     </>

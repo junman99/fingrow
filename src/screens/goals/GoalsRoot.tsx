@@ -3,6 +3,7 @@ import { View, Text, Pressable, ScrollView, Dimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, useAnimatedScrollHandler, interpolate, Extrapolate } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
 import { ScreenScroll } from '../../components/ScreenScroll';
 import Icon from '../../components/Icon';
@@ -116,7 +117,7 @@ const GoalsRoot: React.FC = () => {
   const { accounts } = useAccountsStore();
   const { holdings, quotes } = useInvestStore();
   const { transactions } = useTxStore();
-  const { currentStreak, longestStreak, recordVisit, hydrate: hydrateStreaks } = useStreaksStore();
+  const { currentStreak, longestStreak, visitDates, recordVisit, hydrate: hydrateStreaks } = useStreaksStore();
   const [activeTab, setActiveTab] = useState<TabType>('milestone');
   const [showWealthJourney, setShowWealthJourney] = useState(false);
 
@@ -145,7 +146,7 @@ const GoalsRoot: React.FC = () => {
   // Calculate wealth journey data
   const totalCash = useMemo(() => {
     return accounts
-      .filter(a => a.includeInNetWorth !== false)
+      .filter(a => a.includeInNetWorth !== false && a.type !== 'debt' && a.type !== 'investment')
       .reduce((sum, a) => sum + (a.balance || 0), 0);
   }, [accounts]);
 
@@ -267,129 +268,361 @@ const GoalsRoot: React.FC = () => {
       : 0;
     const remaining = Math.max(0, (goal.targetAmount || 0) - (goal.currentAmount || 0));
     const isComplete = progress >= 100 || !!goal.completedAt;
-    const progressColor = isComplete ? successColor : accentPrimary;
+
+    // Determine status and color
+    let statusColor = successColor;
+    let statusText = 'On Track';
+    let statusIcon = 'check-circle' as const;
+    let progressColor = accentPrimary;
 
     let daysRemaining: number | null = null;
     let monthlyNeeded = 0;
+    let monthsRemaining = 0;
+
     if (goal.targetDate && !isComplete) {
       const targetDate = new Date(goal.targetDate);
       const today = new Date();
       const diffTime = targetDate.getTime() - today.getTime();
       daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      monthsRemaining = daysRemaining / 30;
 
       if (remaining > 0 && daysRemaining > 0) {
-        const monthsRemaining = daysRemaining / 30;
         monthlyNeeded = remaining / monthsRemaining;
+      }
+
+      // Determine status based on progress vs time
+      const timeProgress = monthsRemaining > 0 ? ((goal.targetDate ? (new Date(goal.targetDate).getTime() - new Date(goal.createdAt).getTime()) / (1000 * 60 * 60 * 24 * 30) : 0) - monthsRemaining) / (goal.targetDate ? (new Date(goal.targetDate).getTime() - new Date(goal.createdAt).getTime()) / (1000 * 60 * 60 * 24 * 30) : 1) * 100 : 0;
+
+      if (daysRemaining < 0) {
+        statusColor = warningColor;
+        statusText = 'Overdue';
+        statusIcon = 'alert-circle';
+        progressColor = warningColor;
+      } else if (progress < timeProgress - 10) {
+        statusColor = warningColor;
+        statusText = 'Behind Schedule';
+        statusIcon = 'alert-triangle';
+        progressColor = warningColor;
+      } else if (progress < timeProgress + 10) {
+        statusColor = accentSecondary;
+        statusText = 'Needs Attention';
+        statusIcon = 'info';
+        progressColor = accentSecondary;
       }
     }
 
+    if (isComplete) {
+      statusColor = successColor;
+      statusText = 'Complete';
+      statusIcon = 'check-circle';
+      progressColor = successColor;
+    }
+
     return (
-      <AnimatedPressable
-        key={goal.id}
-        onPress={() => nav.navigate('GoalDetail', { goalId: goal.id, mode: 'journey' })}
-        style={{ marginBottom: spacing.s12 }}
-      >
+      <View key={goal.id} style={{ marginBottom: spacing.s16 }}>
         <View
           style={{
-            backgroundColor: isComplete ? withAlpha(successColor, isDark ? 0.15 : 0.08) : cardBg,
+            backgroundColor: isComplete ? withAlpha(successColor, isDark ? 0.12 : 0.06) : cardBg,
             borderRadius: radius.xl,
             padding: spacing.s16,
             borderWidth: 1,
             borderColor: isComplete ? withAlpha(successColor, 0.3) : border,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: isDark ? 0.3 : 0.08,
+            shadowRadius: 8,
+            elevation: 3,
           }}
         >
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <View style={{ flex: 1, paddingRight: spacing.s12 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, marginBottom: spacing.s8 }}>
-                {goal.icon && <Text style={{ fontSize: 28 }}>{goal.icon}</Text>}
+          {/* Header with icon, title, and status */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.s12 }}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.s10 }}>
+              {goal.icon && <Text style={{ fontSize: 32 }}>{goal.icon}</Text>}
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: text, fontSize: 19, fontWeight: '800', marginBottom: spacing.s4 }}>
+                  {goal.title}
+                </Text>
                 {goal.isPinned && (
                   <View style={{
                     backgroundColor: withAlpha(warningColor, isDark ? 0.25 : 0.15),
                     paddingHorizontal: spacing.s8,
                     paddingVertical: spacing.s4,
-                    borderRadius: radius.sm,
+                    borderRadius: radius.pill,
                     borderWidth: 1,
                     borderColor: withAlpha(warningColor, 0.3),
+                    alignSelf: 'flex-start',
                   }}>
-                    <Text style={{ color: warningColor, fontSize: 11, fontWeight: '700' }}>PINNED</Text>
+                    <Text style={{ color: warningColor, fontSize: 10, fontWeight: '700' }}>📌 PINNED</Text>
                   </View>
                 )}
               </View>
-              <Text style={{ color: text, fontSize: 20, fontWeight: '800', marginBottom: spacing.s6 }}>
-                {goal.title}
-              </Text>
-              <Text style={{ color: muted, fontSize: 14, fontWeight: '600', marginBottom: spacing.s4 }}>
-                {formatCurrency(goal.currentAmount || 0)} of {formatCurrency(goal.targetAmount)}
-              </Text>
-              {!isComplete && remaining > 0 && (
-                <Text style={{ color: muted, fontSize: 13 }}>
-                  {formatCurrency(remaining)} remaining
-                </Text>
-              )}
-              {isComplete && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6, marginTop: spacing.s4 }}>
-                  <Icon name="check-circle" size={16} color={successColor} />
-                  <Text style={{ color: successColor, fontSize: 14, fontWeight: '700' }}>
-                    Complete!
-                  </Text>
-                </View>
-              )}
             </View>
-
-            <View style={{ alignItems: 'center' }}>
-              <View style={{ position: 'relative' }}>
-                <AnimatedRing
-                  progress={progress}
-                  size={70}
-                  strokeWidth={6}
-                  color={progressColor}
-                />
-                <View style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <Text style={{ color: text, fontSize: 18, fontWeight: '800' }}>
-                    {progress}%
-                  </Text>
-                </View>
-              </View>
+            {/* Status indicator */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.s4,
+              paddingHorizontal: spacing.s8,
+              paddingVertical: spacing.s6,
+              borderRadius: radius.pill,
+              backgroundColor: withAlpha(statusColor, isDark ? 0.25 : 0.12),
+              borderWidth: 1,
+              borderColor: withAlpha(statusColor, 0.3),
+            }}>
+              <Icon name={statusIcon} size={14} color={statusColor} />
+              <Text style={{ color: statusColor, fontSize: 11, fontWeight: '700' }}>
+                {statusText}
+              </Text>
             </View>
           </View>
 
-          {!isComplete && daysRemaining !== null && (
-            <View style={{
-              marginTop: spacing.s12,
-              paddingTop: spacing.s12,
-              borderTopWidth: 1,
-              borderTopColor: border,
-              flexDirection: 'row',
-              justifyContent: 'space-between'
-            }}>
-              {daysRemaining > 0 ? (
-                <>
-                  <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>
-                    {daysRemaining} days left
+          {/* Amount and Progress */}
+          <View style={{ marginBottom: spacing.s12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s8 }}>
+              <Text style={{ color: text, fontSize: 24, fontWeight: '800' }}>
+                {formatCurrency(goal.currentAmount || 0)}
+              </Text>
+              {/* Milestone badges */}
+              {!isComplete && progress >= 25 && (
+                <View style={{
+                  paddingHorizontal: spacing.s8,
+                  paddingVertical: spacing.s4,
+                  borderRadius: radius.pill,
+                  backgroundColor: withAlpha(
+                    progress >= 75 ? successColor : progress >= 50 ? accentSecondary : accentPrimary,
+                    isDark ? 0.25 : 0.15
+                  ),
+                  borderWidth: 1,
+                  borderColor: withAlpha(
+                    progress >= 75 ? successColor : progress >= 50 ? accentSecondary : accentPrimary,
+                    0.4
+                  ),
+                }}>
+                  <Text style={{
+                    color: progress >= 75 ? successColor : progress >= 50 ? accentSecondary : accentPrimary,
+                    fontSize: 10,
+                    fontWeight: '800'
+                  }}>
+                    {progress >= 75 ? '🌟 75%+' : progress >= 50 ? '⭐ 50%+' : '✨ 25%+'}
                   </Text>
-                  {monthlyNeeded > 0 && (
-                    <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>
-                      {formatCurrency(monthlyNeeded)}/mo needed
-                    </Text>
-                  )}
-                </>
-              ) : (
-                <Text style={{ color: warningColor, fontSize: 13, fontWeight: '600' }}>
-                  {Math.abs(daysRemaining)} days overdue
+                </View>
+              )}
+            </View>
+            <Text style={{ color: muted, fontSize: 14, fontWeight: '600', marginTop: spacing.s4 }}>
+              of {formatCurrency(goal.targetAmount)} • {formatCurrency(remaining)} left
+            </Text>
+          </View>
+
+          {/* Enhanced Progress Bar with Gradient */}
+          <View style={{ marginBottom: spacing.s12 }}>
+            <View style={{
+              height: 10,
+              borderRadius: radius.md,
+              backgroundColor: withAlpha(progressColor, isDark ? 0.15 : 0.1),
+              overflow: 'hidden',
+            }}>
+              <LinearGradient
+                colors={[progressColor, withAlpha(progressColor, 0.7)]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{
+                  width: `${progress}%`,
+                  height: 10,
+                }}
+              />
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.s6 }}>
+              <Text style={{ color: progressColor, fontSize: 13, fontWeight: '700' }}>
+                {progress}%
+              </Text>
+              {!isComplete && daysRemaining !== null && daysRemaining > 0 && (
+                <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>
+                  {daysRemaining} days left
                 </Text>
               )}
             </View>
+          </View>
+
+          {/* Info Row */}
+          {!isComplete && monthlyNeeded > 0 && (
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.s6,
+              paddingVertical: spacing.s10,
+              paddingHorizontal: spacing.s12,
+              backgroundColor: withAlpha(accentSecondary, isDark ? 0.12 : 0.08),
+              borderRadius: radius.md,
+              marginBottom: spacing.s12,
+            }}>
+              <Icon name="trending-up" size={16} color={accentSecondary} />
+              <Text style={{ color: text, fontSize: 13, fontWeight: '600', flex: 1 }}>
+                Save {formatCurrency(monthlyNeeded)}/month to reach goal on time
+              </Text>
+            </View>
+          )}
+
+          {/* Funding Breakdown */}
+          {goal.history && goal.history.length > 0 && (
+            <View style={{
+              paddingVertical: spacing.s10,
+              paddingHorizontal: spacing.s12,
+              backgroundColor: withAlpha(surface2, 0.5),
+              borderRadius: radius.md,
+              marginBottom: spacing.s12,
+              borderWidth: 1,
+              borderColor: border,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s8 }}>
+                <Text style={{ color: muted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' }}>
+                  Progress Breakdown
+                </Text>
+                <Text style={{ color: muted, fontSize: 11, fontWeight: '600' }}>
+                  {goal.history.length} contribution{goal.history.length !== 1 ? 's' : ''}
+                </Text>
+              </View>
+
+              {(() => {
+                const contributions = goal.history.filter(h => h.type === 'contribution');
+                const roundups = goal.history.filter(h => h.type === 'roundup');
+                const adjustments = goal.history.filter(h => h.type === 'adjust');
+
+                const totalContributions = contributions.reduce((sum, h) => sum + h.amount, 0);
+                const totalRoundups = roundups.reduce((sum, h) => sum + h.amount, 0);
+                const totalAdjustments = adjustments.reduce((sum, h) => sum + h.amount, 0);
+
+                return (
+                  <View style={{ gap: spacing.s6 }}>
+                    {totalContributions > 0 && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6 }}>
+                          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: accentPrimary }} />
+                          <Text style={{ color: text, fontSize: 12, fontWeight: '600' }}>
+                            Manual deposits
+                          </Text>
+                        </View>
+                        <Text style={{ color: text, fontSize: 12, fontWeight: '700' }}>
+                          {formatCurrency(totalContributions)}
+                        </Text>
+                      </View>
+                    )}
+
+                    {totalRoundups > 0 && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6 }}>
+                          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: successColor }} />
+                          <Text style={{ color: text, fontSize: 12, fontWeight: '600' }}>
+                            Round-ups
+                          </Text>
+                        </View>
+                        <Text style={{ color: text, fontSize: 12, fontWeight: '700' }}>
+                          {formatCurrency(totalRoundups)}
+                        </Text>
+                      </View>
+                    )}
+
+                    {totalAdjustments !== 0 && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6 }}>
+                          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: accentSecondary }} />
+                          <Text style={{ color: text, fontSize: 12, fontWeight: '600' }}>
+                            Adjustments
+                          </Text>
+                        </View>
+                        <Text style={{ color: text, fontSize: 12, fontWeight: '700' }}>
+                          {formatCurrency(totalAdjustments)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                );
+              })()}
+            </View>
+          )}
+
+          {/* Quick Actions */}
+          {!isComplete && (
+            <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
+              <AnimatedPressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  nav.navigate('GoalDetail', { goalId: goal.id, mode: 'contribute' });
+                }}
+                style={{ flex: 1 }}
+              >
+                <View style={{
+                  backgroundColor: accentPrimary,
+                  paddingVertical: spacing.s10,
+                  paddingHorizontal: spacing.s12,
+                  borderRadius: radius.md,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: spacing.s6,
+                }}>
+                  <Icon name="plus" size={16} color="white" />
+                  <Text style={{ color: 'white', fontSize: 14, fontWeight: '700' }}>
+                    Add Money
+                  </Text>
+                </View>
+              </AnimatedPressable>
+              <AnimatedPressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  nav.navigate('GoalDetail', { goalId: goal.id, mode: 'journey' });
+                }}
+                style={{ flex: 1 }}
+              >
+                <View style={{
+                  backgroundColor: surface2,
+                  paddingVertical: spacing.s10,
+                  paddingHorizontal: spacing.s12,
+                  borderRadius: radius.md,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: spacing.s6,
+                  borderWidth: 1,
+                  borderColor: border,
+                }}>
+                  <Icon name="bar-chart-2" size={16} color={text} />
+                  <Text style={{ color: text, fontSize: 14, fontWeight: '700' }}>
+                    Details
+                  </Text>
+                </View>
+              </AnimatedPressable>
+            </View>
+          )}
+
+          {/* Complete state with celebration */}
+          {isComplete && (
+            <AnimatedPressable
+              onPress={() => {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                nav.navigate('GoalDetail', { goalId: goal.id, mode: 'journey' });
+              }}
+            >
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: spacing.s8,
+                paddingVertical: spacing.s12,
+                backgroundColor: withAlpha(successColor, isDark ? 0.2 : 0.12),
+                borderRadius: radius.md,
+                borderWidth: 1,
+                borderColor: withAlpha(successColor, 0.3),
+              }}>
+                <Text style={{ fontSize: 20 }}>🎉</Text>
+                <Text style={{ color: successColor, fontSize: 15, fontWeight: '700' }}>
+                  Goal Completed!
+                </Text>
+                <Text style={{ fontSize: 20 }}>🎉</Text>
+              </View>
+            </AnimatedPressable>
           )}
         </View>
-      </AnimatedPressable>
+      </View>
     );
   };
 
@@ -454,173 +687,189 @@ const GoalsRoot: React.FC = () => {
       >
       <View style={{ paddingHorizontal: spacing.s16, gap: spacing.s16 }}>
 
-        {/* Header like Money tab */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s4 }}>
           <Animated.Text style={[{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.5 }, originalTitleAnimatedStyle]}>
             Goals
           </Animated.Text>
-          <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
-            {/* Wealth Journey Button */}
-            <AnimatedPressable onPress={() => setShowWealthJourney(true)}>
-              <View style={{
-                paddingHorizontal: spacing.s12,
-                paddingVertical: spacing.s8,
-                borderRadius: radius.pill,
-                backgroundColor: withAlpha(successColor, isDark ? 0.25 : 0.15),
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: spacing.s6,
-                borderWidth: 1,
-                borderColor: withAlpha(successColor, 0.3),
-              }}>
-                <Icon name="trending-up" size={16} color={successColor} />
-                <Text style={{ color: text, fontSize: 13, fontWeight: '700' }}>
-                  Journey
-                </Text>
-              </View>
-            </AnimatedPressable>
-            {/* Achievements Badge */}
-            <AnimatedPressable onPress={() => nav.navigate('AchievementsModal')}>
-              <View style={{
-                paddingHorizontal: spacing.s12,
-                paddingVertical: spacing.s8,
-                borderRadius: radius.pill,
-                backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: spacing.s6,
-                borderWidth: 1,
-                borderColor: withAlpha(accentPrimary, 0.3),
-              }}>
-                <Icon name="trophy" size={16} color={accentPrimary} />
-                <Text style={{ color: text, fontSize: 13, fontWeight: '700' }}>
-                  {achievements.length > 0 ? `${achievements.length} Badge${achievements.length !== 1 ? 's' : ''}` : 'Badges'}
-                </Text>
-              </View>
-            </AnimatedPressable>
-          </View>
-        </View>
-
-        {/* Streak Counter */}
-        {currentStreak > 0 && (
-          <View
-            style={{
-              backgroundColor: cardBg,
-              borderRadius: radius.lg,
-              borderWidth: 1,
-              borderColor: border,
-              padding: spacing.s16,
+          <AnimatedPressable onPress={() => nav.navigate('AchievementsModal')}>
+            <View style={{
+              paddingHorizontal: spacing.s12,
+              paddingVertical: spacing.s8,
+              borderRadius: radius.pill,
+              backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
               flexDirection: 'row',
               alignItems: 'center',
-              gap: spacing.s12,
-            }}
-          >
-            <View
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: radius.md,
-                backgroundColor: successColor,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Icon name="zap" size={28} colorToken="text.onPrimary" />
+              gap: spacing.s6,
+              borderWidth: 1,
+              borderColor: withAlpha(accentPrimary, 0.3),
+            }}>
+              <Icon name="trophy" size={16} color={accentPrimary} />
+              <Text style={{ color: text, fontSize: 13, fontWeight: '700' }}>
+                {achievements.length > 0 ? achievements.length : '0'}
+              </Text>
             </View>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s4 }}>
-                <Text style={{ color: text, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
-                  {currentStreak}
-                </Text>
-                <Text style={{ color: muted, fontSize: 14, fontWeight: '600' }}>
-                  day streak
-                </Text>
-              </View>
-              <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s2 }}>
-                {getStreakMessage(currentStreak)}
+          </AnimatedPressable>
+        </View>
+
+        {/* Streak Display */}
+        {currentStreak > 0 && (
+          <View style={{ gap: spacing.s10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s10 }}>
+              <Text style={{ fontSize: 22 }}>🔥</Text>
+              <Text style={{ color: text, fontSize: 20, fontWeight: '800' }}>
+                {currentStreak} day streak
               </Text>
               {getNextMilestone(currentStreak) && (
-                <View
-                  style={{
-                    marginTop: spacing.s8,
-                    paddingHorizontal: spacing.s10,
-                    paddingVertical: spacing.s4,
-                    borderRadius: radius.pill,
-                    backgroundColor: surface2,
-                    alignSelf: 'flex-start',
-                  }}
-                >
-                  <Text style={{ color: muted, fontSize: 11, fontWeight: '600' }}>
-                    {getNextMilestone(currentStreak)!.days - currentStreak} days to {getNextMilestone(currentStreak)!.label}
-                  </Text>
-                </View>
+                <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>
+                  · {getNextMilestone(currentStreak)!.days - currentStreak} to {getNextMilestone(currentStreak)!.label}
+                </Text>
               )}
+            </View>
+
+            {/* Mini Calendar - Last 7 days */}
+            <View style={{ flexDirection: 'row', gap: spacing.s6 }}>
+              {Array.from({ length: 7 }).map((_, i) => {
+                const date = new Date();
+                date.setDate(date.getDate() - (6 - i));
+                const dateString = date.toISOString().split('T')[0];
+                const isActive = visitDates.includes(dateString);
+                const isToday = i === 6;
+
+                return (
+                  <View
+                    key={i}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: radius.sm,
+                      backgroundColor: isActive
+                        ? successColor
+                        : withAlpha(muted, 0.15),
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderWidth: isToday ? 2 : 0,
+                      borderColor: isToday ? successColor : 'transparent',
+                    }}
+                  >
+                    {isActive && (
+                      <Icon name="check" size={12} color="white" />
+                    )}
+                  </View>
+                );
+              })}
             </View>
           </View>
         )}
 
-        {/* Hero - Level & XP */}
-        <View style={{
-          backgroundColor: withAlpha(accentPrimary, isDark ? 0.15 : 0.08),
-          borderRadius: radius.xl,
-          padding: spacing.s16,
-          borderWidth: 1,
-          borderColor: withAlpha(accentPrimary, 0.2),
-        }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.s12 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: muted, fontSize: 13, fontWeight: '600', marginBottom: spacing.s4 }}>
-                YOUR LEVEL
-              </Text>
-              <Text style={{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.5 }}>
-                {level}
-              </Text>
-            </View>
-          </View>
-
-          <View style={{ gap: spacing.s6 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ color: muted, fontSize: 13, fontWeight: '600' }}>
-                {xp} / {currentLevelXP} XP
-              </Text>
-              <Text style={{ color: muted, fontSize: 13 }}>
-                {Math.round(currentLevelXP - xp)} to Level {level + 1}
-              </Text>
-            </View>
-            <View style={{
-              height: 8,
-              borderRadius: 4,
-              backgroundColor: withAlpha(accentPrimary, isDark ? 0.15 : 0.1),
-              overflow: 'hidden'
-            }}>
+        {/* Smart Insights Card */}
+        {(milestoneGoals.length > 0 || networthGoals.length > 0) && (
+          <View style={{
+            backgroundColor: withAlpha(accentPrimary, isDark ? 0.12 : 0.08),
+            borderRadius: radius.lg,
+            padding: spacing.s16,
+            borderWidth: 1,
+            borderColor: withAlpha(accentPrimary, 0.3),
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s10, marginBottom: spacing.s12 }}>
               <View style={{
-                width: `${xpProgress}%`,
-                height: 8,
+                width: 36,
+                height: 36,
+                borderRadius: radius.md,
                 backgroundColor: accentPrimary,
-              }} />
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Icon name="lightbulb" size={18} color="white" />
+              </View>
+              <Text style={{ color: text, fontSize: 16, fontWeight: '800' }}>
+                Smart Insight
+              </Text>
             </View>
-          </View>
-        </View>
 
-        {/* Tab Switcher - Metrics */}
-        <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
+            {(() => {
+              // Calculate insights
+              const allGoals = [...milestoneGoals, ...networthGoals];
+              const totalTarget = allGoals.reduce((sum, g) => sum + g.targetAmount, 0);
+              const totalSaved = allGoals.reduce((sum, g) => sum + (g.currentAmount || 0), 0);
+              const totalRemaining = totalTarget - totalSaved;
+              const overallProgress = totalTarget > 0 ? (totalSaved / totalTarget) * 100 : 0;
+
+              // Find most urgent goal
+              const urgentGoals = allGoals
+                .filter(g => g.targetDate && !g.completedAt)
+                .sort((a, b) => {
+                  const aDate = new Date(a.targetDate!).getTime();
+                  const bDate = new Date(b.targetDate!).getTime();
+                  return aDate - bDate;
+                });
+              const mostUrgent = urgentGoals[0];
+
+              // Find goal closest to completion
+              const nearCompletion = allGoals
+                .filter(g => !g.completedAt && g.targetAmount > 0)
+                .map(g => ({
+                  goal: g,
+                  progress: ((g.currentAmount || 0) / g.targetAmount) * 100
+                }))
+                .sort((a, b) => b.progress - a.progress)[0];
+
+              // Generate insight message
+              let insightMessage = '';
+              let insightIcon = 'info';
+
+              if (nearCompletion && nearCompletion.progress >= 80) {
+                const remaining = nearCompletion.goal.targetAmount - (nearCompletion.goal.currentAmount || 0);
+                insightMessage = `You're ${Math.round(nearCompletion.progress)}% of the way to "${nearCompletion.goal.title}"! Just ${formatCurrency(remaining)} more to go. 🎯`;
+                insightIcon = 'target';
+              } else if (mostUrgent) {
+                const daysLeft = Math.ceil((new Date(mostUrgent.targetDate!).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                const remaining = mostUrgent.targetAmount - (mostUrgent.currentAmount || 0);
+                const dailyNeeded = remaining / daysLeft;
+
+                if (daysLeft > 0 && daysLeft < 60) {
+                  insightMessage = `"${mostUrgent.title}" is due in ${daysLeft} days. Save ${formatCurrency(dailyNeeded)}/day to reach it on time.`;
+                  insightIcon = 'clock';
+                } else {
+                  insightMessage = `You're making great progress! Keep contributing regularly to stay on track with your ${allGoals.length} active goal${allGoals.length !== 1 ? 's' : ''}.`;
+                  insightIcon = 'trending-up';
+                }
+              } else if (allGoals.length > 0) {
+                insightMessage = `You have ${formatCurrency(totalRemaining)} left to save across all goals. You're ${Math.round(overallProgress)}% of the way there!`;
+                insightIcon = 'pie-chart';
+              } else {
+                insightMessage = "Start by creating your first goal. Small steps lead to big achievements!";
+                insightIcon = 'target';
+              }
+
+              return (
+                <Text style={{ color: text, fontSize: 14, lineHeight: 20 }}>
+                  {insightMessage}
+                </Text>
+              );
+            })()}
+          </View>
+        )}
+
+        {/* Simplified Tab Switcher */}
+        <View style={{ flexDirection: 'row', gap: spacing.s10, backgroundColor: surface2, padding: spacing.s6, borderRadius: radius.lg, alignSelf: 'stretch' }}>
           <AnimatedPressable
             onPress={() => setActiveTab('milestone')}
             style={{ flex: 1 }}
           >
             <View style={{
-              backgroundColor: cardBg,
-              borderRadius: radius.lg,
-              padding: spacing.s16,
-              borderWidth: 2,
-              borderColor: activeTab === 'milestone' ? accentPrimary : border,
+              backgroundColor: activeTab === 'milestone' ? accentPrimary : 'transparent',
+              paddingVertical: spacing.s10,
+              paddingHorizontal: spacing.s8,
+              borderRadius: radius.md,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: spacing.s6,
             }}>
-              <Icon name="target" size={22} colorToken="accent.primary" />
-              <Text style={{ color: text, fontSize: 22, fontWeight: '800', marginTop: spacing.s8 }}>
-                {milestoneGoals.length}
-              </Text>
-              <Text style={{ color: muted, fontSize: 13, fontWeight: '600', marginTop: spacing.s4 }}>
-                Milestone{milestoneGoals.length !== 1 ? 's' : ''}
+              <Icon name="target" size={16} color={activeTab === 'milestone' ? 'white' : muted} />
+              <Text style={{ color: activeTab === 'milestone' ? 'white' : text, fontSize: 13, fontWeight: '700' }}>
+                Milestones ({milestoneGoals.length})
               </Text>
             </View>
           </AnimatedPressable>
@@ -630,18 +879,18 @@ const GoalsRoot: React.FC = () => {
             style={{ flex: 1 }}
           >
             <View style={{
-              backgroundColor: cardBg,
-              borderRadius: radius.lg,
-              padding: spacing.s16,
-              borderWidth: 2,
-              borderColor: activeTab === 'networth' ? accentSecondary : border,
+              backgroundColor: activeTab === 'networth' ? accentSecondary : 'transparent',
+              paddingVertical: spacing.s10,
+              paddingHorizontal: spacing.s8,
+              borderRadius: radius.md,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: spacing.s6,
             }}>
-              <Icon name="trending-up" size={22} colorToken="accent.secondary" />
-              <Text style={{ color: text, fontSize: 22, fontWeight: '800', marginTop: spacing.s8 }}>
-                {networthGoals.length}
-              </Text>
-              <Text style={{ color: muted, fontSize: 13, fontWeight: '600', marginTop: spacing.s4 }}>
-                Net Worth
+              <Icon name="trending-up" size={16} color={activeTab === 'networth' ? 'white' : muted} />
+              <Text style={{ color: activeTab === 'networth' ? 'white' : text, fontSize: 13, fontWeight: '700' }}>
+                Net Worth ({networthGoals.length})
               </Text>
             </View>
           </AnimatedPressable>
@@ -668,9 +917,63 @@ const GoalsRoot: React.FC = () => {
           </View>
         )}
 
+        {/* Popular Templates */}
+        {activeTab === 'milestone' && activeGoals.length === 0 && (
+          <View style={{ marginBottom: spacing.s8 }}>
+            <Text style={{ color: text, fontSize: 16, fontWeight: '700', marginBottom: spacing.s12 }}>
+              Popular Goals
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.s10 }}>
+              {[
+                { icon: '🏠', title: 'House Down Payment', amount: 50000, color: accentPrimary },
+                { icon: '✈️', title: 'Dream Vacation', amount: 5000, color: accentSecondary },
+                { icon: '🚗', title: 'New Car', amount: 30000, color: successColor },
+                { icon: '💍', title: 'Wedding', amount: 25000, color: warningColor },
+                { icon: '🎓', title: 'Education Fund', amount: 15000, color: accentPrimary },
+                { icon: '🏥', title: 'Emergency Fund', amount: 10000, color: successColor },
+              ].map((template, idx) => (
+                <AnimatedPressable
+                  key={idx}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    nav.navigate('GoalCreate', {
+                      type: 'milestone',
+                      template: {
+                        title: template.title,
+                        targetAmount: template.amount,
+                        icon: template.icon,
+                      }
+                    });
+                  }}
+                >
+                  <View style={{
+                    width: 140,
+                    backgroundColor: withAlpha(template.color, isDark ? 0.15 : 0.08),
+                    borderRadius: radius.lg,
+                    padding: spacing.s14,
+                    borderWidth: 1,
+                    borderColor: withAlpha(template.color, 0.3),
+                  }}>
+                    <Text style={{ fontSize: 32, marginBottom: spacing.s8 }}>{template.icon}</Text>
+                    <Text style={{ color: text, fontSize: 13, fontWeight: '700', marginBottom: spacing.s4 }} numberOfLines={2}>
+                      {template.title}
+                    </Text>
+                    <Text style={{ color: muted, fontSize: 11, fontWeight: '600' }}>
+                      {formatCurrency(template.amount)}
+                    </Text>
+                  </View>
+                </AnimatedPressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {/* Create Button */}
         <AnimatedPressable
-          onPress={() => nav.navigate('GoalCreate', { type: activeTab })}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            nav.navigate('GoalCreate', { type: activeTab });
+          }}
         >
           <View style={{
             backgroundColor: accentPrimary,
@@ -717,6 +1020,84 @@ const GoalsRoot: React.FC = () => {
           </View>
         ) : (
           activeGoals.map(renderGoalCard)
+        )}
+
+        {/* Level & XP Progress - Enhanced */}
+        {(milestoneGoals.length > 0 || networthGoals.length > 0) && (
+          <AnimatedPressable onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            nav.navigate('AchievementsModal');
+          }}>
+            <View style={{
+              backgroundColor: withAlpha(accentPrimary, isDark ? 0.12 : 0.08),
+              borderRadius: radius.lg,
+              padding: spacing.s16,
+              borderWidth: 1,
+              borderColor: withAlpha(accentPrimary, 0.2),
+              marginTop: spacing.s8,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s10 }}>
+                  <View style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: radius.md,
+                    backgroundColor: accentPrimary,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <Text style={{ fontSize: 24 }}>
+                      {level >= 10 ? '🏆' : level >= 5 ? '⭐' : '🎯'}
+                    </Text>
+                  </View>
+                  <View>
+                    <Text style={{ color: text, fontSize: 18, fontWeight: '800' }}>
+                      Level {level}
+                    </Text>
+                    <Text style={{ color: muted, fontSize: 12, fontWeight: '600' }}>
+                      {xp} / {currentLevelXP} XP
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={{ color: accentPrimary, fontSize: 12, fontWeight: '700' }}>
+                    {Math.round(currentLevelXP - xp)} XP
+                  </Text>
+                  <Text style={{ color: muted, fontSize: 11, fontWeight: '600' }}>
+                    to level {level + 1}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Progress bar */}
+              <View style={{
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: withAlpha(accentPrimary, isDark ? 0.15 : 0.1),
+                overflow: 'hidden',
+                marginBottom: spacing.s10,
+              }}>
+                <LinearGradient
+                  colors={[accentPrimary, withAlpha(accentPrimary, 0.7)]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={{
+                    width: `${xpProgress}%`,
+                    height: 8,
+                  }}
+                />
+              </View>
+
+              {/* Rewards hint */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6 }}>
+                <Icon name="gift" size={14} color={muted} />
+                <Text style={{ color: muted, fontSize: 11, fontWeight: '600', flex: 1 }}>
+                  Earn XP by creating goals, contributing, and staying consistent
+                </Text>
+                <Icon name="chevron-right" size={14} color={muted} />
+              </View>
+            </View>
+          </AnimatedPressable>
         )}
       </View>
 
