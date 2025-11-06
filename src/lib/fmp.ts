@@ -14,7 +14,9 @@
 // - Silently falls back to individual calls (free tier)
 // - No errors shown to user for 402 responses
 
-import { FMP_API_KEY as DEFAULT_FMP_API_KEY } from '../config/secrets';
+import { env } from '../config/env';
+
+const DEFAULT_FMP_API_KEY = env.FMP_API_KEY;
 
 // Track if user has premium (detected automatically)
 let hasPremiumAccess = true; // Assume premium until we detect otherwise

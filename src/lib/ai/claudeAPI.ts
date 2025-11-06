@@ -4,7 +4,7 @@
  * Includes caching, rate limiting, and error handling
  */
 
-import { CLAUDE_API_KEY } from '../../config/secrets';
+import { env } from '../../config/env';
 import { AI_CONFIG, SYSTEM_PROMPT } from '../../config/ai';
 import { useProfileStore } from '../../store/profile';
 
@@ -79,11 +79,12 @@ export async function callClaude(
     }
 
     // Validate API key
-    if (!CLAUDE_API_KEY || CLAUDE_API_KEY === 'YOUR_CLAUDE_API_KEY_HERE') {
+    const claudeKey = env.CLAUDE_API_KEY;
+    if (!claudeKey || claudeKey === 'YOUR_CLAUDE_API_KEY_HERE') {
       return {
         error: 'Claude API key not configured',
         type: 'invalid_key',
-        message: 'Please add your Claude API key to src/config/secrets.ts'
+        message: 'Please add your Claude API key to .env file'
       };
     }
 
@@ -109,7 +110,7 @@ export async function callClaude(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': CLAUDE_API_KEY,
+        'x-api-key': claudeKey,
         'anthropic-version': API_VERSION,
       },
       body: JSON.stringify({

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { FMP_API_KEY } from '../config/secrets';
+import { env } from '../config/env';
 import type { CountryCode } from '../lib/countryConfig';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
@@ -59,7 +59,7 @@ const defaultProfile: Profile = {
   tier: 'Starter',
   aiTier: 'free', // Default AI tier
   dataSource: 'fmp',
-  fmpApiKey: FMP_API_KEY,
+  fmpApiKey: env.FMP_API_KEY,
   includeRetirementInInvestments: true, // Default to including retirement accounts
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
