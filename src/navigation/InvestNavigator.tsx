@@ -1,15 +1,17 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Invest as InvestHome } from '../screens/Invest';
-import { AddLot } from '../screens/AddLot';
+import {
+  Invest as InvestHome,
+  AddLot,
+  EditWatchlist,
+  EditLot,
+  HoldingHistory,
+  DCAPlanner,
+  PortfolioDetail,
+  CreatePortfolio,
+} from '../features/invest';
 import Search from '../screens/Search';
-import EditWatchlist from '../screens/EditWatchlist';
-import EditLot from '../screens/EditLot';
-import HoldingHistory from '../screens/HoldingHistory';
 import CashManagement from '../screens/CashManagement';
-import DCAPlanner from '../screens/DCAPlanner';
-import PortfolioDetail from '../screens/PortfolioDetail';
-import CreatePortfolio from '../screens/CreatePortfolio';
 
 const Stack = createNativeStackNavigator();
 

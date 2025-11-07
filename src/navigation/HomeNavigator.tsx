@@ -9,18 +9,20 @@ import BudgetSettings from '../screens/BudgetSettings';
 import CategoryInsights from '../screens/CategoryInsights';
 import CategoryTransactions from '../screens/CategoryTransactions';
 import UpcomingBills from '../screens/UpcomingBills';
-import GroupsRoot from '../screens/groups/GroupsRoot';
-import GroupDetail from '../screens/groups/GroupDetail';
-import AddMember from '../screens/groups/AddMember';
-import AddBill from '../screens/groups/AddBill';
-import EditBill from '../screens/groups/EditBill';
-import CreateGroup from '../screens/groups/CreateGroup';
-import BillDetails from '../screens/groups/BillDetails';
-import SettleUp from '../screens/groups/SettleUp';
-import GroupReminders from '../screens/groups/GroupReminders';
-import ManageMembers from '../screens/groups/ManageMembers';
-import EditGroup from '../screens/groups/EditGroup';
-import AddReminder from '../screens/groups/AddReminder';
+import {
+  GroupsRoot,
+  GroupDetail,
+  AddMember,
+  AddBill,
+  EditBill,
+  CreateGroup,
+  BillDetails,
+  SettleUp,
+  GroupReminders,
+  ManageMembers,
+  EditGroup,
+  AddReminder,
+} from '../features/groups';
 
 export type HomeStackParamList = {
   HomeRoot: undefined;

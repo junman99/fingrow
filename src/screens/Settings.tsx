@@ -16,7 +16,7 @@ import { ScreenScroll } from '../components/ScreenScroll';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens, useTheme } from '../theme/ThemeProvider';
 import { useProfileStore, type ThemeMode } from '../store/profile';
-import { useInvestStore } from '../store/invest';
+import { useInvestStore } from '../features/invest';
 import { useNavigation } from '@react-navigation/native';
 import ProfileHero from '../components/ProfileHero';
 import Button from '../components/Button';

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, ScrollView, Animated, Easing, Pressable, AppState } from 'react-native';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing } from '../theme/tokens';
-import IndexDetailSheet from './invest/IndexDetailSheet';
+import { IndexDetailSheet } from '../features/invest';
 
 type IndexData = {
   symbol: string;

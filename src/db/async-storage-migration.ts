@@ -16,8 +16,8 @@ import {
 } from './schema';
 import type { BankAccount } from '../store/accounts';
 import type { Transaction } from '../store/transactions';
-import type { Portfolio, Holding, Lot, Quote } from '../store/invest';
-import type { Goal, Achievement } from '../store/goals';
+import type { Portfolio, Holding, Lot, Quote } from '../features/invest';
+import type { Goal, Achievement } from '../features/goals';
 import type { Debt } from '../store/debts';
 
 // AsyncStorage keys

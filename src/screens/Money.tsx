@@ -16,7 +16,7 @@ import { CompoundBarChart } from '../components/CompoundBarChart';
 import { BarLineComboChart } from '../components/BarLineComboChart';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { useAccountsStore } from '../store/accounts';
-import { useInvestStore } from '../store/invest';
+import { useInvestStore } from '../features/invest';
 import { formatCurrency } from '../lib/format';
 import { useNavigation } from '@react-navigation/native';
 import { useRecurringStore, computeNextDue, Recurring } from '../store/recurring';

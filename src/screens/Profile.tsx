@@ -11,7 +11,7 @@ import { formatCurrency } from '../lib/format';
 import { useAccountsStore } from '../store/accounts';
 import { useRecurringStore, computeNextDue, type Recurring } from '../store/recurring';
 import { useDebtsStore } from '../store/debts';
-import { useInvestStore } from '../store/invest';
+import { useInvestStore } from '../features/invest';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

@@ -1,5 +1,5 @@
 // Average-cost realized/unrealized P&L calculator.
-import type { Lot } from '../store/invest';
+import type { Lot } from '../features/invest';
 
 export type PnL = {
   qty: number;

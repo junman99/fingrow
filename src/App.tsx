@@ -13,10 +13,10 @@ import { ThemeProvider, useTheme } from './theme/ThemeProvider';
 import RootNavigator from './navigation/RootNavigator';
 import AuthNavigator from './navigation/AuthNavigator';
 import { useTxStore } from './store/transactions';
-import { useGroupsStore } from './store/groups';
+import { useGroupsStore } from './features/groups';
 import { useAuthStore } from './store/auth';
 import { seedInvestSixMonths } from './lib/demo_invest';
-import { useInvestStore } from './store/invest';
+import { useInvestStore } from './features/invest';
 import './i18n/config';
 
 // Create a client for React Query with optimized cache settings

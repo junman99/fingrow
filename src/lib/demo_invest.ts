@@ -1,5 +1,5 @@
 
-import { useInvestStore } from '../store/invest';
+import { useInvestStore } from '../features/invest';
 
 type InstrumentMeta = { name: string; type: 'stock' | 'bond' | 'crypto' | 'fund' | 'etf'; currency: string };
 

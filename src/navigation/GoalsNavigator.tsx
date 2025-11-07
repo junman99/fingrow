@@ -1,8 +1,6 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import GoalsRoot from '../screens/goals/GoalsRoot';
-import GoalCreate from '../screens/goals/GoalCreate';
-import GoalDetail from '../screens/goals/GoalDetail';
+import { GoalsRoot, GoalCreate, GoalDetail } from '../features/goals';
 
 export type GoalsStackParamList = {
   GoalsRoot: undefined;

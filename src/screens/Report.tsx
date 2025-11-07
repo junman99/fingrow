@@ -8,7 +8,7 @@ import { spacing, radius } from '../theme/tokens';
 import { useTxStore } from '../store/transactions';
 import { useAccountsStore } from '../store/accounts';
 import { useDebtsStore } from '../store/debts';
-import { useInvestStore } from '../store/invest';
+import { useInvestStore } from '../features/invest';
 import Icon from '../components/Icon';
 
 function withAlpha(hex: string, alpha: number) {

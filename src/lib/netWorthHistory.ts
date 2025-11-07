@@ -1,6 +1,6 @@
 import { Transaction } from '../store/transactions';
 import { BankAccount } from '../store/accounts';
-import { useInvestStore } from '../store/invest';
+import { useInvestStore } from '../features/invest';
 
 export type NetWorthDataPoint = {
   t: number; // timestamp

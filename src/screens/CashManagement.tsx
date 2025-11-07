@@ -5,10 +5,10 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
 import { Screen } from '../components/Screen';
-import { useInvestStore } from '../store/invest';
+import { useInvestStore } from '../features/invest';
 import { formatCurrency } from '../lib/format';
 import Icon from '../components/Icon';
-import CashEditorSheet from '../components/invest/CashEditorSheet';
+import { CashEditorSheet } from '../features/invest';
 
 export default function CashManagement() {
   const { get } = useThemeTokens();

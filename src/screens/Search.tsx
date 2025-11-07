@@ -3,7 +3,7 @@ import { View, Text, TextInput, FlatList, Pressable } from 'react-native';
 import { Screen } from '../components/Screen';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
-import { useInvestStore } from '../store/invest';
+import { useInvestStore } from '../features/invest';
 import { baseCryptoSymbol } from '../lib/coingecko';
 import { useNavigation, useRoute } from '@react-navigation/native';
 

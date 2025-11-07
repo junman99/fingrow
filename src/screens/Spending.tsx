@@ -13,7 +13,7 @@ import { RecentTransactionsCard } from '../components/RecentTransactionsCard';
 import Icon from '../components/Icon';
 import { useTxStore } from '../store/transactions';
 import { useProfileStore } from '../store/profile';
-import { useGroupsStore } from '../store/groups';
+import { useGroupsStore } from '../features/groups';
 
 const AnimatedText = RNAnimated.createAnimatedComponent(Text);
 

@@ -11,7 +11,7 @@ import { useNavigation } from '@react-navigation/native';
 import { processQuery, AIMessage, getUserRateLimitStatus, clearConversation } from '../lib/ai/aiService';
 import TransactionConfirmation, { TransactionData, PortfolioTransactionData } from '../components/ai/TransactionConfirmation';
 import { useTxStore } from '../store/transactions';
-import { useInvestStore } from '../store/invest';
+import { useInvestStore } from '../features/invest';
 import { useAccountsStore } from '../store/accounts';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
