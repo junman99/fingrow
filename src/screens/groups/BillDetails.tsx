@@ -63,8 +63,31 @@ export default function BillDetails() {
   }
 
   const memberName = (id: string) => group.members.find(m => m.id === id)?.name || '—';
-  const remainingUnsettled = bill.splits.filter(s => !s.settled).reduce((a,s)=>a+s.share,0);
-  const allSettled = bill.splits.every(s => s.settled);
+
+  // Only count splits where contribution doesn't cover share as outstanding
+  const remainingUnsettled = bill.splits
+    .filter(s => {
+      const contribution = bill.contributions.find(c => c.memberId === s.memberId);
+      if (!contribution) return !s.settled; // Not a contributor, count if not settled
+
+      // If contribution covers share, they don't owe anything
+      if (contribution.amount >= s.share) return false;
+
+      // Otherwise count the remainder if not settled
+      return !s.settled;
+    })
+    .reduce((a,s)=>a+s.share,0);
+
+  // All settled if all people who owe money have settled
+  const allSettled = bill.splits
+    .filter(s => {
+      const contribution = bill.contributions.find(c => c.memberId === s.memberId);
+      if (!contribution) return true; // Not a contributor, they need to settle
+
+      // If contribution doesn't cover share, they need to settle
+      return contribution.amount < s.share;
+    })
+    .every(s => s.settled);
 
   const shareText = () => {
     const lines = bill.splits.map(s => `${memberName(s.memberId)}: ${formatCurrency(s.share)}${s.settled ? ' (paid)' : ''}`);
@@ -303,7 +326,38 @@ export default function BillDetails() {
             Who owes what
           </Text>
           <View style={{ gap: spacing.s8 }}>
-            {bill.splits.map(s => {
+            {(() => {
+              const nonPayerSplits = bill.splits.filter(s => {
+                // Exclude people whose contribution covers their share
+                const contribution = bill.contributions.find(c => c.memberId === s.memberId);
+                if (!contribution) return true; // Not a contributor, so they owe their share
+
+                // If they contributed more than or equal to their share, they don't owe anything
+                return contribution.amount < s.share;
+              });
+
+              if (nonPayerSplits.length === 0) {
+                return (
+                  <View style={{
+                    backgroundColor: surface1,
+                    borderRadius: radius.lg,
+                    padding: spacing.s16,
+                    borderWidth: 1,
+                    borderColor: borderSubtle,
+                    alignItems: 'center'
+                  }}>
+                    <Icon name="check-circle" size={48} color={successColor} />
+                    <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700', marginTop: spacing.s12 }}>
+                      All Clear!
+                    </Text>
+                    <Text style={{ color: textMuted, fontSize: 14, marginTop: spacing.s4, textAlign: 'center' }}>
+                      The person who paid has already covered this bill.
+                    </Text>
+                  </View>
+                );
+              }
+
+              return nonPayerSplits.map(s => {
               const member = group.members.find(m => m.id === s.memberId);
               if (!member) return null;
               const initials = member.name.trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase() || '').join('') || '?';
@@ -436,7 +490,8 @@ export default function BillDetails() {
                   )}
                 </View>
               );
-            })}
+            });
+            })()}
           </View>
         </View>
 

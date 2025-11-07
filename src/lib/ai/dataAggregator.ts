@@ -18,13 +18,36 @@ export type AggregatedData = {
 };
 
 /**
- * Get spending data for a category and period
+ * Get spending data for a category and period or custom date range
  */
-export function getSpendingData(category?: string, period?: string): AggregatedData {
+export function getSpendingData(
+  category?: string,
+  period?: string,
+  customStartDate?: Date,
+  customEndDate?: Date
+): AggregatedData {
   const { transactions = [] } = useTxStore.getState();
   const { monthlyBudget } = useBudgetsStore.getState();
 
-  const { startDate, endDate, periodLabel } = parsePeriod(period);
+  // Use custom date range if provided, otherwise parse period
+  const { startDate, endDate, periodLabel } = customStartDate && customEndDate
+    ? {
+        startDate: customStartDate,
+        endDate: customEndDate,
+        periodLabel: formatDateRange(customStartDate, customEndDate)
+      }
+    : parsePeriod(period);
+
+  // Debug logging
+  console.log('[DataAggregator] getSpendingData called:', {
+    category,
+    period,
+    customStartDate: customStartDate?.toISOString(),
+    customEndDate: customEndDate?.toISOString(),
+    dateRange: `${startDate.toISOString()} to ${endDate.toISOString()}`,
+    periodLabel,
+    totalTransactions: transactions?.length || 0
+  });
 
   // Filter transactions - add safety check
   const filtered = (transactions || []).filter(tx => {
@@ -35,6 +58,12 @@ export function getSpendingData(category?: string, period?: string): AggregatedD
     const matchesCategory = !category || tx.category?.toLowerCase().includes(category.toLowerCase());
 
     return matchesDate && matchesType && matchesCategory;
+  });
+
+  console.log('[DataAggregator] Filtered transactions:', {
+    filtered: filtered.length,
+    sampleDates: filtered.slice(0, 3).map(tx => tx.date),
+    dateRange: `${startDate.toISOString()} to ${endDate.toISOString()}`
   });
 
   // Aggregate by category
@@ -395,6 +424,242 @@ export function getBudgetData(category?: string, period?: string): AggregatedDat
 /**
  * Parse period string into date range
  */
+/**
+ * Format date range as human-readable string
+ */
+function formatDateRange(start: Date, end: Date): string {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  // Same month and year
+  if (start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth()) {
+    return `in ${months[start.getMonth()]} ${start.getFullYear()}`;
+  }
+
+  // Same year
+  if (start.getFullYear() === end.getFullYear()) {
+    return `from ${months[start.getMonth()]} to ${months[end.getMonth()]} ${start.getFullYear()}`;
+  }
+
+  // Different years
+  return `from ${months[start.getMonth()]} ${start.getFullYear()} to ${months[end.getMonth()]} ${end.getFullYear()}`;
+}
+
+/**
+ * Get detailed stock holding information (lots, average cost, etc.)
+ */
+export function getStockDetails(symbol: string): AggregatedData {
+  const { portfolios, quotes } = useInvestStore.getState();
+  const symbolUpper = symbol.toUpperCase();
+
+  // Find the stock across all portfolios
+  let holding: any = null;
+  let portfolioName = '';
+
+  for (const p of Object.values(portfolios || {})) {
+    if (p.holdings && p.holdings[symbolUpper]) {
+      holding = p.holdings[symbolUpper];
+      portfolioName = p.name;
+      break;
+    }
+  }
+
+  if (!holding || !holding.lots || holding.lots.length === 0) {
+    return {
+      summary: `You don't own any ${symbolUpper} stock.`,
+      metadata: { owned: false }
+    };
+  }
+
+  const lots = holding.lots;
+  const quote = quotes[symbolUpper];
+  const currentPrice = quote?.last || 0;
+
+  // Calculate totals
+  let totalShares = 0;
+  let totalCost = 0;
+  let buyCount = 0;
+  let firstPurchaseDate: Date | null = null;
+
+  const purchaseHistory: Array<{
+    date: string;
+    side: 'buy' | 'sell';
+    shares: number;
+    price: number;
+    total: number;
+  }> = [];
+
+  lots.forEach((lot: any) => {
+    const lotDate = new Date(lot.date);
+
+    if (lot.side === 'buy') {
+      totalShares += lot.qty;
+      totalCost += lot.qty * lot.price;
+      buyCount++;
+
+      if (!firstPurchaseDate || lotDate < firstPurchaseDate) {
+        firstPurchaseDate = lotDate;
+      }
+
+      purchaseHistory.push({
+        date: lot.date,
+        side: 'buy',
+        shares: lot.qty,
+        price: lot.price,
+        total: lot.qty * lot.price
+      });
+    } else {
+      totalShares -= lot.qty;
+      purchaseHistory.push({
+        date: lot.date,
+        side: 'sell',
+        shares: lot.qty,
+        price: lot.price,
+        total: lot.qty * lot.price
+      });
+    }
+  });
+
+  const averageCost = totalShares > 0 ? totalCost / totalShares : 0;
+  const currentValue = totalShares * currentPrice;
+  const totalGain = currentValue - totalCost;
+  const totalGainPercent = totalCost > 0 ? (totalGain / totalCost) * 100 : 0;
+
+  // Build summary
+  let summary = `${symbolUpper} - ${holding.name}\n\n`;
+  summary += `Current Holdings:\n`;
+  summary += `- Shares owned: ${totalShares.toFixed(2)}\n`;
+  summary += `- Average cost: $${averageCost.toFixed(2)} per share\n`;
+  summary += `- Total invested: $${totalCost.toFixed(2)}\n`;
+  summary += `- Current price: $${currentPrice.toFixed(2)}\n`;
+  summary += `- Current value: $${currentValue.toFixed(2)}\n`;
+  summary += `- Total gain/loss: $${totalGain.toFixed(2)} (${totalGainPercent >= 0 ? '+' : ''}${totalGainPercent.toFixed(2)}%)\n\n`;
+
+  if (firstPurchaseDate) {
+    summary += `First investment: ${firstPurchaseDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}\n`;
+  }
+
+  summary += `Total transactions: ${buyCount}\n\n`;
+
+  // Add purchase history
+  if (purchaseHistory.length > 0) {
+    summary += `Purchase history:\n`;
+    purchaseHistory
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .forEach(p => {
+        const date = new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        summary += `- ${date}: ${p.side === 'buy' ? 'Bought' : 'Sold'} ${p.shares} shares at $${p.price.toFixed(2)} (total: $${p.total.toFixed(2)})\n`;
+      });
+  }
+
+  summary += `\nPortfolio: ${portfolioName}`;
+
+  return {
+    summary,
+    metadata: {
+      symbol: symbolUpper,
+      name: holding.name,
+      totalShares,
+      averageCost,
+      currentPrice,
+      currentValue,
+      totalCost,
+      totalGain,
+      totalGainPercent,
+      firstPurchaseDate: firstPurchaseDate?.toISOString(),
+      transactionCount: buyCount,
+      purchaseHistory,
+      portfolioName
+    }
+  };
+}
+
+/**
+ * Get stock fundamentals from local quotes cache
+ */
+export function getStockFundamentals(symbol: string): AggregatedData {
+  const { quotes, portfolios } = useInvestStore.getState();
+  const symbolUpper = symbol.toUpperCase();
+
+  const quote = quotes[symbolUpper];
+
+  if (!quote) {
+    // Check if user owns or watches this stock
+    const inPortfolio = Object.values(portfolios || {}).some(p =>
+      (p.holdings && p.holdings[symbolUpper]) ||
+      (p.watchlist && p.watchlist.includes(symbolUpper))
+    );
+
+    if (inPortfolio) {
+      return {
+        summary: `Data for ${symbolUpper} is being loaded. Try refreshing quotes or ask again in a moment.`,
+        metadata: { available: false, inPortfolio: true }
+      };
+    }
+
+    return {
+      summary: `I don't have data on ${symbolUpper}. Would you like me to add it to your watchlist to fetch the data?`,
+      metadata: { available: false, inPortfolio: false }
+    };
+  }
+
+  const fund = quote.fundamentals;
+
+  if (!fund) {
+    return {
+      summary: `${symbolUpper} - Current price: $${quote.last.toFixed(2)} (${quote.changePct >= 0 ? '+' : ''}${quote.changePct.toFixed(2)}% today). Fundamental data not available.`,
+      metadata: {
+        symbol: symbolUpper,
+        price: quote.last,
+        change: quote.change,
+        changePct: quote.changePct,
+        hasFundamentals: false
+      }
+    };
+  }
+
+  // Build summary with fundamentals
+  let summary = `${symbolUpper} - ${fund.companyName || symbol}\n\n`;
+  summary += `Current Price: $${quote.last.toFixed(2)} (${quote.changePct >= 0 ? '+' : ''}${quote.changePct.toFixed(2)}% today)\n\n`;
+
+  if (fund.sector || fund.industry) {
+    summary += `Business:\n`;
+    if (fund.sector) summary += `- Sector: ${fund.sector}\n`;
+    if (fund.industry) summary += `- Industry: ${fund.industry}\n`;
+    summary += `\n`;
+  }
+
+  summary += `Valuation & Metrics:\n`;
+  if (fund.marketCap) summary += `- Market Cap: $${(fund.marketCap / 1e9).toFixed(2)}B\n`;
+  if (fund.peRatio) summary += `- P/E Ratio: ${fund.peRatio.toFixed(2)}\n`;
+  if (fund.forwardPE) summary += `- Forward P/E: ${fund.forwardPE.toFixed(2)}\n`;
+  if (fund.eps) summary += `- EPS: $${fund.eps.toFixed(2)}\n`;
+  if (fund.dividendYield) summary += `- Dividend Yield: ${fund.dividendYield.toFixed(2)}%\n`;
+  if (fund.beta) summary += `- Beta: ${fund.beta.toFixed(2)}\n`;
+
+  if (fund.week52High || fund.week52Low) {
+    summary += `\n52-Week Range:\n`;
+    if (fund.week52Low) summary += `- Low: $${fund.week52Low.toFixed(2)}\n`;
+    if (fund.week52High) summary += `- High: $${fund.week52High.toFixed(2)}\n`;
+  }
+
+  if (fund.description) {
+    summary += `\nAbout: ${fund.description.substring(0, 200)}${fund.description.length > 200 ? '...' : ''}`;
+  }
+
+  return {
+    summary,
+    metadata: {
+      symbol: symbolUpper,
+      name: fund.companyName,
+      price: quote.last,
+      change: quote.change,
+      changePct: quote.changePct,
+      fundamentals: fund,
+      hasFundamentals: true
+    }
+  };
+}
+
 function parsePeriod(period?: string): {
   startDate: Date;
   endDate: Date;

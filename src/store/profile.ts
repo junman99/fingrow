@@ -60,6 +60,7 @@ const defaultProfile: Profile = {
   aiTier: 'free', // Default AI tier
   dataSource: 'fmp',
   fmpApiKey: env.FMP_API_KEY,
+  finnhubApiKey: env.FINNHUB_API_KEY || undefined, // Optional - use if provided in .env
   includeRetirementInInvestments: true, // Default to including retirement accounts
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),

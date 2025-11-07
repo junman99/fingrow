@@ -25,6 +25,8 @@ import {
 import { AI_CONFIG, IntentType } from '../../config/ai';
 import { useProfileStore } from '../../store/profile';
 import { useAccountsStore } from '../../store/accounts';
+import { AI_TOOLS } from './tools';
+import { executeTool } from './toolExecutor';
 
 export type AIMessage = {
   id: string;
@@ -60,13 +62,23 @@ export async function processQuery(
 ): Promise<AIResponse> {
   console.log('[AI Service] Processing query:', query);
 
-  // Step 1: Classify intent locally
-  const intent = classifyIntent(query);
-  console.log('[AI Service] Intent classified:', intent.type, 'confidence:', intent.confidence);
+  // Get conversation manager
+  const conversationManager = getConversationManager(getMemoryTurns());
+
+  // NO MORE INTENT CLASSIFICATION - let GPT-4o Mini handle everything
+  const intent: Intent = {
+    type: IntentType.SPENDING_QUERY,
+    confidence: 'high',
+    needsAI: true,
+    params: {}
+  };
+
+  // Check if this is a transaction logging request (has amount like "$5" or "5.31")
+  const hasAmount = /\$?\s*\d+(?:\.\d{1,2})?/.test(query);
+  const isTransactionLog = hasAmount && /(?:spent|paid|bought|purchased|add|log|for)/i.test(query);
 
   // Step 2: Handle transaction logging with AI-powered extraction
-  if (intent.type === IntentType.TRANSACTION_LOG) {
-    const conversationManager = getConversationManager(getMemoryTurns());
+  if (isTransactionLog) {
     conversationManager.addUserMessage(query, { intent });
 
     console.log('[AI Service] Using AI extraction for transaction...');
@@ -80,7 +92,7 @@ export async function processQuery(
     const currentHour = now.getHours();
 
     // Always use Claude to extract transaction details for better accuracy
-    const extractionPrompt = `You are a transaction data extraction assistant. Extract transaction details from the user's natural language query.
+    const extractionPrompt = `Extract transaction details from the user's query and return ONLY the JSON object, nothing else.
 
 Query: "${query}"
 
@@ -89,37 +101,19 @@ Context:
 - Current hour: ${currentHour}
 - Available accounts: ${accountNames.join(', ')}
 
-Instructions:
-1. Extract the AMOUNT the user spent (required, must be a number)
-2. Extract the MERCHANT or item description (what they bought, e.g., "Shopee", "McDonald's", "Pizza" - NOT the account name)
-3. Extract the CATEGORY from this list: Food, Groceries, Transport, Fuel, Shopping, Entertainment, Bills, Utilities, Health, Fitness, Home, Education, Pets, Travel, Subscriptions, Gifts
-4. Extract the TIME if mentioned (convert phrases like "afternoon" to 15:00, "lunch time" to 12:30, "morning" to 09:00, "just now" to ${currentHour}:00)
-5. Extract the ACCOUNT name if mentioned (match against available accounts above, return ONLY the account name without the type in parentheses)
+Extract:
+1. AMOUNT (required number)
+2. MERCHANT (what they bought, e.g., "Pizza", "McDonald's" - NOT the account name)
+3. CATEGORY: Food, Groceries, Transport, Fuel, Shopping, Entertainment, Bills, Utilities, Health, Fitness, Home, Education, Pets, Travel, Subscriptions, Gifts
+4. TIME (convert "afternoon"→15:00, "lunch"→12:30, "morning"→09:00, "just now"→${currentHour}:00)
+5. ACCOUNT (match name from available accounts, exclude (type), or null)
 
-CRITICAL: If user says "Trust account" or "Trust card" and you see "Trust (credit)" in the available accounts, return "Trust" as the account, NOT "Trust (credit)".
-CRITICAL: The merchant field should be what they bought (e.g., "Pizza", "Uber ride"), NOT the payment method or account.
-
-Return ONLY valid JSON (no markdown, no code blocks, no explanations):
-{
-  "amount": number (required),
-  "merchant": string (what they bought),
-  "category": string (from list above),
-  "time": string (HH:MM format in 24hr),
-  "account": string or null (just the account name, or null)
-}
+Return ONLY this JSON (no markdown, no text before or after):
+{"amount": number, "merchant": string, "category": string, "time": string, "account": string|null}
 
 Examples:
-Query: "I bought Shopee for 5 dollars this afternoon"
-{"amount": 5, "merchant": "Shopee", "category": "Shopping", "time": "15:00", "account": null}
-
-Query: "Had lunch at McDonald's for $12 using my Trust account"
-{"amount": 12, "merchant": "McDonald's", "category": "Food", "time": "12:30", "account": "Trust"}
-
-Query: "Uber ride cost me $15 yesterday morning"
-{"amount": 15, "merchant": "Uber", "category": "Transport", "time": "09:00", "account": null}
-
-Query: "Spent $50 on groceries just now"
-{"amount": 50, "merchant": "Groceries", "category": "Groceries", "time": "${currentHour}:00", "account": null}`;
+"5.31 for pizza" → {"amount": 5.31, "merchant": "Pizza", "category": "Food", "time": "${currentHour}:00", "account": null}
+"$12 at McDonald's using Trust card" → {"amount": 12, "merchant": "McDonald's", "category": "Food", "time": "${currentHour}:00", "account": "Trust"}`;
 
     const aiResult = await callClaude(
       [{ role: 'user', content: extractionPrompt }],
@@ -136,10 +130,15 @@ Query: "Spent $50 on groceries just now"
 
     if (!('error' in aiResult)) {
       try {
-        console.log('[AI Service] Raw AI response:', aiResult.content);
+        // Extract text from response (OpenAI returns array, we need string)
+        const textContent = Array.isArray(aiResult.content)
+          ? aiResult.content.find((c: any) => c.type === 'text')?.text || ''
+          : aiResult.content;
+
+        console.log('[AI Service] Raw AI response:', textContent);
 
         // Parse AI response - handle both raw JSON and JSON in markdown blocks
-        let jsonText = aiResult.content.trim();
+        let jsonText = textContent.trim();
 
         // Remove markdown code blocks if present
         if (jsonText.startsWith('```')) {
@@ -199,11 +198,11 @@ Query: "Spent $50 on groceries just now"
           };
           console.log('[AI Service] AI extraction successful:', extractedData);
         } else {
-          console.error('[AI Service] No JSON found in response:', aiResult.content);
+          console.error('[AI Service] No JSON found in response:', textContent);
         }
       } catch (error) {
         console.error('[AI Service] Failed to parse AI extraction:', error);
-        console.error('[AI Service] Raw response was:', aiResult.content);
+        console.error('[AI Service] Raw response was:', textContent);
         // Use fallback data
       }
     } else {
@@ -241,87 +240,32 @@ Query: "Spent $50 on groceries just now"
     };
   }
 
-  // Step 3: Handle direct responses (no AI needed)
-  if (intent.directResponse && !intent.needsAI) {
-    const conversationManager = getConversationManager(getMemoryTurns());
-    conversationManager.addUserMessage(query, { intent });
+  // NO MORE directResponse or aggregatedData - GPT-4o Mini handles everything via tools
 
-    const assistantMsg = conversationManager.addAssistantMessage(intent.directResponse, {
-      directResponse: true
-    });
-
-    return {
-      message: {
-        id: assistantMsg.id,
-        role: 'assistant',
-        content: intent.directResponse,
-        timestamp: assistantMsg.timestamp,
-        metadata: { intent, cached: true }
-      }
-    };
-  }
-
-  // Step 3: Aggregate relevant data locally
-  let aggregatedData: AggregatedData | null = null;
-
-  try {
-    aggregatedData = aggregateDataForIntent(intent);
-    console.log('[AI Service] Data aggregated:', aggregatedData?.summary);
-  } catch (error) {
-    console.error('[AI Service] Data aggregation error:', error);
-  }
-
-  // Step 4: If simple query with aggregated data, return direct answer
-  if (intent.type === IntentType.SIMPLE_QUERY && aggregatedData && intent.directResponse) {
-    // For balance/net worth queries, use aggregated data
-    const conversationManager = getConversationManager(getMemoryTurns());
-    conversationManager.addUserMessage(query, { intent });
-
-    const response = aggregatedData.summary;
-    const assistantMsg = conversationManager.addAssistantMessage(response, {
-      aggregatedData,
-      directResponse: true
-    });
-
-    return {
-      message: {
-        id: assistantMsg.id,
-        role: 'assistant',
-        content: response,
-        timestamp: assistantMsg.timestamp,
-        metadata: { intent, aggregatedData, cached: true }
-      }
-    };
-  }
-
-  // Step 5: Build context for Claude
-  const conversationManager = getConversationManager(getMemoryTurns());
-  conversationManager.addUserMessage(query, { intent, aggregatedData });
+  // Step 3: Build context and call GPT-4o Mini
+  conversationManager.addUserMessage(query, { intent });
 
   // Get conversation history
   const contextMessages = conversationManager.getContextMessages();
 
-  // Add current query with aggregated data
+  // Build messages for API
   const messages: ClaudeMessage[] = contextMessages.map(msg => ({
     role: msg.role,
     content: msg.content
   }));
 
-  // If we have aggregated data, enhance the current query
-  if (aggregatedData && messages.length > 0) {
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage.role === 'user') {
-      lastMessage.content = `${lastMessage.content}\n\n[Context: ${aggregatedData.summary}]`;
-    }
-  }
+  console.log('[AI Service] Calling API with', messages.length, 'messages');
+  console.log('[AI Service] Last 3 messages:', contextMessages.slice(-3).map(m => ({
+    role: m.role,
+    content: typeof m.content === 'string' ? m.content.substring(0, 100) : '[complex]'
+  })));
 
-  console.log('[AI Service] Calling Claude with', messages.length, 'messages');
-
-  // Step 6: Call Claude API
+  // Step 4: Call API with tool support
   const result = await callClaude(messages, {
     skipCache: options?.skipCache,
     maxTokens: getMaxTokens(),
-    temperature: AI_CONFIG.API.TEMPERATURE
+    temperature: AI_CONFIG.API.TEMPERATURE,
+    tools: AI_TOOLS // Enable tool calling
   });
 
   // Step 7: Handle errors
@@ -338,14 +282,100 @@ Query: "Spent $50 on groceries just now"
         role: 'assistant',
         content: errorResponse,
         timestamp: assistantMsg.timestamp,
-        metadata: { intent, aggregatedData, error: true }
+        metadata: { intent, error: true }
       }
     };
   }
 
-  // Step 8: Process successful response
+  // Step 8: Handle tool use (if Claude requests data)
   const claudeResponse = result as ClaudeResponse;
-  const assistantMsg = conversationManager.addAssistantMessage(claudeResponse.content, {
+  const toolUseBlocks = claudeResponse.content.filter((c: any) => c.type === 'tool_use');
+
+  if (toolUseBlocks.length > 0) {
+    console.log('[AI Service] Claude requested', toolUseBlocks.length, 'tools');
+
+    // Execute all requested tools
+    const toolResults = toolUseBlocks.map((toolUse: any) => {
+      const result = executeTool(toolUse.name, toolUse.input, toolUse.id);
+      console.log('[AI Service] Tool result:', result);
+      return result;
+    });
+
+    // Add assistant message with tool use to conversation history
+    conversationManager.addAssistantMessage('[Using tools to fetch data]', {
+      toolCalls: toolUseBlocks.map((t: any) => ({ name: t.name, input: t.input }))
+    });
+
+    // Add assistant message with tool use to API messages
+    messages.push({
+      role: 'assistant',
+      content: claudeResponse.content
+    });
+
+    // Add tool results to API messages
+    messages.push({
+      role: 'user',
+      content: toolResults.map(r => ({
+        type: 'tool_result',
+        tool_use_id: r.tool_use_id,
+        content: r.content
+      }))
+    });
+
+    // Add tool results to conversation history for context
+    const toolResultsSummary = toolResults.map(r => `${r.content.substring(0, 200)}...`).join('\n');
+    conversationManager.addUserMessage(`[Tool results: ${toolResultsSummary}]`, {
+      toolResults: true
+    });
+
+    // Call Claude again with tool results
+    const finalResult = await callClaude(messages, {
+      skipCache: true, // Don't cache tool-based responses
+      maxTokens: getMaxTokens(),
+      temperature: AI_CONFIG.API.TEMPERATURE,
+      tools: AI_TOOLS
+    });
+
+    if ('error' in finalResult) {
+      const errorResponse = formatErrorResponse(finalResult);
+      return {
+        message: {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: errorResponse,
+          timestamp: Date.now(),
+          metadata: { intent, error: true }
+        }
+      };
+    }
+
+    // Extract final text response
+    const finalResponse = finalResult as ClaudeResponse;
+    const textContent = finalResponse.content.find((c: any) => c.type === 'text')?.text || 'No response';
+
+    const assistantMsg = conversationManager.addAssistantMessage(textContent, {
+      usage: finalResponse.usage,
+      toolUsed: true
+    });
+
+    return {
+      message: {
+        id: assistantMsg.id,
+        role: 'assistant',
+        content: textContent,
+        timestamp: assistantMsg.timestamp,
+        metadata: {
+          intent,
+          usage: finalResponse.usage,
+          toolUsed: true
+        }
+      }
+    };
+  }
+
+  // Step 9: No tool use - process text response
+  const textContent = claudeResponse.content.find((c: any) => c.type === 'text')?.text || '';
+  const assistantMsg = conversationManager.addAssistantMessage(textContent, {
     usage: claudeResponse.usage,
     cached: claudeResponse.stop_reason === 'cached'
   });
@@ -353,11 +383,10 @@ Query: "Spent $50 on groceries just now"
   const aiMessage: AIMessage = {
     id: assistantMsg.id,
     role: 'assistant',
-    content: claudeResponse.content,
+    content: textContent,
     timestamp: assistantMsg.timestamp,
     metadata: {
       intent,
-      aggregatedData: aggregatedData || undefined,
       usage: claudeResponse.usage,
       cached: claudeResponse.stop_reason === 'cached'
     }

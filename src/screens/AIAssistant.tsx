@@ -40,7 +40,7 @@ export default function AIAssistant() {
   const nav = useNavigation();
   const { add: addTransaction } = useTxStore();
   const { addLot } = useInvestStore();
-  const { accounts } = useAccountsStore();
+  const { accounts, hydrate: hydrateAccounts } = useAccountsStore();
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [input, setInput] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
@@ -55,6 +55,11 @@ export default function AIAssistant() {
   // Expanding bubble animation
   const bubbleScale = React.useRef(new Animated.Value(0)).current;
   const bubbleOpacity = React.useRef(new Animated.Value(0)).current;
+
+  // Hydrate accounts on mount
+  React.useEffect(() => {
+    hydrateAccounts();
+  }, [hydrateAccounts]);
 
   // Load persisted messages on mount
   React.useEffect(() => {
@@ -255,8 +260,6 @@ export default function AIAssistant() {
   }, [accounts]);
 
   const handleConfirmTransaction = async (data: TransactionData | PortfolioTransactionData) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
     if (pendingConfirmation?.type === 'transaction') {
       const txData = data as TransactionData;
 
@@ -283,6 +286,7 @@ export default function AIAssistant() {
           category: txData.category || 'Food & Dining',
           date: dateISO,
           note: txData.merchant || 'Added via AI Assistant',
+          account: txData.account,
         });
 
         // Add transaction to store
@@ -295,20 +299,34 @@ export default function AIAssistant() {
           account: txData.account,
         });
 
-        // Add success message
-        const successMsg: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          text: `✅ Transaction added: $${txData.amount?.toFixed(2)}${txData.merchant ? ' at ' + txData.merchant : ''}. Check your Spending tab!`,
-          timestamp: new Date(),
-        };
-        setMessages(prev => [successMsg, ...prev]);
+        // Verify transaction was added by checking store
+        const { transactions } = useTxStore.getState();
+        const wasAdded = transactions && transactions.length > 0 &&
+          transactions[0].amount === txData.amount &&
+          transactions[0].note === (txData.merchant || 'Added via AI Assistant');
+
+        if (wasAdded) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          console.log('[AIAssistant] Transaction verified in store');
+
+          // Add success message
+          const successMsg: Message = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            text: `✅ Transaction logged: $${txData.amount?.toFixed(2)}${txData.merchant ? ' at ' + txData.merchant : ''}${txData.account ? ' using ' + txData.account : ''}. Check your Spending tab!`,
+            timestamp: new Date(),
+          };
+          setMessages(prev => [successMsg, ...prev]);
+        } else {
+          throw new Error('Transaction not found in store after adding');
+        }
       } catch (error) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         console.error('[AIAssistant] Error adding transaction:', error);
         const errorMsg: Message = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          text: '❌ Failed to add transaction. Please try again.',
+          text: '❌ Failed to log transaction. Please try again or add it manually in the Spending tab.',
           timestamp: new Date(),
         };
         setMessages(prev => [errorMsg, ...prev]);
@@ -369,6 +387,58 @@ export default function AIAssistant() {
     );
   };
 
+  // Format AI messages with better visuals (but no bold)
+  const FormattedMessage = ({ text, textColor }: { text: string; textColor: string }) => {
+    const lines = text.split('\n');
+    const elements: JSX.Element[] = [];
+
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
+
+      // Skip empty lines
+      if (!trimmed) {
+        elements.push(<View key={`space-${idx}`} style={{ height: spacing.s8 }} />);
+        return;
+      }
+
+      // Bullet points (- or • or *)
+      if (trimmed.match(/^[-•*]\s+/)) {
+        const content = trimmed.replace(/^[-•*]\s+/, '').replace(/\*\*/g, ''); // Remove ** markup
+        elements.push(
+          <View key={idx} style={{ flexDirection: 'row', marginBottom: spacing.s4 }}>
+            <Text style={{ color: get('accent.primary') as string, fontSize: 15, marginRight: spacing.s8 }}>•</Text>
+            <Text style={{ color: textColor, fontSize: 15, lineHeight: 22, flex: 1 }}>{content}</Text>
+          </View>
+        );
+        return;
+      }
+
+      // Numbered lists (1. or 2. etc)
+      const numberedMatch = trimmed.match(/^(\d+)\.\s+(.+)$/);
+      if (numberedMatch) {
+        const [, num, content] = numberedMatch;
+        const cleanContent = content.replace(/\*\*/g, ''); // Remove ** markup
+        elements.push(
+          <View key={idx} style={{ flexDirection: 'row', marginBottom: spacing.s4 }}>
+            <Text style={{ color: get('accent.primary') as string, fontSize: 15, marginRight: spacing.s8 }}>{num}.</Text>
+            <Text style={{ color: textColor, fontSize: 15, lineHeight: 22, flex: 1 }}>{cleanContent}</Text>
+          </View>
+        );
+        return;
+      }
+
+      // Regular text - just remove any ** markup
+      const cleanText = trimmed.replace(/\*\*/g, '');
+      elements.push(
+        <Text key={idx} style={{ color: textColor, fontSize: 15, lineHeight: 22, marginBottom: spacing.s4 }}>
+          {cleanText}
+        </Text>
+      );
+    });
+
+    return <View>{elements}</View>;
+  };
+
   const renderMessage = ({ item, index }: { item: Message; index: number }) => {
     const isUser = item.role === 'user';
     const isCached = item.metadata?.cached;
@@ -404,9 +474,13 @@ export default function AIAssistant() {
               elevation: 2,
             }}
           >
-            <Text style={{ color: isUser ? '#FFFFFF' : text, fontSize: 15, lineHeight: 22 }} selectable>
-              {item.text}
-            </Text>
+            {isUser ? (
+              <Text style={{ color: '#FFFFFF', fontSize: 15, lineHeight: 22 }} selectable>
+                {item.text}
+              </Text>
+            ) : (
+              <FormattedMessage text={item.text} textColor={text} />
+            )}
           </Pressable>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.s6, marginHorizontal: spacing.s8, alignSelf: isUser ? 'flex-end' : 'flex-start', gap: spacing.s6 }}>
             <Text style={{ color: muted, fontSize: 11 }}>
@@ -473,11 +547,11 @@ export default function AIAssistant() {
             {/* Floating Gradient Header - positioned absolutely over content */}
             <LinearGradient
             colors={[
-              bg,
-              bg,
-              withAlpha(bg, 0.95),
               withAlpha(bg, 0.8),
+              withAlpha(bg, 0.7),
               withAlpha(bg, 0.5),
+              withAlpha(bg, 0.3),
+              withAlpha(bg, 0.1),
               withAlpha(bg, 0)
             ]}
             style={{
@@ -637,11 +711,11 @@ export default function AIAssistant() {
             <LinearGradient
               colors={[
                 withAlpha(bg, 0),
+                withAlpha(bg, 0.1),
+                withAlpha(bg, 0.3),
                 withAlpha(bg, 0.5),
-                withAlpha(bg, 0.8),
-                withAlpha(bg, 0.95),
-                bg,
-                bg
+                withAlpha(bg, 0.7),
+                withAlpha(bg, 0.8)
               ]}
               style={{
                 paddingTop: spacing.s48,

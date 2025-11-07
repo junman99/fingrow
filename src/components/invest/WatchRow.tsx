@@ -145,7 +145,7 @@ export default function WatchRow({ sym, onPress, portfolioCurrency }: { sym: str
         <View style={{ alignItems: 'flex-end', gap: spacing.s2 }}>
           <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
             <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>
-              {last.toFixed(2)}
+              {formatCurrency(last, cur).replace(/[^\d,.-]/g, '')}
             </Text>
             <Text style={{ color: muted, fontSize: 11, marginLeft: 3, fontWeight: '600' }}>
               {cur}

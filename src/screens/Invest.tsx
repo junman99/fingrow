@@ -986,14 +986,14 @@ export const Invest = React.memo(() => {
         <View>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: spacing.s4 }}>
             <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.8 }}>
-              {hideAmounts ? '••••••' : totalValue.toFixed(2)}
+              {hideAmounts ? '••••••' : formatCurrency(totalValue, cur).replace(/[^\d,.-]/g, '')}
             </Text>
             <Text style={{ color: textMuted, fontSize: 14, marginLeft: spacing.s6, fontWeight: '600' }}>
               {cur}
             </Text>
           </View>
           <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s8 }}>
-            {hideAmounts ? '•••' : `Holdings: ${holdingsValue.toFixed(2)} ${cur}`} · {hideAmounts ? '•••' : `Cash: ${cashValue.toFixed(2)} ${cur}`}
+            {hideAmounts ? '•••' : `Holdings: ${formatCurrency(holdingsValue, cur).replace(/[^\d,.-]/g, '')} ${cur}`} · {hideAmounts ? '•••' : `Cash: ${formatCurrency(cashValue, cur).replace(/[^\d,.-]/g, '')} ${cur}`}
           </Text>
 
           {/* Day's Gain */}

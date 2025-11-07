@@ -1,5 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, Alert, Pressable, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { useAnimatedStyle, useSharedValue, useAnimatedScrollHandler, interpolate, Extrapolate } from 'react-native-reanimated';
 import { ScreenScroll } from '../../components/ScreenScroll';
 import Button from '../../components/Button';
 import Icon from '../../components/Icon';
@@ -23,10 +26,60 @@ export default function ManageMembers() {
   const { get, isDark } = useThemeTokens();
   const route = useRoute<any>();
   const nav = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const { groupId } = (route?.params ?? {}) as { groupId: string };
   const { groups, archiveMember, deleteMember } = useGroupsStore();
   const group = groups.find(g => g.id === groupId);
   const [showArchived, setShowArchived] = useState(false);
+
+  // Main Tab Title Animation
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+
+  const originalTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+    return {
+      opacity: 1 - progress,
+    };
+  });
+
+  const floatingTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+    const fontSize = interpolate(progress, [0, 1], [28, 20]);
+    const fontWeight = interpolate(progress, [0, 1], [800, 700]);
+    return {
+      fontSize,
+      fontWeight: fontWeight.toString() as any,
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
 
   const textPrimary = get('text.primary') as string;
   const textMuted = get('text.muted') as string;
@@ -36,6 +89,7 @@ export default function ManageMembers() {
   const accentPrimary = get('accent.primary') as string;
   const dangerColor = get('semantic.danger') as string;
   const successColor = get('semantic.success') as string;
+  const bgDefault = get('background.default') as string;
 
   if (!group) {
     return (
@@ -196,7 +250,7 @@ export default function ManageMembers() {
                 borderColor: withAlpha(dangerColor, 0.3),
               })}
             >
-              <Icon name="trash-2" size={16} color={dangerColor} />
+              <Icon name="trash" size={16} color={dangerColor} />
               <Text style={{ color: dangerColor, fontWeight: '600', fontSize: 14 }}>Delete</Text>
             </Pressable>
           )}
@@ -209,32 +263,84 @@ export default function ManageMembers() {
   const archived = group.members.filter(m => m.archived);
 
   return (
-    <ScreenScroll contentStyle={{ paddingBottom: spacing.s32 }}>
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s20 }}>
-        {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
-          <Pressable
-            onPress={() => nav.goBack()}
-            style={({ pressed }) => ({
-              padding: spacing.s8,
-              marginLeft: -spacing.s8,
-              borderRadius: radius.md,
-              backgroundColor: pressed ? surface1 : 'transparent',
-            })}
-            hitSlop={8}
+    <>
+      {/* Main Tab Title Animation - Floating Gradient Header (Fixed at top, outside scroll) */}
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            top: -insets.top,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            pointerEvents: 'none',
+          },
+          gradientAnimatedStyle,
+        ]}
+      >
+        <LinearGradient
+          colors={[
+            bgDefault,
+            bgDefault,
+            withAlpha(bgDefault, 0.95),
+            withAlpha(bgDefault, 0.8),
+            withAlpha(bgDefault, 0.5),
+            withAlpha(bgDefault, 0)
+          ]}
+          style={{
+            paddingTop: insets.top + spacing.s16,
+            paddingBottom: spacing.s32 + spacing.s20,
+            paddingHorizontal: spacing.s16,
+          }}
+        >
+          <Animated.Text
+            style={[
+              {
+                color: textPrimary,
+                fontSize: 20,
+                fontWeight: '700',
+                letterSpacing: -0.5,
+                textAlign: 'center',
+              },
+              floatingTitleAnimatedStyle,
+            ]}
           >
-            <Icon name="chevron-left" size={28} color={textPrimary} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
-              Manage Members
-            </Text>
-            <Text style={{ color: textMuted, fontSize: 13, marginTop: spacing.s4 }}>
-              {active.length} active {active.length === 1 ? 'member' : 'members'}
-              {archived.length > 0 && ` • ${archived.length} archived`}
-            </Text>
+            Manage Members
+          </Animated.Text>
+        </LinearGradient>
+      </Animated.View>
+
+      <ScreenScroll
+        inTab
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        contentStyle={{
+          paddingTop: spacing.s16,
+          paddingBottom: spacing.s24
+        }}
+      >
+        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s20 }}>
+          {/* Header */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12, marginBottom: spacing.s8 }}>
+            <Pressable
+              onPress={() => nav.goBack()}
+              style={({ pressed }) => ({
+                padding: spacing.s8,
+                marginLeft: -spacing.s8,
+                marginTop: -spacing.s4,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? surface1 : 'transparent',
+              })}
+              hitSlop={8}
+            >
+              <Icon name="x" size={28} color={textPrimary} />
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Animated.Text style={[{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 }, originalTitleAnimatedStyle]}>
+                Manage Members
+              </Animated.Text>
+            </View>
           </View>
-        </View>
 
         {/* Add Member Button */}
         <Button
@@ -247,7 +353,7 @@ export default function ManageMembers() {
         {/* Active Members */}
         <View>
           <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16, marginBottom: spacing.s12 }}>
-            Active Members
+            Active Members ({active.length})
           </Text>
           {active.length === 0 ? (
             <View style={{
@@ -267,7 +373,7 @@ export default function ManageMembers() {
                 justifyContent: 'center',
                 marginBottom: spacing.s12,
               }}>
-                <Icon name="users" size={28} colorToken="accent.primary" />
+                <Icon name="users-2" size={28} colorToken="accent.primary" />
               </View>
               <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>No active members</Text>
               <Text style={{ color: textMuted, fontSize: 13, marginTop: spacing.s4, textAlign: 'center' }}>
@@ -309,5 +415,6 @@ export default function ManageMembers() {
         )}
       </View>
     </ScreenScroll>
+    </>
   );
 }

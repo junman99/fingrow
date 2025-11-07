@@ -444,20 +444,6 @@ const AccountsList: React.FC = () => {
               )}
             </CollapsibleSection>
 
-            {/* Credit Cards */}
-            <CollapsibleSection
-              title="Credit Cards"
-              icon="credit-card"
-              count={categorizedAccounts.credit.length}
-              total={totals.credit}
-              color={warningColor}
-              defaultExpanded={false}
-            >
-              {categorizedAccounts.credit.map((account, index) =>
-                renderAccount(account, warningColor, index === categorizedAccounts.credit.length - 1)
-              )}
-            </CollapsibleSection>
-
             {/* Loans & Mortgages */}
             <CollapsibleSection
               title="Loans & Mortgages"

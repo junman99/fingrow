@@ -15,6 +15,7 @@ type Tx = {
   date: string;
   type?: 'expense' | 'income';
   category?: string;
+  account?: string;
 };
 
 export const TransactionRow: React.FC<{
@@ -71,13 +72,14 @@ export const TransactionRow: React.FC<{
       <GestureDetector gesture={pan}>
         <Animated.View style={[styles.row, rowStyle]}>
           <Pressable
-            onPress={() => nav.navigate('EditTransaction', { id: tx.id })}
+            onPress={() => nav.navigate('Add', { id: tx.id })}
             style={[styles.inner, { borderBottomColor: get('border.subtle') as string }, isLast ? { borderBottomWidth: 0 } : { borderBottomWidth: StyleSheet.hairlineWidth }]}
           >
             <View style={{ flex: 1 }}>
               <Text style={{ color: get('text.primary') as string, fontWeight: '600' }}>{tx.title || tx.category || 'Transaction'}</Text>
               <Text style={{ color: get('text.muted') as string, fontSize: 12 }}>
                 {new Date(tx.date).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                {tx.account && ` • ${tx.account}`}
               </Text>
             </View>
             <Text style={{ color: get('text.primary') as string, fontWeight: '700' }}>

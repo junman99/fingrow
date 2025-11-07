@@ -107,12 +107,12 @@ export default function HoldingHistory() {
           <View style={{ flexDirection: 'row', gap: spacing.s8, marginBottom: spacing.s8 }}>
             <View style={{ flex: 1, backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s12 }}>
               <Text style={{ color: muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.s4 }}>Shares</Text>
-              <Text style={{ color: text, fontSize: 20, fontWeight: '800' }}>{pnl.qty}</Text>
+              <Text style={{ color: text, fontSize: 20, fontWeight: '800' }}>{pnl.qty.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}</Text>
             </View>
             <View style={{ flex: 1, backgroundColor: get('surface.level1') as string, borderRadius: radius.lg, padding: spacing.s12 }}>
               <Text style={{ color: muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.s4 }}>Avg Cost</Text>
               <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                <Text style={{ color: text, fontSize: 20, fontWeight: '800' }}>{pnl.avgCost.toFixed(2)}</Text>
+                <Text style={{ color: text, fontSize: 20, fontWeight: '800' }}>{pnl.avgCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
                 <Text style={{ color: muted, fontSize: 12, marginLeft: 3, fontWeight: '600' }}>{cur}</Text>
               </View>
             </View>
@@ -123,7 +123,7 @@ export default function HoldingHistory() {
               <Text style={{ color: muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.s4 }}>Realized</Text>
               <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
                 <Text style={{ color: (pnl.realized >= 0 ? get('semantic.success') : get('semantic.danger')) as string, fontSize: 18, fontWeight: '800' }}>
-                  {pnl.realized.toFixed(2)}
+                  {pnl.realized.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
                 <Text style={{ color: muted, fontSize: 12, marginLeft: 3, fontWeight: '600' }}>{cur}</Text>
               </View>
@@ -132,7 +132,7 @@ export default function HoldingHistory() {
               <Text style={{ color: muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.s4 }}>Unrealized</Text>
               <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
                 <Text style={{ color: (pnl.unrealized >= 0 ? get('semantic.success') : get('semantic.danger')) as string, fontSize: 18, fontWeight: '800' }}>
-                  {pnl.unrealized.toFixed(2)}
+                  {pnl.unrealized.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
                 <Text style={{ color: muted, fontSize: 12, marginLeft: 3, fontWeight: '600' }}>{cur}</Text>
               </View>

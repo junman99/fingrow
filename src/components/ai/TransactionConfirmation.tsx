@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { View, Text, Pressable, TextInput } from 'react-native';
+import { View, Text, Pressable, TextInput, Modal, ScrollView } from 'react-native';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
 import Icon from '../Icon';
@@ -55,9 +55,7 @@ export default function TransactionConfirmation({ type, data, onConfirm, onCance
   });
   const [customAccountName, setCustomAccountName] = React.useState('');
   const [showCustomInput, setShowCustomInput] = React.useState(false);
-  const [showAccountDropdown, setShowAccountDropdown] = React.useState(false);
-  const [dropdownLayout, setDropdownLayout] = React.useState({ y: 0, height: 0 });
-  const accountRowRef = React.useRef<any>(null);
+  const [showAccountModal, setShowAccountModal] = React.useState(false);
 
   const text = get('text.primary') as string;
   const muted = get('text.muted') as string;
@@ -66,7 +64,7 @@ export default function TransactionConfirmation({ type, data, onConfirm, onCance
   const accent = get('accent.primary') as string;
   const border = get('border.subtle') as string;
   const success = get('semantic.success') as string;
-  const error = get('semantic.error') as string;
+  const danger = get('semantic.danger') as string;
 
   const handleConfirm = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -164,117 +162,26 @@ export default function TransactionConfirmation({ type, data, onConfirm, onCance
           </View>
 
           {/* Account - Tappable */}
-          <View
-            style={{ position: 'relative' }}
-            ref={accountRowRef}
-            onLayout={(event) => {
-              accountRowRef.current?.measureInWindow((x: number, y: number, width: number, height: number) => {
-                setDropdownLayout({ y, height });
-              });
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setShowAccountModal(true);
             }}
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              opacity: pressed ? 0.7 : 1,
+            })}
           >
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setShowAccountDropdown(!showAccountDropdown);
-              }}
-              style={({ pressed }) => ({
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                opacity: pressed ? 0.7 : 1,
-              })}
-            >
-              <Text style={{ color: muted, fontSize: 13 }}>Account</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
-                <Text style={{ color: accent, fontSize: 14, fontWeight: '600' }}>
-                  {selectedAccountName || 'Select account'}
-                </Text>
-                <Icon name="chevron-down" size={16} colorToken="accent.primary" />
-              </View>
-            </Pressable>
-
-            {/* Floating Account Dropdown */}
-            {showAccountDropdown && suggestedAccounts && suggestedAccounts.length > 0 && (() => {
-              // Calculate if dropdown should appear above or below
-              const screenHeight = 800; // Approximate screen height
-              const dropdownHeight = Math.min(suggestedAccounts.length * 44 + 16, 200);
-              const spaceBelow = screenHeight - (dropdownLayout.y + dropdownLayout.height);
-              const showAbove = spaceBelow < dropdownHeight + 20 && dropdownLayout.y > dropdownHeight + 20;
-
-              return (
-                <View
-                  style={{
-                    position: 'absolute',
-                    ...(showAbove ? { bottom: 28 } : { top: 28 }),
-                    right: 0,
-                    backgroundColor: surface1,
-                    borderRadius: radius.lg,
-                    padding: spacing.s6,
-                    borderWidth: 1,
-                    borderColor: border,
-                    maxHeight: 200,
-                    zIndex: 1000,
-                    shadowColor: '#000000',
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.15,
-                    shadowRadius: 12,
-                    elevation: 8,
-                  }}
-                >
-                  {suggestedAccounts.map((account, index) => {
-                    const isSelected = selectedAccountName === account.name;
-                    return (
-                      <Pressable
-                        key={account.id}
-                        onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setSelectedAccountName(account.name);
-                          setShowAccountDropdown(false);
-                        }}
-                        style={({ pressed }) => ({
-                          backgroundColor: isSelected ? accent + '15' : 'transparent',
-                          borderRadius: radius.md,
-                          padding: spacing.s8,
-                          paddingHorizontal: spacing.s12,
-                          marginBottom: index < suggestedAccounts.length - 1 ? spacing.s2 : 0,
-                          opacity: pressed ? 0.7 : 1,
-                          flexDirection: 'row',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          gap: spacing.s24,
-                        })}
-                      >
-                        {/* Left: Account Type */}
-                        <Text
-                          style={{
-                            color: muted,
-                            fontSize: 11,
-                            textTransform: 'capitalize',
-                            fontWeight: '600',
-                            minWidth: 60,
-                          }}
-                        >
-                          {account.kind || 'Account'}
-                        </Text>
-                        {/* Right: Account Name */}
-                        <Text
-                          style={{
-                            color: isSelected ? accent : text,
-                            fontSize: 14,
-                            fontWeight: isSelected ? '700' : '600',
-                            flexShrink: 0,
-                          }}
-                        >
-                          {account.name}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              );
-            })()}
-          </View>
+            <Text style={{ color: muted, fontSize: 13 }}>Account</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
+              <Text style={{ color: accent, fontSize: 14, fontWeight: '600' }}>
+                {selectedAccountName || 'Select account'}
+              </Text>
+              <Icon name="chevron-down" size={16} colorToken="accent.primary" />
+            </View>
+          </Pressable>
 
           {/* Date */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -296,7 +203,7 @@ export default function TransactionConfirmation({ type, data, onConfirm, onCance
               opacity: pressed ? 0.7 : 1,
             })}
           >
-            <Text style={{ color: error, fontSize: 14, fontWeight: '600' }}>Cancel</Text>
+            <Text style={{ color: danger, fontSize: 14, fontWeight: '600' }}>Cancel</Text>
           </Pressable>
 
           <Pressable
@@ -313,6 +220,72 @@ export default function TransactionConfirmation({ type, data, onConfirm, onCance
             <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '600' }}>Confirm & Add</Text>
           </Pressable>
         </View>
+
+        {/* Account Selection Modal */}
+        <Modal
+          visible={showAccountModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowAccountModal(false)}
+        >
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
+            onPress={() => setShowAccountModal(false)}
+          >
+            <Pressable onPress={(e) => e.stopPropagation()}>
+              <View style={{
+                backgroundColor: surface1,
+                borderRadius: radius.lg,
+                padding: spacing.s16,
+                width: 300,
+                maxHeight: 400,
+                borderWidth: 1,
+                borderColor: border,
+              }}>
+                <Text style={{ color: text, fontSize: 16, fontWeight: '700', marginBottom: spacing.s12 }}>
+                  Select Account
+                </Text>
+                <ScrollView style={{ maxHeight: 300 }}>
+                  {suggestedAccounts && suggestedAccounts.map((account) => {
+                    const isSelected = selectedAccountName === account.name;
+                    return (
+                      <Pressable
+                        key={account.id}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setSelectedAccountName(account.name);
+                          setShowAccountModal(false);
+                        }}
+                        style={({ pressed }) => ({
+                          backgroundColor: isSelected ? accent + '15' : 'transparent',
+                          borderRadius: radius.md,
+                          padding: spacing.s12,
+                          marginBottom: spacing.s8,
+                          opacity: pressed ? 0.7 : 1,
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        })}
+                      >
+                        <View>
+                          <Text style={{ color: text, fontSize: 14, fontWeight: '600' }}>
+                            {account.name}
+                          </Text>
+                          <Text style={{ color: muted, fontSize: 12, textTransform: 'capitalize' }}>
+                            {account.kind || 'Account'}
+                          </Text>
+                        </View>
+                        {isSelected && (
+                          <Icon name="check" size={20} colorToken="accent.primary" />
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </View>
     );
   }

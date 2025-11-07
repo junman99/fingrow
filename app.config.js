@@ -23,6 +23,8 @@ module.exports = {
     extra: {
       FMP_API_KEY: process.env.FMP_API_KEY,
       CLAUDE_API_KEY: process.env.CLAUDE_API_KEY,
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      FINNHUB_API_KEY: process.env.FINNHUB_API_KEY, // Optional
     }
   }
 };

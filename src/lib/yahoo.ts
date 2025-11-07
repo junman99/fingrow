@@ -7,6 +7,8 @@ export type YahooBar = { date: number; open: number; high: number; low: number; 
 
 export function toYahooSymbol(userSymbol: string): string {
   if (!userSymbol) return '';
+  // Keep ^ prefix for indices (^GSPC, ^DJI, etc.)
+  // Only strip exchange suffix like .SI, .L, .HK
   return userSymbol.toUpperCase().replace(/\.[A-Z]+$/, '');
 }
 

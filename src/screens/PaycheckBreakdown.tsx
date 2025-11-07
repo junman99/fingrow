@@ -167,21 +167,18 @@ const PaycheckBreakdown: React.FC = () => {
   // State for manual calculator
   const [calculatorAmount, setCalculatorAmount] = useState('');
 
-  // Animation for breakdown appearance
-  const breakdownHeight = useSharedValue(0);
+  // Animation for breakdown appearance - simple fade in from top
   const breakdownOpacity = useSharedValue(0);
+  const breakdownTranslateY = useSharedValue(-20);
 
   // Animate breakdown when it appears/disappears
   useEffect(() => {
     if (calculatorAmount && parseFloat(calculatorAmount) > 0) {
-      breakdownHeight.value = withSpring(1, {
-        damping: 20,
-        stiffness: 200,
-      });
-      breakdownOpacity.value = withTiming(1, { duration: 300 });
+      breakdownOpacity.value = withTiming(1, { duration: 400 });
+      breakdownTranslateY.value = withTiming(0, { duration: 400 });
     } else {
-      breakdownHeight.value = withTiming(0, { duration: 200 });
       breakdownOpacity.value = withTiming(0, { duration: 200 });
+      breakdownTranslateY.value = withTiming(-20, { duration: 200 });
     }
   }, [calculatorAmount]);
 
@@ -189,10 +186,7 @@ const PaycheckBreakdown: React.FC = () => {
     opacity: breakdownOpacity.value,
     transform: [
       {
-        scaleY: breakdownHeight.value,
-      },
-      {
-        translateY: (1 - breakdownHeight.value) * -50,
+        translateY: breakdownTranslateY.value,
       },
     ],
   }));

@@ -19,12 +19,14 @@ import Constants from 'expo-constants';
 interface EnvironmentConfig {
   FMP_API_KEY: string;
   CLAUDE_API_KEY: string;
+  OPENAI_API_KEY: string;
+  FINNHUB_API_KEY?: string; // Optional - user may not have Finnhub
 }
 
 /**
  * Get environment variable with fallback and validation
  */
-function getEnvVar(key: keyof EnvironmentConfig): string {
+function getEnvVar(key: keyof EnvironmentConfig, required: boolean = true): string | undefined {
   // Try expo-constants first (for EAS builds and expo environment)
   const expoValue = Constants.expoConfig?.extra?.[key];
   if (expoValue && typeof expoValue === 'string') {
@@ -37,14 +39,18 @@ function getEnvVar(key: keyof EnvironmentConfig): string {
     return processValue;
   }
 
-  // If no value found, throw a helpful error
-  throw new Error(
-    `Missing required environment variable: ${key}\n\n` +
-    `Please create a .env file in the project root and add:\n` +
-    `${key}=your_${key.toLowerCase()}_here\n\n` +
-    `For local development, run: npx expo start --clear\n` +
-    `For EAS builds, add to eas.json env section.`
-  );
+  // If no value found and required, throw a helpful error
+  if (required) {
+    throw new Error(
+      `Missing required environment variable: ${key}\n\n` +
+      `Please create a .env file in the project root and add:\n` +
+      `${key}=your_${key.toLowerCase()}_here\n\n` +
+      `For local development, run: npx expo start --clear\n` +
+      `For EAS builds, add to eas.json env section.`
+    );
+  }
+
+  return undefined;
 }
 
 /**
@@ -71,10 +77,12 @@ function validateKey(key: string, keyName: string, expectedPrefix?: string): voi
 class Environment {
   private _fmpApiKey: string | null = null;
   private _claudeApiKey: string | null = null;
+  private _openaiApiKey: string | null = null;
+  private _finnhubApiKey: string | null | undefined = undefined; // undefined = not loaded yet, null = not provided
 
   get FMP_API_KEY(): string {
     if (!this._fmpApiKey) {
-      this._fmpApiKey = getEnvVar('FMP_API_KEY');
+      this._fmpApiKey = getEnvVar('FMP_API_KEY')!;
       validateKey(this._fmpApiKey, 'FMP_API_KEY');
     }
     return this._fmpApiKey;
@@ -82,10 +90,29 @@ class Environment {
 
   get CLAUDE_API_KEY(): string {
     if (!this._claudeApiKey) {
-      this._claudeApiKey = getEnvVar('CLAUDE_API_KEY');
+      this._claudeApiKey = getEnvVar('CLAUDE_API_KEY')!;
       validateKey(this._claudeApiKey, 'CLAUDE_API_KEY', 'sk-ant-');
     }
     return this._claudeApiKey;
+  }
+
+  get OPENAI_API_KEY(): string {
+    if (!this._openaiApiKey) {
+      this._openaiApiKey = getEnvVar('OPENAI_API_KEY')!;
+      validateKey(this._openaiApiKey, 'OPENAI_API_KEY', 'sk-');
+    }
+    return this._openaiApiKey;
+  }
+
+  get FINNHUB_API_KEY(): string | null {
+    if (this._finnhubApiKey === undefined) {
+      const key = getEnvVar('FINNHUB_API_KEY', false); // Optional key
+      this._finnhubApiKey = key || null;
+      if (this._finnhubApiKey) {
+        validateKey(this._finnhubApiKey, 'FINNHUB_API_KEY');
+      }
+    }
+    return this._finnhubApiKey;
   }
 
   /**
@@ -108,6 +135,12 @@ class Environment {
       errors.push(`CLAUDE_API_KEY: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
+    try {
+      this.OPENAI_API_KEY;
+    } catch (error) {
+      errors.push(`OPENAI_API_KEY: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+
     return {
       valid: errors.length === 0,
       errors,
@@ -126,6 +159,8 @@ class Environment {
     return {
       FMP_API_KEY: this._fmpApiKey ? sanitize(this._fmpApiKey) : 'not loaded',
       CLAUDE_API_KEY: this._claudeApiKey ? sanitize(this._claudeApiKey) : 'not loaded',
+      OPENAI_API_KEY: this._openaiApiKey ? sanitize(this._openaiApiKey) : 'not loaded',
+      FINNHUB_API_KEY: this._finnhubApiKey ? sanitize(this._finnhubApiKey) : 'not provided',
     };
   }
 }

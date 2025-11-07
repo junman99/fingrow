@@ -199,7 +199,7 @@ const HoldingRow = React.memo(({ sym, onPress, portfolioId, variant = 'card' }: 
         <View style={{ alignItems: 'flex-end', gap: spacing.s2 }}>
           <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
             <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>
-              {val.toFixed(2)}
+              {formatCurrency(val, cur).replace(/[^\d,.-]/g, '')}
             </Text>
             <Text style={{ color: muted, fontSize: 11, marginLeft: 3, fontWeight: '600' }}>
               {cur}

@@ -180,7 +180,7 @@ const Row = ({ item, onRemove, onEdit }: { item: Tx; onRemove: () => void; onEdi
               fontSize: 13,
               marginTop: 2
             }}>
-              {fmtTime(d)} • {item.category}
+              {fmtTime(d)} • {item.category}{item.account ? ` • ${item.account}` : ''}
             </Text>
           </View>
 
@@ -497,7 +497,7 @@ export const Transactions: React.FC = () => {
   };
 
   const onEdit = (tx: Tx) => {
-    (nav as any).navigate('EditTransaction', { id: tx.id });
+    (nav as any).navigate('Add', { id: tx.id });
   };
 
   return (

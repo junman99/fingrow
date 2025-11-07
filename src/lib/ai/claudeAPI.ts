@@ -1,14 +1,15 @@
 /**
- * Claude API Wrapper
- * Handles communication with Anthropic's Claude API
+ * AI API Wrapper
+ * Routes to OpenAI or Anthropic based on config
  * Includes caching, rate limiting, and error handling
  */
 
 import { env } from '../../config/env';
 import { AI_CONFIG, SYSTEM_PROMPT } from '../../config/ai';
 import { useProfileStore } from '../../store/profile';
+import { callOpenAI, AIMessage, AIResponse as OpenAIResponse, AIError as OpenAIError } from './openaiAPI';
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
+const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const API_VERSION = '2023-06-01';
 
 // Simple in-memory cache
@@ -22,11 +23,17 @@ const rateLimitState = {
 
 export type ClaudeMessage = {
   role: 'user' | 'assistant';
-  content: string;
+  content: string | Array<{ type: string; [key: string]: any }>;
 };
 
 export type ClaudeResponse = {
-  content: string;
+  content: Array<{
+    type: 'text' | 'tool_use';
+    text?: string;
+    id?: string;
+    name?: string;
+    input?: any;
+  }>;
   usage: {
     input_tokens: number;
     output_tokens: number;
@@ -41,7 +48,7 @@ export type ClaudeError = {
 };
 
 /**
- * Call Claude API with rate limiting and caching
+ * Call Claude API with rate limiting, caching, and optional tool support
  */
 export async function callClaude(
   messages: ClaudeMessage[],
@@ -49,8 +56,16 @@ export async function callClaude(
     maxTokens?: number;
     temperature?: number;
     skipCache?: boolean;
+    tools?: Array<any>;
   }
 ): Promise<ClaudeResponse | ClaudeError> {
+  // Route to correct provider
+  if (AI_CONFIG.API.PROVIDER === 'openai') {
+    console.log('[AI] Routing to OpenAI');
+    return callOpenAI(messages as any, options) as Promise<ClaudeResponse | ClaudeError>;
+  }
+
+  // Original Anthropic code
   try {
     // CRITICAL: Enforce HAIKU-only policy to control costs
     const model = AI_CONFIG.API.MODEL;
@@ -105,21 +120,29 @@ export async function callClaude(
       tier: aiTier
     });
 
+    // Build request body
+    const requestBody: any = {
+      model: AI_CONFIG.API.MODEL,
+      max_tokens: maxTokens,
+      temperature,
+      system: SYSTEM_PROMPT,
+      messages
+    };
+
+    // Add tools if provided
+    if (options?.tools && options.tools.length > 0) {
+      requestBody.tools = options.tools;
+    }
+
     // Make API request
-    const response = await fetch(API_URL, {
+    const response = await fetch(ANTHROPIC_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': claudeKey,
         'anthropic-version': API_VERSION,
       },
-      body: JSON.stringify({
-        model: AI_CONFIG.API.MODEL,
-        max_tokens: maxTokens,
-        temperature,
-        system: SYSTEM_PROMPT,
-        messages
-      })
+      body: JSON.stringify(requestBody)
     });
 
     // Handle HTTP errors
@@ -151,8 +174,8 @@ export async function callClaude(
 
     const data = await response.json();
 
-    // Extract response
-    const content = data.content?.[0]?.text || '';
+    // Extract response (content is now an array)
+    const content = data.content || [];
     const usage = {
       input_tokens: data.usage?.input_tokens || 0,
       output_tokens: data.usage?.output_tokens || 0
@@ -160,14 +183,18 @@ export async function callClaude(
 
     console.log('[Claude] Response received', {
       tokens: usage,
-      cost: calculateCost(usage.input_tokens, usage.output_tokens)
+      cost: calculateCost(usage.input_tokens, usage.output_tokens),
+      hasToolUse: content.some((c: any) => c.type === 'tool_use')
     });
 
     // Update rate limits
     incrementRateLimit();
 
-    // Cache the response
-    cacheResponse(messages, content);
+    // Cache the response (only cache text responses, not tool use)
+    const textContent = content.find((c: any) => c.type === 'text')?.text || '';
+    if (textContent && !content.some((c: any) => c.type === 'tool_use')) {
+      cacheResponse(messages, textContent);
+    }
 
     return {
       content,

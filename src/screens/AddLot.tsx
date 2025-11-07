@@ -273,7 +273,7 @@ export const AddLot = React.memo(() => {
           {/* Price below header */}
           <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
             <Text style={{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.8 }}>
-              {Number(last || 0).toFixed(2)}
+              {Number(last || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </Text>
             <Text style={{ color: muted, fontSize: 14, marginLeft: spacing.s4, fontWeight: '600' }}>
               {cur}
@@ -742,7 +742,7 @@ export const AddLot = React.memo(() => {
               </View>
               <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
                 <Text style={{ color: muted, fontSize: 13 }}>Shares</Text>
-                <Text style={{ color: text, fontWeight: '600', fontSize: 14 }}>{qty}</Text>
+                <Text style={{ color: text, fontWeight: '600', fontSize: 14 }}>{qty.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}</Text>
               </View>
               <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
                 <Text style={{ color: muted, fontSize: 13 }}>Average cost</Text>

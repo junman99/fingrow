@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, Animated, Easing, Pressable } from 'react-native';
+import { View, Text, ScrollView, Animated, Easing, Pressable, AppState } from 'react-native';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing } from '../theme/tokens';
 import IndexDetailSheet from './invest/IndexDetailSheet';
@@ -15,15 +15,16 @@ type IndexData = {
 };
 
 // Major global indices - you can update these with real data from your store/API
+// Using correct Yahoo Finance ticker symbols
 const INDICES: IndexData[] = [
-  { symbol: 'SPX', name: 'S&P 500', currentValue: 5234.56, dayChange: 52.30, dayChangePct: 0.85, ytdChange: 812.45, ytdChangePct: 15.2 },
-  { symbol: 'DJI', name: 'Dow Jones', currentValue: 38245.60, dayChange: 245.60, dayChangePct: 0.62, ytdChange: 3250.10, ytdChangePct: 9.8 },
-  { symbol: 'IXIC', name: 'Nasdaq', currentValue: 16180.25, dayChange: 180.25, dayChangePct: 1.15, ytdChange: 2845.75, ytdChangePct: 22.4 },
-  { symbol: 'FTSE', name: 'FTSE 100', currentValue: 7815.40, dayChange: -15.40, dayChangePct: -0.22, ytdChange: 185.30, ytdChangePct: 2.5 },
-  { symbol: 'DAX', name: 'DAX', currentValue: 17098.75, dayChange: 98.75, dayChangePct: 0.58, ytdChange: 1825.60, ytdChangePct: 12.8 },
-  { symbol: 'N225', name: 'Nikkei 225', currentValue: 38125.80, dayChange: -125.80, dayChangePct: -0.35, ytdChange: 4250.90, ytdChangePct: 18.6 },
-  { symbol: 'HSI', name: 'Hang Seng', currentValue: 18320.50, dayChange: 320.50, dayChangePct: 1.45, ytdChange: -1250.30, ytdChangePct: -6.2 },
-  { symbol: 'STI', name: 'STI', currentValue: 3312.45, dayChange: 12.45, dayChangePct: 0.38, ytdChange: 245.80, ytdChangePct: 7.5 },
+  { symbol: '^GSPC', name: 'S&P 500', currentValue: 5234.56, dayChange: 52.30, dayChangePct: 0.85, ytdChange: 812.45, ytdChangePct: 15.2 },
+  { symbol: '^DJI', name: 'Dow Jones', currentValue: 38245.60, dayChange: 245.60, dayChangePct: 0.62, ytdChange: 3250.10, ytdChangePct: 9.8 },
+  { symbol: '^IXIC', name: 'Nasdaq', currentValue: 16180.25, dayChange: 180.25, dayChangePct: 1.15, ytdChange: 2845.75, ytdChangePct: 22.4 },
+  { symbol: '^FTSE', name: 'FTSE 100', currentValue: 7815.40, dayChange: -15.40, dayChangePct: -0.22, ytdChange: 185.30, ytdChangePct: 2.5 },
+  { symbol: '^GDAXI', name: 'DAX', currentValue: 17098.75, dayChange: 98.75, dayChangePct: 0.58, ytdChange: 1825.60, ytdChangePct: 12.8 },
+  { symbol: '^N225', name: 'Nikkei 225', currentValue: 38125.80, dayChange: -125.80, dayChangePct: -0.35, ytdChange: 4250.90, ytdChangePct: 18.6 },
+  { symbol: '^HSI', name: 'Hang Seng', currentValue: 18320.50, dayChange: 320.50, dayChangePct: 1.45, ytdChange: -1250.30, ytdChangePct: -6.2 },
+  { symbol: '^STI', name: 'STI', currentValue: 3312.45, dayChange: 12.45, dayChangePct: 0.38, ytdChange: 245.80, ytdChangePct: 7.5 },
 ];
 
 // Calculate US market status (NYSE/NASDAQ: 9:30 AM - 4:00 PM ET)
@@ -135,9 +136,11 @@ export const GlobalIndicesTicker: React.FC = () => {
   const { get } = useThemeTokens();
   const scrollX = React.useRef(new Animated.Value(0)).current;
   const [itemWidth, setItemWidth] = React.useState(0);
-  const scrollIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
+  const animationFrameRef = React.useRef<number | null>(null);
   const isUserScrollingRef = React.useRef(false);
   const initialScrollDoneRef = React.useRef(false);
+  const isPausedRef = React.useRef(false);
+  const lastTimestampRef = React.useRef<number | null>(null);
   const [marketStatus, setMarketStatus] = React.useState(getUSMarketStatus());
   const [selectedIndex, setSelectedIndex] = React.useState<IndexData | null>(null);
   const [showModal, setShowModal] = React.useState(false);
@@ -214,20 +217,45 @@ export const GlobalIndicesTicker: React.FC = () => {
     }
   }, [itemWidth, scrollX]);
 
-  // Auto-scroll effect with bidirectional wrapping
+  // Pause animation when app goes to background
+  React.useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        isPausedRef.current = false;
+        lastTimestampRef.current = null; // Reset timestamp to avoid jumps
+      } else {
+        isPausedRef.current = true;
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  // Auto-scroll effect with requestAnimationFrame (prevents speed issues when app is backgrounded)
   React.useEffect(() => {
     if (itemWidth === 0) return;
 
     const totalWidth = itemWidth * INDICES.length;
-    const scrollSpeed = 0.5; // pixels per frame
+    const scrollSpeed = 30; // pixels per second
 
     // Small delay to ensure initial scroll is complete
     const startDelay = setTimeout(() => {
-      const interval = setInterval(() => {
-        if (isUserScrollingRef.current) return;
+      const animate = (timestamp: number) => {
+        if (isUserScrollingRef.current || isPausedRef.current) {
+          lastTimestampRef.current = timestamp;
+          animationFrameRef.current = requestAnimationFrame(animate);
+          return;
+        }
+
+        // Calculate delta time for smooth animation regardless of frame rate
+        const deltaTime = lastTimestampRef.current ? (timestamp - lastTimestampRef.current) / 1000 : 0;
+        lastTimestampRef.current = timestamp;
 
         const currentScroll = (scrollX as any)._value;
-        let newScroll = currentScroll + scrollSpeed;
+        const scrollDelta = scrollSpeed * deltaTime;
+        let newScroll = currentScroll + scrollDelta;
 
         // Wrap forward when reaching end of segment
         if (newScroll >= totalWidth * 3) {
@@ -238,22 +266,22 @@ export const GlobalIndicesTicker: React.FC = () => {
         }
 
         scrollX.setValue(newScroll);
-      }, 16); // 60fps
+        animationFrameRef.current = requestAnimationFrame(animate);
+      };
 
-      scrollIntervalRef.current = interval;
+      animationFrameRef.current = requestAnimationFrame(animate);
     }, 100);
 
     return () => {
       clearTimeout(startDelay);
-      if (scrollIntervalRef.current) clearInterval(scrollIntervalRef.current);
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
   }, [itemWidth, scrollX]);
-
 
   // Cleanup
   React.useEffect(() => {
     return () => {
-      if (scrollIntervalRef.current) clearInterval(scrollIntervalRef.current);
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
   }, []);
 

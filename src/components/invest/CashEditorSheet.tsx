@@ -309,7 +309,7 @@ export default function CashEditorSheet({ visible, onClose, portfolioId, portfol
               ) : (
                 <View style={{ padding: spacing.s12, backgroundColor: cardBg, borderRadius: radius.md }}>
                   <Text style={{ color: muted, fontSize: 13 }}>
-                    1 {fromCurrency} = {exchangeRate.toFixed(4)} {toCurrency}
+                    1 {fromCurrency} = {exchangeRate.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })} {toCurrency}
                   </Text>
                 </View>
               )}
@@ -327,7 +327,7 @@ export default function CashEditorSheet({ visible, onClose, portfolioId, portfol
                     Converted to portfolio currency:
                   </Text>
                   <Text style={{ color: text, fontSize: 20, fontWeight: '800' }}>
-                    {convertedAmount.toFixed(2)} {toCurrency}
+                    {convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {toCurrency}
                   </Text>
                 </View>
               )}

@@ -489,7 +489,7 @@ const PortfolioListCard = React.memo(({ selectionMode, selectedIds, onToggleSele
                   <View>
                     <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
                       <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800' }}>
-                        {value.toFixed(2)}
+                        {formatCurrency(value, cur).replace(/[^\d,.-]/g, '')}
                       </Text>
                       <Text style={{ color: textMuted, fontSize: 13, marginLeft: spacing.s4, fontWeight: '600' }}>
                         {cur}

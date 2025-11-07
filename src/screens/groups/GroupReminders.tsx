@@ -7,6 +7,8 @@ import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { listReminders, toggleEnabled, cancel, getSettings, setSettings, selfTestOnce } from '../../lib/notifications';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { HomeStackParamList } from '../../navigation/HomeNavigator';
 
 function withAlpha(hex: string, alpha: number) {
   if (!hex || typeof hex !== 'string') return hex;
@@ -22,7 +24,7 @@ function withAlpha(hex: string, alpha: number) {
 export default function GroupReminders() {
   const { get, isDark } = useThemeTokens();
   const route = useRoute<any>();
-  const nav = useNavigation<any>();
+  const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const { groupId } = (route?.params ?? {}) as { groupId: string };
   const [rem, setRem] = useState<any[]>([]);
   const [enabled, setEnabled] = useState<boolean>(false);
@@ -101,14 +103,11 @@ export default function GroupReminders() {
             })}
             hitSlop={8}
           >
-            <Icon name="chevron-left" size={28} color={textPrimary} />
+            <Icon name="x" size={28} color={textPrimary} />
           </Pressable>
           <View style={{ flex: 1 }}>
             <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
               Reminders
-            </Text>
-            <Text style={{ color: textMuted, fontSize: 13, marginTop: spacing.s4 }}>
-              {rem.length} {rem.length === 1 ? 'reminder' : 'reminders'} active
             </Text>
           </View>
         </View>
@@ -166,9 +165,26 @@ export default function GroupReminders() {
 
         {/* Reminders List */}
         <View>
-          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16, marginBottom: spacing.s12 }}>
-            Active Reminders
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
+            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>
+              Active Reminders ({rem.length})
+            </Text>
+            <Pressable
+              onPress={() => nav.navigate('AddReminder', { groupId })}
+              style={({ pressed }) => ({
+                width: 32,
+                height: 32,
+                borderRadius: 16,
+                backgroundColor: accentPrimary,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: pressed ? 0.8 : 1,
+              })}
+              hitSlop={8}
+            >
+              <Icon name="plus" size={18} color="#FFFFFF" />
+            </Pressable>
+          </View>
 
           {rem.length === 0 ? (
             <View style={{

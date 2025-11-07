@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Screen } from '../components/Screen';
@@ -143,10 +143,15 @@ function evaluateExpression(expr: string): number {
 export default function Add() {
   const { get, isDark } = useThemeTokens();
   const nav = useNavigation<any>();
+  const route = useRoute<any>();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { accounts, hydrate: hydrateAccounts, updateAccountBalance, setDefaultAccount } = useAccountsStore();
+
+  // Edit mode: get transaction ID from route params
+  const editId = route.params?.id;
+  const { transactions, updateTransaction, remove } = useTxStore();
 
   // Quick time & account selection
   const [txDate, setTxDate] = useState<Date>(new Date());
@@ -184,6 +189,7 @@ export default function Add() {
   }
 
   const addTx = useTxStore(s => s.add);
+  const editingTx = useMemo(() => editId ? transactions.find(t => t.id === editId) : null, [editId, transactions]);
 
   const [mode, setMode] = useState<Mode>('expense');
   const [category, setCategory] = useState<Cat>(EXPENSE_CATS[0]);
@@ -191,14 +197,34 @@ export default function Add() {
   const [customExpenseCats, setCustomExpenseCats] = useState<Cat[]>([]);
   const [customIncomeCats, setCustomIncomeCats] = useState<Cat[]>([]);
 
-  // Update category when mode changes
+  // Populate form when editing
   useEffect(() => {
-    if (mode === 'expense') {
-      setCategory(EXPENSE_CATS[0]); // Food
-    } else {
-      setCategory(INCOME_CATS[0]); // Salary
+    if (editingTx) {
+      setMode(editingTx.type as Mode);
+      setExpr(String(Math.abs(editingTx.amount)));
+      setNote(editingTx.note || '');
+      setTxDate(new Date(editingTx.date));
+      setAccount(editingTx.account || '');
+
+      // Find matching category
+      const allCats = editingTx.type === 'expense' ? [...EXPENSE_CATS, ...customExpenseCats] : [...INCOME_CATS, ...customIncomeCats];
+      const matchedCat = allCats.find(c => c.label === editingTx.category);
+      if (matchedCat) {
+        setCategory(matchedCat);
+      }
     }
-  }, [mode]);
+  }, [editingTx, customExpenseCats, customIncomeCats]);
+
+  // Update category when mode changes (only if not editing)
+  useEffect(() => {
+    if (!editId) {
+      if (mode === 'expense') {
+        setCategory(EXPENSE_CATS[0]); // Food
+      } else {
+        setCategory(INCOME_CATS[0]); // Salary
+      }
+    }
+  }, [mode, editId]);
 
   const result = useMemo(() => evaluateExpression(expr), [expr]);
   const [toast, setToast] = useState<string>('');
@@ -651,18 +677,52 @@ export default function Add() {
       showToast('Enter an amount first');
       return false;
     }
-    await addTx({
-      type: mode as TxType,
-      amount: amt,
-      category: category?.label || (mode === 'expense' ? 'Expense' : 'Income'),
-      date: txDate.toISOString(),
-      note: note.trim() ? note.trim() : undefined,
-      account,
-    });
 
-    // Update account balance if account is selected
-    if (account) {
-      await updateAccountBalance(account, amt, mode === 'expense');
+    if (editId && editingTx) {
+      // Update existing transaction
+      await updateTransaction(editId, {
+        type: mode as TxType,
+        amount: amt,
+        category: category?.label || (mode === 'expense' ? 'Expense' : 'Income'),
+        date: txDate.toISOString(),
+        note: note.trim() ? note.trim() : undefined,
+        account,
+      });
+
+      // Update account balance - need to handle the difference
+      if (account && editingTx.account === account) {
+        // Same account, update with difference
+        const oldAmt = Math.abs(editingTx.amount);
+        const diff = amt - oldAmt;
+        if (diff !== 0) {
+          await updateAccountBalance(account, Math.abs(diff), mode === 'expense' ? diff > 0 : diff < 0);
+        }
+      } else {
+        // Different account or account changed
+        if (editingTx.account) {
+          // Reverse old transaction
+          await updateAccountBalance(editingTx.account, Math.abs(editingTx.amount), editingTx.type === 'income');
+        }
+        if (account) {
+          // Apply new transaction
+          await updateAccountBalance(account, amt, mode === 'expense');
+        }
+      }
+    } else {
+      // Create new transaction
+      await addTx({
+        type: mode as TxType,
+        amount: amt,
+        category: category?.label || (mode === 'expense' ? 'Expense' : 'Income'),
+        date: txDate.toISOString(),
+        note: note.trim() ? note.trim() : undefined,
+        account,
+      });
+
+      // Update account balance if account is selected
+      if (account) {
+        await updateAccountBalance(account, amt, mode === 'expense');
+      }
     }
 
     return true;
@@ -671,9 +731,14 @@ export default function Add() {
   const onAddAndStay = async () => {
     const ok = await addTxCommon();
     if (!ok) return;
-    showToast(`${mode === 'expense' ? '-' : '+'}$${result.toFixed(2)} added`, 2000);
-    setExpr('');
-    setHasEvaluated(false);
+    if (editId) {
+      // In edit mode, just close after saving
+      nav.goBack();
+    } else {
+      showToast(`${mode === 'expense' ? '-' : '+'}$${result.toFixed(2)} added`, 2000);
+      setExpr('');
+      setHasEvaluated(false);
+    }
   };
 
   const onSaveAndClose = async () => {
@@ -681,6 +746,17 @@ export default function Add() {
     if (!ok) return;
     setHasEvaluated(false);
     nav.goBack();
+  };
+
+  const handleDelete = () => {
+    if (!editId) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // Simple confirmation - just delete
+    setTimeout(async () => {
+      await remove(editId);
+      showToast('Transaction deleted');
+      nav.goBack();
+    }, 100);
   };
 
   const keypadHeader = (
@@ -760,15 +836,15 @@ export default function Add() {
                 </Pressable>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 28, letterSpacing: -0.5, marginTop: spacing.s2 }}>
-                    Choose category
+                    {editId ? 'Edit transaction' : 'Choose category'}
                   </Text>
-                  {deleteMode && (
+                  {deleteMode && !editId && (
                     <Text style={{ color: textMuted, marginTop: spacing.s4, fontSize: 13 }}>
                       Tap ✕ to delete custom categories
                     </Text>
                   )}
                 </View>
-                {deleteMode && (
+                {deleteMode && !editId && (
                   <Pressable
                     onPress={() => setDeleteMode(false)}
                     style={({ pressed }) => ({
@@ -781,6 +857,21 @@ export default function Add() {
                     })}
                   >
                     <Text style={{ color: textOnPrimary, fontWeight: '700', fontSize: 14 }}>Done</Text>
+                  </Pressable>
+                )}
+                {editId && !deleteMode && (
+                  <Pressable
+                    onPress={handleDelete}
+                    style={({ pressed }) => ({
+                      paddingHorizontal: spacing.s12,
+                      paddingVertical: spacing.s8,
+                      borderRadius: radius.pill,
+                      backgroundColor: get('semantic.danger') as string,
+                      opacity: pressed ? 0.85 : 1,
+                      marginTop: spacing.s2,
+                    })}
+                  >
+                    <Text style={{ color: textOnPrimary, fontWeight: '700', fontSize: 14 }}>Delete</Text>
                   </Pressable>
                 )}
               </View>

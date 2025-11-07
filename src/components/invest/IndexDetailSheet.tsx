@@ -1,9 +1,12 @@
 import React from 'react';
-import { View, Text, Modal, Pressable, ScrollView, Dimensions, PanResponder } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
+import BottomSheet from '../BottomSheet';
 import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius } from '../../theme/tokens';
 import LineChart from '../LineChart';
 import Icon from '../Icon';
+import { useInvestStore } from '../../store/invest';
+import { useProfileStore } from '../../store/profile';
 
 type IndexData = {
   symbol: string;
@@ -39,44 +42,44 @@ function generateSampleData(currentValue: number, days: number = 90) {
   return data;
 }
 
-// Index descriptions
+// Index descriptions (use Yahoo Finance ticker format with ^ prefix)
 const INDEX_INFO: Record<string, { description: string; components: string; methodology: string }> = {
-  SPX: {
+  '^GSPC': {
     description: 'The S&P 500 is a stock market index tracking the performance of 500 large companies listed on stock exchanges in the United States.',
     components: '500 of the largest U.S. publicly traded companies',
     methodology: 'Market-capitalization-weighted index',
   },
-  DJI: {
+  '^DJI': {
     description: 'The Dow Jones Industrial Average is a price-weighted index of 30 prominent companies traded on the NYSE and NASDAQ.',
     components: '30 large publicly owned U.S. companies',
     methodology: 'Price-weighted index',
   },
-  IXIC: {
+  '^IXIC': {
     description: 'The NASDAQ Composite includes more than 3,000 stocks listed on the NASDAQ exchange, heavily weighted toward technology companies.',
     components: '3,000+ stocks listed on NASDAQ',
     methodology: 'Market-capitalization-weighted index',
   },
-  FTSE: {
+  '^FTSE': {
     description: 'The FTSE 100 Index is a share index of the 100 companies listed on the London Stock Exchange with the highest market capitalization.',
     components: '100 largest companies on the LSE',
     methodology: 'Market-capitalization-weighted index',
   },
-  DAX: {
+  '^GDAXI': {
     description: 'The DAX is a stock market index consisting of the 40 major German blue chip companies trading on the Frankfurt Stock Exchange.',
     components: '40 major German blue chip companies',
     methodology: 'Free-float market-capitalization-weighted index',
   },
-  N225: {
+  '^N225': {
     description: 'The Nikkei 225 is a stock market index for the Tokyo Stock Exchange, comprising 225 large, publicly-owned companies in Japan.',
     components: '225 large publicly-owned Japanese companies',
     methodology: 'Price-weighted index',
   },
-  HSI: {
+  '^HSI': {
     description: 'The Hang Seng Index is a freefloat-adjusted market-capitalization-weighted stock market index of the largest companies on the Hong Kong Stock Exchange.',
     components: 'Largest companies on the Hong Kong Stock Exchange',
     methodology: 'Free-float market-capitalization-weighted index',
   },
-  STI: {
+  '^STI': {
     description: 'The Straits Times Index tracks the performance of the top 30 companies listed on the Singapore Exchange.',
     components: 'Top 30 companies on the Singapore Exchange',
     methodology: 'Market-capitalization-weighted index',
@@ -96,37 +99,76 @@ export default function IndexDetailSheet({ index, visible, onClose }: Props) {
   const borderSubtle = get('border.subtle') as string;
   const successColor = get('semantic.success') as string;
   const dangerColor = get('semantic.danger') as string;
+  const accentPrimary = get('accent.primary') as string;
+
+  const [timeframe, setTimeframe] = React.useState<'1D'|'5D'|'1M'|'3M'|'6M'|'YTD'|'1Y'|'ALL'>('6M');
+
+  const { quotes, refreshQuotes } = useInvestStore();
+  const { profile } = useProfileStore();
+
+  React.useEffect(() => {
+    if (visible && index?.symbol) {
+      // Refresh data in background (non-blocking)
+      console.log('📊 [IndexDetailSheet] Background refresh for:', index.symbol);
+      refreshQuotes([index.symbol]).catch((e) => {
+        console.error('📊 [IndexDetailSheet] Background refresh failed:', e);
+      });
+    }
+  }, [visible, index?.symbol]);
 
   const chartData = React.useMemo(() => {
     if (!index) return [];
-    return generateSampleData(index.currentValue, 90);
-  }, [index]);
 
-  // Pan responder for swipe down to dismiss
-  const panResponder = React.useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        // Only handle vertical swipes down
-        return gestureState.dy > 10 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        // Close if swiped down more than 100px
-        if (gestureState.dy > 100) {
-          onClose();
-        }
-      },
-    })
-  ).current;
+    // Get quote from store
+    const quote = quotes[index.symbol];
 
-  if (!index || !visible) {
-    console.log('📊 [IndexDetailSheet] Not rendering - index:', index?.symbol, 'visible:', visible);
+    // Use real data if available
+    if (quote && quote.bars && quote.bars.length > 0) {
+      const daysMap = { '1D': 1, '5D': 5, '1M': 30, '3M': 90, '6M': 180, 'YTD': 180, '1Y': 365, 'ALL': 9999 };
+      const days = daysMap[timeframe];
+      const cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
+
+      const filtered = quote.bars
+        .filter(b => {
+          // Handle both timestamp formats (milliseconds and seconds)
+          const timestamp = b.t > 10000000000 ? b.t : b.t * 1000;
+          return timestamp >= cutoff;
+        })
+        .map(b => {
+          // Handle both timestamp formats
+          const timestamp = b.t > 10000000000 ? b.t : b.t * 1000;
+          // bars from store have 'c' property (close price)
+          const value = b.c || 0;
+          return { t: timestamp, v: value };
+        })
+        .sort((a, b) => a.t - b.t);
+
+      if (filtered.length > 0) {
+        return filtered;
+      }
+    }
+
+    // Fallback to sample data
+    const daysMap = { '1D': 1, '5D': 5, '1M': 30, '3M': 90, '6M': 180, 'YTD': 180, '1Y': 365, 'ALL': 365 };
+    const days = daysMap[timeframe];
+    return generateSampleData(index.currentValue, days);
+  }, [index, timeframe, quotes]);
+
+  if (!index) {
     return null;
   }
 
-  console.log('📊 [IndexDetailSheet] Rendering for index:', index.symbol);
+  // Get quote from store
+  const quote = quotes[index.symbol];
 
-  const dayColor = index.dayChangePct >= 0 ? successColor : dangerColor;
+  // Use real data for display when available
+  const displayValue = quote && quote.last > 0 ? quote.last : index.currentValue;
+  const displayChange = quote ? quote.change : index.dayChange;
+  const displayChangePct = quote && quote.last > 0
+    ? (quote.change / (quote.last - quote.change)) * 100
+    : index.dayChangePct;
+
+  const dayColor = displayChangePct >= 0 ? successColor : dangerColor;
   const ytdColor = index.ytdChangePct >= 0 ? successColor : dangerColor;
 
   const info = INDEX_INFO[index.symbol] || {
@@ -135,45 +177,24 @@ export default function IndexDetailSheet({ index, visible, onClose }: Props) {
     methodology: 'Market-weighted index',
   };
 
-  // Calculate sample stats
-  const open = index.currentValue - index.dayChange * 0.5;
-  const high = index.currentValue + Math.abs(index.dayChange) * 0.3;
-  const low = index.currentValue - Math.abs(index.dayChange) * 0.7;
+  // Calculate stats from real data if available, otherwise use sample data
+  let open = index.currentValue - index.dayChange * 0.5;
+  let high = index.currentValue + Math.abs(index.dayChange) * 0.3;
+  let low = index.currentValue - Math.abs(index.dayChange) * 0.7;
 
-  const sheetBackground = isDark ? '#1A1A1A' : (surface0 || '#FFFFFF');
+  if (quote && quote.bars && quote.bars.length > 0) {
+    // Get today's bar (last bar)
+    const todayBar = quote.bars[quote.bars.length - 1];
+    if (todayBar) {
+      open = todayBar.o || todayBar.c || open;
+      high = todayBar.h || todayBar.c || high;
+      low = todayBar.l || todayBar.c || low;
+    }
+  }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable
-        onPress={() => {
-          console.log('📊 [IndexDetailSheet] Backdrop pressed, calling onClose');
-          onClose();
-        }}
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}
-      >
-        <Pressable
-          onPress={(e) => {
-            // Prevent backdrop from closing when tapping inside the sheet
-            e.stopPropagation();
-          }}
-          style={{
-            backgroundColor: sheetBackground,
-            borderTopLeftRadius: radius.xl,
-            borderTopRightRadius: radius.xl,
-            maxHeight: Dimensions.get('window').height * 0.85,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: 0.1,
-            shadowRadius: 8,
-            elevation: 8,
-          }}
-        >
-          {/* Handle bar with pan responder */}
-          <View {...panResponder.panHandlers} style={{ alignItems: 'center', paddingTop: spacing.s12, paddingBottom: spacing.s8 }}>
-            <View style={{ width: 40, height: 4, backgroundColor: borderSubtle, borderRadius: 2 }} />
-          </View>
-
-          <ScrollView style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s32 }}>
+    <BottomSheet visible={visible} onClose={onClose}>
+      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s32 }}>
             {/* Header */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.s16 }}>
               <View style={{ flex: 1 }}>
@@ -184,11 +205,11 @@ export default function IndexDetailSheet({ index, visible, onClose }: Props) {
                   {index.name}
                 </Text>
                 <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800' }}>
-                  {index.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {displayValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
                 <View style={{ flexDirection: 'row', gap: spacing.s12, marginTop: spacing.s8 }}>
                   <Text style={{ color: dayColor, fontSize: 14, fontWeight: '600' }}>
-                    {index.dayChangePct >= 0 ? '+' : ''}{index.dayChange.toFixed(2)} ({index.dayChangePct >= 0 ? '+' : ''}{index.dayChangePct.toFixed(2)}%)
+                    {displayChangePct >= 0 ? '+' : ''}{displayChange.toFixed(2)} ({displayChangePct >= 0 ? '+' : ''}{displayChangePct.toFixed(2)}%)
                   </Text>
                   <Text style={{ color: textMuted, fontSize: 14 }}>Today</Text>
                 </View>
@@ -214,6 +235,35 @@ export default function IndexDetailSheet({ index, visible, onClose }: Props) {
                 padding={{ left: 12, right: 12, bottom: 20, top: 10 }}
                 showCurrentLabel={false}
               />
+              {quote && quote.bars && (
+                <Text style={{ color: textMuted, fontSize: 10, marginTop: spacing.s4, textAlign: 'center' }}>
+                  Data from {profile.dataSource || 'Yahoo'} • {chartData.length} data points
+                </Text>
+              )}
+
+              {/* Time Interval Selector */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.s12 }}>
+                {(['1D','5D','1M','3M','6M','YTD','1Y','ALL'] as const).map(k => {
+                  const on = timeframe === k;
+                  return (
+                    <Pressable
+                      key={k}
+                      onPress={() => setTimeframe(k)}
+                      style={{ paddingHorizontal: spacing.s8, paddingVertical: spacing.s8 }}
+                    >
+                      <Text
+                        style={{
+                          color: on ? accentPrimary : textMuted,
+                          fontSize: on ? 14 : 12,
+                          fontWeight: on ? '800' : '600',
+                        }}
+                      >
+                        {k}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
 
             {/* Stats Grid */}
@@ -223,7 +273,7 @@ export default function IndexDetailSheet({ index, visible, onClose }: Props) {
                   Open
                 </Text>
                 <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>
-                  {open.toFixed(2)}
+                  {open.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
               </View>
               <View style={{ flex: 1, backgroundColor: surface1, padding: spacing.s12, borderRadius: radius.md }}>
@@ -231,7 +281,7 @@ export default function IndexDetailSheet({ index, visible, onClose }: Props) {
                   High
                 </Text>
                 <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>
-                  {high.toFixed(2)}
+                  {high.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
               </View>
               <View style={{ flex: 1, backgroundColor: surface1, padding: spacing.s12, borderRadius: radius.md }}>
@@ -239,7 +289,7 @@ export default function IndexDetailSheet({ index, visible, onClose }: Props) {
                   Low
                 </Text>
                 <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>
-                  {low.toFixed(2)}
+                  {low.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
               </View>
             </View>
@@ -282,9 +332,7 @@ export default function IndexDetailSheet({ index, visible, onClose }: Props) {
                 </View>
               </View>
             </View>
-          </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
+      </View>
+    </BottomSheet>
   );
 }

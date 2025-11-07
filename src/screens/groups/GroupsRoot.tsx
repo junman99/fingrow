@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { FlatList, View, Text, Pressable, Animated } from 'react-native';
+import { FlatList, View, Text, Pressable, Animated, Alert } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,14 +17,202 @@ import { useThemeTokens } from '../../theme/ThemeProvider';
 import { spacing, radius, elevation } from '../../theme/tokens';
 import { useGroupsStore } from '../../store/groups';
 import { useProfileStore } from '../../store/profile';
+import { useTxStore } from '../../store/transactions';
 import { formatCurrency, sum } from '../../lib/format';
+import type { ID } from '../../types/groups';
+
+// Settlement Transfer Row with Animation
+const SettlementTransferRow: React.FC<{
+  fromInitials: string;
+  toInitials: string;
+  amount: number;
+  warningColor: string;
+  successColor: string;
+  accentPrimary: string;
+  textPrimary: string;
+  textMuted: string;
+  surface2: string;
+  isDark: boolean;
+  formatCurrency: (n: number) => string;
+}> = ({ fromInitials, toInitials, amount, warningColor, successColor, accentPrimary, textPrimary, textMuted, surface2, isDark, formatCurrency }) => {
+  const flowAnim = useRef(new Animated.Value(0)).current;
+  const dotAnim1 = useRef(new Animated.Value(0)).current;
+  const dotAnim2 = useRef(new Animated.Value(0)).current;
+  const dotAnim3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Start flow animation
+    Animated.loop(
+      Animated.timing(flowAnim, {
+        toValue: 1,
+        duration: 2000,
+        useNativeDriver: false
+      })
+    ).start();
+
+    // Start dot animations with delays
+    Animated.loop(
+      Animated.timing(dotAnim1, {
+        toValue: 1,
+        duration: 1500,
+        useNativeDriver: true
+      })
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.delay(500),
+        Animated.timing(dotAnim2, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true
+        })
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.delay(1000),
+        Animated.timing(dotAnim3, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true
+        })
+      ])
+    ).start();
+  }, []);
+
+  const withAlphaLocal = (hex: string, alpha: number) => {
+    if (!hex || typeof hex !== 'string') return hex;
+    if (hex.startsWith('#')) {
+      const clean = hex.slice(1, 7);
+      const padded = clean.length === 6 ? clean : clean.padEnd(6, '0');
+      const a = Math.round(Math.min(Math.max(alpha, 0), 1) * 255).toString(16).padStart(2, '0');
+      return `#${padded}${a}`;
+    }
+    return hex;
+  };
+
+  const dotAnims = [dotAnim1, dotAnim2, dotAnim3];
+
+  return (
+    <View style={{
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: spacing.s14,
+      paddingHorizontal: spacing.s16,
+      backgroundColor: surface2,
+      borderRadius: radius.lg,
+      marginBottom: spacing.s8,
+      overflow: 'hidden'
+    }}>
+      {/* Animated gradient background */}
+      <Animated.View style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: '100%',
+        opacity: flowAnim.interpolate({
+          inputRange: [0, 0.5, 1],
+          outputRange: [0, 0.3, 0]
+        }),
+        transform: [{
+          translateX: flowAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [-300, 300]
+          })
+        }]
+      }}>
+        <View style={{
+          flex: 1,
+          backgroundColor: isDark
+            ? 'rgba(255, 153, 51, 0.15)'
+            : 'rgba(251, 146, 60, 0.15)'
+        }} />
+      </Animated.View>
+
+      {/* From member */}
+      <View style={{
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: withAlphaLocal(warningColor, isDark ? 0.25 : 0.2),
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: warningColor,
+        zIndex: 2
+      }}>
+        <Text style={{ color: warningColor, fontSize: 13, fontWeight: '800' }}>
+          {fromInitials}
+        </Text>
+      </View>
+
+      {/* Amount and flow line with animated dots */}
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', marginHorizontal: spacing.s12, zIndex: 1 }}>
+        <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700', marginBottom: spacing.s6 }}>
+          {formatCurrency(amount)}
+        </Text>
+        <View style={{ width: '100%', height: 2, backgroundColor: withAlphaLocal(textMuted, 0.2), position: 'relative' }}>
+          {/* Animated flowing dots */}
+          {dotAnims.map((dotAnim, i) => (
+            <Animated.View
+              key={i}
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: -2,
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: accentPrimary,
+                transform: [
+                  {
+                    translateX: dotAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, 200]
+                    })
+                  }
+                ],
+                opacity: dotAnim.interpolate({
+                  inputRange: [0, 0.2, 0.8, 1],
+                  outputRange: [0, 1, 1, 0]
+                })
+              }}
+            />
+          ))}
+        </View>
+      </View>
+
+      {/* To member */}
+      <View style={{
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: withAlphaLocal(successColor, isDark ? 0.25 : 0.2),
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: successColor,
+        zIndex: 2
+      }}>
+        <Text style={{ color: successColor, fontSize: 13, fontWeight: '800' }}>
+          {toInitials}
+        </Text>
+      </View>
+    </View>
+  );
+};
 
 export default function GroupsRoot() {
   const { get, isDark } = useThemeTokens();
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { groups, hydrate, balances } = useGroupsStore();
+  const { groups, hydrate, balances, addSettlement } = useGroupsStore();
+  const { add: addTransaction } = useTxStore();
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [settleUpGroupId, setSettleUpGroupId] = useState<string | null>(null);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -202,6 +390,92 @@ export default function GroupsRoot() {
     );
   };
 
+  // Calculate settlement plan (who pays who)
+  const calculateSettlementPlan = (groupId: string) => {
+    type Edge = { fromId: ID; toId: ID; amount: number };
+    const groupBal = balances(groupId);
+    const creditors: { id: ID; amt: number }[] = [];
+    const debtors: { id: ID; amt: number }[] = [];
+
+    Object.entries(groupBal).forEach(([id, v]) => {
+      const val = Math.round((v as number) * 100) / 100;
+      if (val > 0.009) creditors.push({ id: id as ID, amt: val });
+      else if (val < -0.009) debtors.push({ id: id as ID, amt: -val });
+    });
+
+    creditors.sort((a, b) => b.amt - a.amt);
+    debtors.sort((a, b) => b.amt - a.amt);
+
+    const edges: Edge[] = [];
+    let i = 0, j = 0;
+
+    while (i < debtors.length && j < creditors.length) {
+      const d = debtors[i];
+      const c = creditors[j];
+      const x = Math.min(d.amt, c.amt);
+      edges.push({ fromId: d.id, toId: c.id, amount: Math.round(x * 100) / 100 });
+      d.amt = Math.round((d.amt - x) * 100) / 100;
+      c.amt = Math.round((c.amt - x) * 100) / 100;
+      if (d.amt === 0) i++;
+      if (c.amt === 0) j++;
+    }
+
+    return edges;
+  };
+
+  const recordTransfers = async (groupId: string) => {
+    const group = groups.find(g => g.id === groupId);
+    if (!group) return;
+
+    const settlementPlan = calculateSettlementPlan(groupId);
+
+    if (settlementPlan.length === 0) {
+      Alert.alert('All settled', 'No transfers needed.');
+      return;
+    }
+
+    try {
+      const myMember = group.members.find((m: any) => (m.name || '').trim().toLowerCase() === meName);
+
+      // Record each settlement
+      for (const edge of settlementPlan) {
+        await addSettlement(group.id, edge.fromId, edge.toId, edge.amount);
+
+        // If I'm involved in this transfer, create a transaction in spending ledger
+        if (myMember && (edge.fromId === myMember.id || edge.toId === myMember.id)) {
+          const fromMember = group.members.find((m: any) => m.id === edge.fromId);
+          const toMember = group.members.find((m: any) => m.id === edge.toId);
+
+          if (edge.fromId === myMember.id) {
+            // I'm paying someone - create expense transaction
+            await addTransaction({
+              type: 'expense',
+              amount: edge.amount,
+              category: 'Shared Bill',
+              date: new Date().toISOString(),
+              note: `Payment to ${toMember?.name || 'member'} - ${group.name}`
+            });
+          } else if (edge.toId === myMember.id) {
+            // Someone is paying me - create income transaction
+            await addTransaction({
+              type: 'income',
+              amount: edge.amount,
+              category: 'Shared Bill',
+              date: new Date().toISOString(),
+              note: `Payment from ${fromMember?.name || 'member'} - ${group.name}`
+            });
+          }
+        }
+      }
+
+      setSettleUpGroupId(null);
+      await hydrate(); // Refresh group data
+      Alert.alert('Success', 'Transfers recorded successfully!');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || String(e));
+    }
+  };
+
   const Row = ({ item }: { item: any }) => {
     const activeMembers = item.members.filter((m: any) => !m.archived);
     const settled = item.unsettled <= 0.009;
@@ -320,7 +594,7 @@ export default function GroupsRoot() {
                 size="sm"
                 variant="primary"
                 title="Settle up"
-                onPress={() => nav.navigate('SettleUp', { groupId: item.id })}
+                onPress={() => setSettleUpGroupId(item.id)}
                 style={{ flex: 1 }}
               />
             )}
@@ -389,14 +663,13 @@ export default function GroupsRoot() {
             scrollEventThrottle={16}
             contentContainerStyle={{
               paddingHorizontal: spacing.s16,
-              paddingTop: insets.top + spacing.s16,
+              paddingTop: spacing.s16,
               paddingBottom: spacing.s32,
             }}
             ListHeaderComponentStyle={{ marginBottom: spacing.s16 }}
             ListHeaderComponent={(
-            <View>
-              <View style={{ paddingTop: spacing.s12 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8, marginBottom: spacing.s16 }}>
+            <View style={{ paddingTop: spacing.s12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8, marginBottom: spacing.s8 }}>
                   <Pressable
                     onPress={() => nav.goBack()}
                     style={({ pressed }) => ({
@@ -454,7 +727,6 @@ export default function GroupsRoot() {
                     caption={totals.theyOwe > 0.009 ? 'Give your pals a nudge' : 'Nothing outstanding'}
                   />
                 </View>
-              </View>
 
               <View style={{
                 marginTop: spacing.s16,
@@ -548,6 +820,142 @@ export default function GroupsRoot() {
           />
         </Animated.View>
       </Screen>
+
+      {/* Settle Up Modal */}
+      {settleUpGroupId && (() => {
+        const group = groups.find(g => g.id === settleUpGroupId);
+        if (!group) return null;
+
+        const settlementPlan = calculateSettlementPlan(settleUpGroupId);
+        const groupBal = balances(settleUpGroupId) || {};
+        const posVals = Object.values(groupBal).filter(v => (v as number) > 0);
+        const unsettledTotal = posVals.reduce((a: number, b: any) => a + Math.abs(b as number), 0);
+
+        const successColor = get('semantic.success') as string;
+        const warningColor = get('semantic.warning') as string;
+
+        return (
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: isDark ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.6)',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: spacing.s20,
+              zIndex: 100
+            }}
+          >
+            <Pressable
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+              onPress={() => setSettleUpGroupId(null)}
+            />
+            <View
+              style={{
+                width: '100%',
+                maxWidth: 400,
+                backgroundColor: surface1,
+                borderRadius: 24,
+                padding: spacing.s24,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 20 },
+                shadowOpacity: 0.4,
+                shadowRadius: 32,
+                elevation: 20
+              }}
+            >
+              {/* Close button */}
+              <Pressable
+                onPress={() => setSettleUpGroupId(null)}
+                style={({ pressed }) => ({
+                  position: 'absolute',
+                  top: spacing.s16,
+                  right: spacing.s16,
+                  padding: spacing.s8,
+                  borderRadius: radius.pill,
+                  backgroundColor: surface2,
+                  opacity: pressed ? 0.6 : 1,
+                  zIndex: 10
+                })}
+              >
+                <Icon name="x" size={20} color={textMuted} />
+              </Pressable>
+
+              {/* Icon & Title */}
+              <View style={{ alignItems: 'center', marginBottom: spacing.s20, marginTop: spacing.s8 }}>
+                <View style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: 36,
+                  backgroundColor: withAlpha(successColor, 0.15),
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: spacing.s16
+                }}>
+                  <Text style={{ fontSize: 36 }}>🎉</Text>
+                </View>
+                <Text style={{ color: textPrimary, fontSize: 26, fontWeight: '900', marginBottom: spacing.s6, textAlign: 'center' }}>
+                  Settle Up
+                </Text>
+                <Text style={{ color: textMuted, fontSize: 14, textAlign: 'center' }}>
+                  Outstanding balance: {formatCurrency(unsettledTotal)}
+                </Text>
+              </View>
+
+              {/* Settlement plan - who pays who */}
+              <View style={{ marginBottom: spacing.s24 }}>
+                {settlementPlan.map((edge, idx) => {
+                  const fromMember = group.members.find((m: any) => m.id === edge.fromId);
+                  const toMember = group.members.find((m: any) => m.id === edge.toId);
+                  const fromInitials = fromMember?.name.trim().split(/\s+/).slice(0, 2).map((p: string) => p[0]?.toUpperCase() || '').join('') || '?';
+                  const toInitials = toMember?.name.trim().split(/\s+/).slice(0, 2).map((p: string) => p[0]?.toUpperCase() || '').join('') || '?';
+
+                  return (
+                    <SettlementTransferRow
+                      key={idx}
+                      fromInitials={fromInitials}
+                      toInitials={toInitials}
+                      amount={edge.amount}
+                      warningColor={warningColor}
+                      successColor={successColor}
+                      accentPrimary={accentPrimary}
+                      textPrimary={textPrimary}
+                      textMuted={textMuted}
+                      surface2={surface2}
+                      isDark={isDark}
+                      formatCurrency={formatCurrency}
+                    />
+                  );
+                })}
+              </View>
+
+              {/* Action button */}
+              <Pressable
+                onPress={() => recordTransfers(settleUpGroupId)}
+                style={({ pressed }) => ({
+                  backgroundColor: accentPrimary,
+                  paddingVertical: spacing.s16,
+                  borderRadius: radius.xl,
+                  alignItems: 'center',
+                  shadowColor: accentPrimary,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                  elevation: 4,
+                  opacity: pressed ? 0.85 : 1
+                })}
+              >
+                <Text style={{ color: textOnPrimary, fontSize: 17, fontWeight: '800' }}>
+                  Record Transfer
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        );
+      })()}
     </>
   );
 }

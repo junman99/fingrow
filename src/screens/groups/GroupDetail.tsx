@@ -616,13 +616,19 @@ export default function GroupDetail() {
     const d = new Date(item.createdAt || Date.now());
     const time = fmtTime(d);
     const isLastInCard = groupIndex === groupCount - 1 && index === (billGroups[groupIndex].items.length - 1);
+
+    // Show bill amount, not outstanding
+    const billAmount = item.finalAmount;
     const amountPositive = item.outstanding > 0.009;
     const amountNegative = item.outstanding < -0.009;
-    const amountLabel = amountPositive
-      ? `+${formatCurrency(item.outstanding)}`
+
+    // Determine subtitle (You owe / You lent)
+    const subtitle = amountPositive
+      ? `You lent ${formatCurrency(item.outstanding)}`
       : amountNegative
-        ? `-${formatCurrency(Math.abs(item.outstanding))}`
-        : formatCurrency(0);
+        ? `You owe ${formatCurrency(Math.abs(item.outstanding))}`
+        : 'Settled';
+
     const amountColor = amountPositive
       ? successColor
       : amountNegative
@@ -737,13 +743,16 @@ export default function GroupDetail() {
               <Text numberOfLines={1} style={{ color: textPrimary, fontWeight: '700' }}>
                 {item.title || 'Untitled bill'}
               </Text>
-              <Text numberOfLines={1} style={{ color: textMuted, marginTop: 2 }}>
+              <Text numberOfLines={1} style={{ color: textMuted, marginTop: 2, fontSize: 12 }}>
                 {time} • {item.payerName}
+              </Text>
+              <Text numberOfLines={1} style={{ color: amountColor, marginTop: 2, fontSize: 12, fontWeight: '600' }}>
+                {subtitle}
               </Text>
             </View>
 
-            <Text style={{ color: amountColor, fontWeight: '700', marginLeft: spacing.s8 }}>
-              {amountLabel}
+            <Text style={{ color: textPrimary, fontWeight: '700', marginLeft: spacing.s8, fontSize: 16 }}>
+              {formatCurrency(billAmount)}
             </Text>
           </View>
         </Pressable>
@@ -813,10 +822,10 @@ export default function GroupDetail() {
         scrollEventThrottle={16}
         contentStyle={{
           paddingBottom: spacing.s32,
-          paddingTop: insets.top + spacing.s24,
+          paddingTop: spacing.s16,
         }}
       >
-        <Animated.View style={{ opacity: fadeAnim, paddingHorizontal: spacing.s16, gap: spacing.s20 }}>
+        <Animated.View style={{ opacity: fadeAnim, paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s20 }}>
           {/* Header with back button */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12 }}>
             <Pressable
@@ -1421,7 +1430,7 @@ export default function GroupDetail() {
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-                <Icon name="users" size={20} colorToken="accent.primary" />
+                <Icon name="users-2" size={20} colorToken="accent.primary" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>Manage members</Text>
@@ -1487,7 +1496,7 @@ export default function GroupDetail() {
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-                <Icon name="edit-3" size={20} colorToken="accent.primary" />
+                <Icon name="edit" size={20} colorToken="accent.primary" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>Edit group</Text>
@@ -1613,7 +1622,7 @@ export default function GroupDetail() {
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-                <Icon name="trash-2" size={20} color={dangerColor} />
+                <Icon name="trash" size={20} color={dangerColor} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: dangerColor, fontWeight: '700', fontSize: 15 }}>Delete group</Text>

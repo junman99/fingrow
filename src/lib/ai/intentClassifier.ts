@@ -159,7 +159,7 @@ export function classifyIntent(query: string): Intent {
   }
 
   // Unsupported - non-financial queries
-  if (/(?:weather|news|movie|recipe|sport|game)/i.test(q)) {
+  if (/(?:weather|news|movie|recipe|sport|game|hello|hi|hey|thanks|thank you)/i.test(q)) {
     return {
       type: IntentType.UNSUPPORTED,
       confidence: 'high',
@@ -168,12 +168,25 @@ export function classifyIntent(query: string): Intent {
     };
   }
 
-  // Default - let AI handle it
+  // Check if query contains financial keywords
+  const hasFinancialKeywords = /(?:money|dollar|spend|spent|paid|cost|price|buy|bought|sale|invest|stock|crypto|portfolio|account|balance|worth|budget|transaction|expense|income|saving)/i.test(q);
+
+  // Default - only use AI if query seems financial
+  if (hasFinancialKeywords) {
+    return {
+      type: IntentType.SPENDING_QUERY,
+      confidence: 'low',
+      needsAI: true,
+      params: {}
+    };
+  }
+
+  // Non-financial query - reject
   return {
-    type: IntentType.SPENDING_QUERY, // Default assumption
-    confidence: 'low',
-    needsAI: true,
-    params: {}
+    type: IntentType.UNSUPPORTED,
+    confidence: 'medium',
+    needsAI: false,
+    directResponse: "I can only help with your Fingrow financial data. Try asking about your spending, portfolio, or logging a transaction."
   };
 }
 
