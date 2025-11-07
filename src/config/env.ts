@@ -67,8 +67,6 @@ function validateKey(key: string, keyName: string, expectedPrefix?: string): voi
       `Please verify it's correct.`
     );
   }
-
-  
 }
 
 /**
