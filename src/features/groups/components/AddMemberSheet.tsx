@@ -1,10 +1,9 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, Alert, Pressable, TextInput, Animated as RNAnimated } from 'react-native';
-import { ScreenScroll } from '../../../components/ScreenScroll';
-import { useThemeTokens } from '../../../theme/ThemeProvider';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, Alert, Pressable, TextInput, Animated as RNAnimated, ScrollView } from 'react-native';
+import BottomSheet from '../../../components/BottomSheet';
 import Icon from '../../../components/Icon';
 import { spacing, radius } from '../../../theme/tokens';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
 import { useGroupsStore } from '../store';
 
 function withAlpha(hex: string, alpha: number) {
@@ -18,37 +17,34 @@ function withAlpha(hex: string, alpha: number) {
   return hex;
 }
 
-export default function AddMember() {
+type Props = {
+  visible: boolean;
+  onClose: () => void;
+  groupId: string;
+  memberId?: string;
+};
+
+export default function AddMemberSheet({ visible, onClose, groupId, memberId }: Props) {
   const { get, isDark } = useThemeTokens();
-  const route = useRoute<any>();
-  const nav = useNavigation<any>();
-  const { groupId, memberId, archiveToggle } = (route?.params ?? {}) as { groupId: string; memberId?: string; archiveToggle?: boolean };
-  const { groups, addMember, updateMember, archiveMember } = useGroupsStore();
+  const { groups, addMember, updateMember } = useGroupsStore();
   const group = groups.find(g => g.id === groupId);
   const member = group?.members.find(m => m.id === memberId);
 
   const [name, setName] = useState(member?.name || '');
   const [contact, setContact] = useState(member?.contact || '');
-  const fadeAnim = useRef(new RNAnimated.Value(0)).current;
 
   const textPrimary = get('text.primary') as string;
   const textMuted = get('text.muted') as string;
   const accentPrimary = get('accent.primary') as string;
   const surface1 = get('surface.level1') as string;
   const surface2 = get('surface.level2') as string;
-  const borderSubtle = get('border.subtle') as string;
 
   useEffect(() => {
-    if (archiveToggle && member) {
-      archiveMember(groupId, memberId!, !member.archived).then(() => nav.goBack());
+    if (visible) {
+      setName(member?.name || '');
+      setContact(member?.contact || '');
     }
-
-    RNAnimated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 400,
-      useNativeDriver: true,
-    }).start();
-  }, []);
+  }, [visible, member]);
 
   const onSave = async () => {
     if (!group) return;
@@ -61,7 +57,7 @@ export default function AddMember() {
       }
       await addMember(groupId, { name: name.trim(), contact: contact.trim() || undefined });
     }
-    nav.goBack();
+    onClose();
   };
 
   const canSave = name.trim().length > 0;
@@ -79,24 +75,17 @@ export default function AddMember() {
   const placeholder = withAlpha(textMuted, 0.6);
 
   return (
-    <RNAnimated.View style={{ flex: 1, opacity: fadeAnim }}>
-      <ScreenScroll inTab contentStyle={{ paddingBottom: spacing.s24 }}>
-        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s16 }}>
+    <BottomSheet visible={visible} onClose={onClose}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ flexGrow: 1 }}
+        automaticallyAdjustKeyboardInsets
+      >
+        <View style={{ gap: spacing.s12 }}>
           {/* Header */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.s12 }}>
-            <Pressable
-              onPress={() => nav.goBack()}
-              style={({ pressed }) => ({
-                position: 'absolute',
-                left: -spacing.s8,
-                padding: spacing.s8,
-                borderRadius: radius.md,
-                backgroundColor: pressed ? surface1 : 'transparent',
-              })}
-            >
-              <Icon name="chevron-left" size={28} color={textPrimary} />
-            </Pressable>
-            <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12 }}>
+            <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 20 }}>
               {member ? 'Edit Member' : 'Add Member'}
             </Text>
           </View>
@@ -201,7 +190,6 @@ export default function AddMember() {
               alignItems: 'center',
               justifyContent: 'center',
               opacity: pressed && canSave ? 0.85 : 1,
-              marginTop: spacing.s8,
             })}
           >
             <Text style={{
@@ -213,7 +201,7 @@ export default function AddMember() {
             </Text>
           </Pressable>
         </View>
-      </ScreenScroll>
-    </RNAnimated.View>
+      </ScrollView>
+    </BottomSheet>
   );
 }

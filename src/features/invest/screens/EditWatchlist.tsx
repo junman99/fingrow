@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, FlatList } from 'react-native';
-import { Screen } from '../components/Screen';
-import { spacing, radius } from '../theme/tokens';
-import { useThemeTokens } from '../theme/ThemeProvider';
+import { Screen } from '../../../components/Screen';
+import { spacing, radius } from '../../../theme/tokens';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import Icon from '../components/Icon';
+import Icon from '../../../components/Icon';
 import { useInvestStore } from '../store/invest';
 
 type Row = { key: string; sym: string };

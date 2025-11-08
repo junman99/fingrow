@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, Pressable, Alert } from 'react-native';
-import CenterModal from '../CenterModal';
+import CenterModal from '../../../components/CenterModal';
 import { useInvestStore } from '../store';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing } from '../../theme/tokens';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing } from '../../../theme/tokens';
 import MoveHoldingsSheet from './MoveHoldingsSheet';
-import { exportPortfolioCsv } from '../../lib/export';
+import { exportPortfolioCsv } from '../../../lib/export';
 
 type Props = {
   onStartDelete?: () => void;

@@ -1,16 +1,16 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { useThemeTokens } from '../theme/ThemeProvider';
-import { spacing, radius } from '../theme/tokens';
-import { Screen } from '../components/Screen';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
+import { Screen } from '../../../components/Screen';
 import TransactionRow from '../components/TransactionRow';
 import TransactionEditorSheet from '../components/TransactionEditorSheet';
 import { useInvestStore } from '../store/invest';
-import { computePnL } from '../lib/positions';
-import { formatCurrency } from '../lib/format';
-import { exportHoldingTxCsv } from '../lib/export';
-import Icon from '../components/Icon';
+import { computePnL } from '../../../lib/positions';
+import { formatCurrency } from '../../../lib/format';
+import { exportHoldingTxCsv } from '../../../lib/export';
+import Icon from '../../../components/Icon';
 
 export default function HoldingHistory() {
   const { get } = useThemeTokens();

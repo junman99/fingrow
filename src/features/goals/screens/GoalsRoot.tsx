@@ -11,7 +11,7 @@ import { useThemeTokens } from '../../../theme/ThemeProvider';
 import { spacing, radius } from '../../../theme/tokens';
 import { useGoalsStore, type Goal } from '../store';
 import { useAccountsStore } from '../../../store/accounts';
-import { useInvestStore } from '../../features/invest';
+import { useInvestStore } from '../../../features/invest';
 import { useTxStore } from '../../../store/transactions';
 import { formatCurrency } from '../../../lib/format';
 import Svg, { Circle, G } from 'react-native-svg';

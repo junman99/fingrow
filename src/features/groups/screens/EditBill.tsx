@@ -1,16 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, Alert, TextInput, Pressable, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, Alert, TextInput, Pressable, StyleSheet, ScrollView, Platform, Modal, TouchableWithoutFeedback } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { ScreenScroll } from '../../components/ScreenScroll';
-import Button from '../../components/Button';
-import Icon from '../../components/Icon';
-import DateTimeSheet from '../../components/DateTimeSheet';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { ScreenScroll } from '../../../components/ScreenScroll';
+import Button from '../../../components/Button';
+import Icon from '../../../components/Icon';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 import { useGroupsStore } from '../store';
-import { formatCurrency } from '../../lib/format';
-import type { ID } from '../../types/groups';
+import { formatCurrency } from '../../../lib/format';
+import type { ID } from '../../../types/groups';
 
 const KEY_ADVANCED_OPEN = 'fingrow/ui/addbill/advancedOpen';
 
@@ -66,7 +66,8 @@ export default function EditBill() {
 
   // Date & Time
   const [billDate, setBillDate] = useState(bill?.createdAt ? new Date(bill.createdAt) : new Date());
-  const [dtOpen, setDtOpen] = useState(false);
+  const [showDateTimePicker, setShowDateTimePicker] = useState(false);
+  const [showTimeOverlay, setShowTimeOverlay] = useState(false);
 
   const amountNum = useMemo(() => Number(amount) || 0, [amount]);
   const sumExacts = useMemo(() => participantIds.reduce((acc, id) => acc + (Number(exacts[id] || 0) || 0), 0), [exacts, participantIds]);
@@ -163,8 +164,8 @@ export default function EditBill() {
   const successColor = get('semantic.success') as string;
 
   const inputStyle = {
-    borderWidth: 1,
-    borderColor: borderSubtle,
+    
+    
     borderRadius: radius.lg,
     paddingVertical: spacing.s14,
     paddingHorizontal: spacing.s16,
@@ -253,7 +254,7 @@ export default function EditBill() {
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s16 }}>
             {/* Calendar button on left */}
             <Pressable
-              onPress={() => setDtOpen(true)}
+              onPress={() => setShowDateTimePicker(true)}
               style={({ pressed }) => ({
                 alignItems: 'center',
                 gap: spacing.s4,
@@ -509,8 +510,8 @@ export default function EditBill() {
         <View style={{
           backgroundColor: surface1,
           borderRadius: radius.xl,
-          borderWidth: 1,
-          borderColor: borderSubtle,
+          
+          
           overflow: 'hidden',
           marginBottom: spacing.s24
         }}>
@@ -644,8 +645,8 @@ export default function EditBill() {
           <View style={{
             backgroundColor: surface1,
             borderRadius: radius.lg,
-            borderWidth: 1,
-            borderColor: borderSubtle,
+            
+            
             overflow: 'hidden'
           }}>
             <Pressable
@@ -796,15 +797,196 @@ export default function EditBill() {
       </View>
     </ScreenScroll>
 
-    <DateTimeSheet
-      visible={dtOpen}
-      date={billDate}
-      onCancel={() => setDtOpen(false)}
-      onConfirm={(d) => {
-        setBillDate(d);
-        setDtOpen(false);
+    {/* Date & Time Picker Modal */}
+    <Modal
+      visible={showDateTimePicker}
+      transparent
+      animationType="fade"
+      onRequestClose={() => {
+        setShowDateTimePicker(false);
+        setShowTimeOverlay(false);
       }}
-    />
+    >
+      <View style={{
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: spacing.s16,
+      }}>
+        <TouchableWithoutFeedback onPress={() => {
+          setShowDateTimePicker(false);
+          setShowTimeOverlay(false);
+        }}>
+          <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }} />
+        </TouchableWithoutFeedback>
+
+        <View style={{
+          width: '100%',
+          maxWidth: 400,
+          backgroundColor: get('background.default') as string,
+          borderRadius: 20,
+          paddingHorizontal: spacing.s8,
+          paddingTop: spacing.s8,
+          paddingBottom: spacing.s8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.4,
+          shadowRadius: 24,
+          elevation: 12,
+          position: 'relative',
+        }}>
+          {/* Date Picker */}
+          <View style={{ alignItems: 'center' }}>
+            <DateTimePicker
+              value={billDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              onChange={(event, selectedDate) => {
+                if (selectedDate) {
+                  setBillDate(selectedDate);
+                }
+              }}
+              themeVariant={isDark ? 'dark' : 'light'}
+            />
+          </View>
+
+          {/* Time Selector Button - Bottom Right */}
+          <View style={{
+            flexDirection: 'row',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            marginTop: spacing.s4,
+            gap: spacing.s12,
+            paddingHorizontal: spacing.s4,
+          }}>
+            <Pressable
+              onPress={() => setShowTimeOverlay(!showTimeOverlay)}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.s8,
+                backgroundColor: get('surface.level1') as string,
+                paddingHorizontal: spacing.s16,
+                paddingVertical: spacing.s10,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: borderSubtle,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Icon name="clock" size={18} color={accentPrimary} />
+              <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
+                {billDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                setShowDateTimePicker(false);
+                setShowTimeOverlay(false);
+              }}
+              style={({ pressed }) => ({
+                backgroundColor: accentPrimary,
+                borderRadius: radius.lg,
+                paddingHorizontal: spacing.s20,
+                paddingVertical: spacing.s10,
+                opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <Text style={{ color: textOnPrimary, fontSize: 15, fontWeight: '700' }}>
+                Done
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Time Picker Overlay - Compact Modal */}
+          {showTimeOverlay && (
+            <View style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: [{ translateX: -140 }, { translateY: -125 }],
+              width: 280,
+              backgroundColor: get('background.default') as string,
+              borderRadius: 16,
+              padding: spacing.s16,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 12,
+              elevation: 10,
+            }}>
+              <TouchableWithoutFeedback>
+                <View style={{ alignItems: 'center' }}>
+                  <View style={{ height: 180, justifyContent: 'center', width: '100%' }}>
+                    <DateTimePicker
+                      value={billDate}
+                      mode="time"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={(event, selectedDate) => {
+                        if (selectedDate) {
+                          setBillDate(selectedDate);
+                        }
+                      }}
+                      themeVariant={isDark ? 'dark' : 'light'}
+                    />
+                  </View>
+
+                  {/* Buttons */}
+                  <View style={{
+                    flexDirection: 'row',
+                    gap: spacing.s10,
+                    marginTop: spacing.s12,
+                    width: '100%',
+                  }}>
+                    {/* Now button */}
+                    <Pressable
+                      onPress={() => {
+                        const now = new Date();
+                        setBillDate(now);
+                        setShowTimeOverlay(false);
+                      }}
+                      style={({ pressed }) => ({
+                        flex: 1,
+                        backgroundColor: get('surface.level1') as string,
+                        borderRadius: radius.lg,
+                        paddingVertical: spacing.s8,
+                        alignItems: 'center',
+                        borderWidth: 1,
+                        borderColor: borderSubtle,
+                        opacity: pressed ? 0.7 : 1,
+                      })}
+                    >
+                      <Text style={{ color: textPrimary, fontSize: 14, fontWeight: '600' }}>
+                        Now
+                      </Text>
+                    </Pressable>
+
+                    {/* Done button */}
+                    <Pressable
+                      onPress={() => setShowTimeOverlay(false)}
+                      style={({ pressed }) => ({
+                        flex: 1,
+                        backgroundColor: accentPrimary,
+                        borderRadius: radius.lg,
+                        paddingVertical: spacing.s8,
+                        alignItems: 'center',
+                        opacity: pressed ? 0.85 : 1,
+                      })}
+                    >
+                      <Text style={{ color: textOnPrimary, fontSize: 14, fontWeight: '700' }}>
+                        Done
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          )}
+        </View>
+      </View>
+    </Modal>
     </>
   );
 }

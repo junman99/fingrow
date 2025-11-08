@@ -6,7 +6,7 @@
 
 import { getSpendingData, getPortfolioData, getNetWorthData, getBudgetData, getStockDetails, getStockFundamentals } from './dataAggregator';
 import type { ToolName, ToolInput } from './tools';
-import { useInvestStore } from '../../store/invest';
+import { useInvestStore } from '../../features/invest';
 
 export type ToolResult = {
   tool_use_id: string;

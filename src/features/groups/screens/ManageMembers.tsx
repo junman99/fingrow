@@ -3,11 +3,10 @@ import { View, Text, Alert, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useAnimatedStyle, useSharedValue, useAnimatedScrollHandler, interpolate, Extrapolate } from 'react-native-reanimated';
-import { ScreenScroll } from '../../components/ScreenScroll';
-import Button from '../../components/Button';
-import Icon from '../../components/Icon';
-import { spacing, radius } from '../../theme/tokens';
-import { useThemeTokens } from '../../theme/ThemeProvider';
+import { ScreenScroll } from '../../../components/ScreenScroll';
+import Icon from '../../../components/Icon';
+import { spacing, radius } from '../../../theme/tokens';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useGroupsStore } from '../store';
 
@@ -88,7 +87,7 @@ export default function ManageMembers() {
   const borderSubtle = get('border.subtle') as string;
   const accentPrimary = get('accent.primary') as string;
   const dangerColor = get('semantic.danger') as string;
-  const successColor = get('semantic.success') as string;
+  const warningColor = get('semantic.warning') as string;
   const bgDefault = get('background.default') as string;
 
   if (!group) {
@@ -114,9 +113,27 @@ export default function ManageMembers() {
     return out;
   }, [group]);
 
+  const askArchive = (memberId: string, name: string, isArchived: boolean) => {
+    if (isArchived) {
+      // Restore without confirmation
+      archiveMember(group.id, memberId, false);
+    } else {
+      // Archive with confirmation
+      Alert.alert(
+        'Archive Member',
+        `Archive ${name}? You can restore them later from the archived section.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Archive', style: 'destructive', onPress: () => archiveMember(group.id, memberId, true) }
+        ]
+      );
+    }
+  };
+
   const askDelete = (memberId: string, name: string) => {
-    Alert.alert('Delete member',
-      `Delete ${name}? This action cannot be undone.`,
+    Alert.alert(
+      'Delete Member',
+      `Permanently delete ${name}? This action cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: async () => {
@@ -125,29 +142,30 @@ export default function ManageMembers() {
           } catch (e: any) {
             Alert.alert('Cannot delete', e?.message || String(e));
           }
-        }},
-      ],
+        }}
+      ]
     );
   };
 
-  const Row = ({ m }: any) => {
+  const MemberRow = ({ m, isLast }: { m: any; isLast: boolean }) => {
     const deletable = canDelete[m.id];
     const initials = m.name.trim().split(/\s+/).slice(0, 2).map((part: string) => part[0]?.toUpperCase() || '').join('') || '?';
 
     return (
       <View style={{
-        backgroundColor: surface1,
-        borderRadius: radius.lg,
-        padding: spacing.s16,
-        marginBottom: spacing.s12,
-        borderWidth: 1,
-        borderColor: borderSubtle,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: spacing.s12,
+        paddingHorizontal: spacing.s16,
+        borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
+        borderBottomColor: borderSubtle,
       }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+        {/* Avatar and Info */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12, flex: 1 }}>
           <View style={{
-            width: 48,
-            height: 48,
-            borderRadius: 24,
+            width: 40,
+            height: 40,
+            borderRadius: 20,
             backgroundColor: m.archived
               ? withAlpha(textMuted, isDark ? 0.15 : 0.1)
               : withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
@@ -159,7 +177,7 @@ export default function ManageMembers() {
             <Text style={{
               color: m.archived ? textMuted : accentPrimary,
               fontWeight: '800',
-              fontSize: 16
+              fontSize: 14
             }}>
               {initials}
             </Text>
@@ -168,90 +186,73 @@ export default function ManageMembers() {
           <View style={{ flex: 1 }}>
             <Text style={{
               color: m.archived ? textMuted : textPrimary,
-              fontWeight: '700',
-              fontSize: 16
+              fontWeight: '600',
+              fontSize: 15
             }} numberOfLines={1}>
               {m.name}
-              {m.archived && <Text style={{ color: textMuted, fontWeight: '600' }}> (Archived)</Text>}
+              {m.archived && <Text style={{ color: textMuted, fontWeight: '500', fontSize: 13 }}> (Archived)</Text>}
             </Text>
             {m.contact && (
               <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }} numberOfLines={1}>
                 {m.contact}
               </Text>
             )}
-            {!m.contact && (
-              <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>
-                {deletable ? 'No transaction history' : 'Has transaction history'}
-              </Text>
-            )}
           </View>
         </View>
 
-        <View style={{
-          flexDirection: 'row',
-          gap: spacing.s8,
-          marginTop: spacing.s12,
-          paddingTop: spacing.s12,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: borderSubtle
-        }}>
+        {/* Action Icons */}
+        <View style={{ flexDirection: 'row', gap: spacing.s4, alignItems: 'center' }}>
+          {/* Edit */}
           <Pressable
             onPress={() => nav.navigate('AddMember', { groupId: group.id, memberId: m.id })}
             style={({ pressed }) => ({
-              flex: 1,
-              paddingVertical: spacing.s10,
-              borderRadius: radius.md,
-              backgroundColor: surface2,
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: pressed ? surface2 : 'transparent',
               alignItems: 'center',
               justifyContent: 'center',
-              opacity: pressed ? 0.7 : 1,
-              flexDirection: 'row',
-              gap: spacing.s6,
             })}
+            hitSlop={4}
           >
-            <Icon name="edit-3" size={16} colorToken="accent.primary" />
-            <Text style={{ color: accentPrimary, fontWeight: '600', fontSize: 14 }}>Edit</Text>
+            <Icon name="edit-3" size={18} colorToken="accent.primary" />
           </Pressable>
 
+          {/* Archive/Restore */}
           <Pressable
-            onPress={() => archiveMember(group.id, m.id, !m.archived)}
+            onPress={() => askArchive(m.id, m.name, m.archived)}
             style={({ pressed }) => ({
-              flex: 1,
-              paddingVertical: spacing.s10,
-              borderRadius: radius.md,
-              backgroundColor: surface2,
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: pressed ? surface2 : 'transparent',
               alignItems: 'center',
               justifyContent: 'center',
-              opacity: pressed ? 0.7 : 1,
-              flexDirection: 'row',
-              gap: spacing.s6,
             })}
+            hitSlop={4}
           >
-            <Icon name={m.archived ? "archive-restore" : "archive"} size={16} colorToken="text.primary" />
-            <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 14 }}>
-              {m.archived ? 'Restore' : 'Archive'}
-            </Text>
+            <Icon
+              name={m.archived ? "archive-restore" : "archive"}
+              size={18}
+              color={m.archived ? accentPrimary : warningColor}
+            />
           </Pressable>
 
+          {/* Delete (only if no transaction history) */}
           {deletable && (
             <Pressable
               onPress={() => askDelete(m.id, m.name)}
               style={({ pressed }) => ({
-                flex: 1,
-                paddingVertical: spacing.s10,
-                borderRadius: radius.md,
-                backgroundColor: withAlpha(dangerColor, isDark ? 0.15 : 0.1),
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: pressed ? withAlpha(dangerColor, 0.1) : 'transparent',
                 alignItems: 'center',
                 justifyContent: 'center',
-                opacity: pressed ? 0.7 : 1,
-                flexDirection: 'row',
-                gap: spacing.s6,
-                borderWidth: 1,
-                borderColor: withAlpha(dangerColor, 0.3),
               })}
+              hitSlop={4}
             >
-              <Icon name="trash" size={16} color={dangerColor} />
-              <Text style={{ color: dangerColor, fontWeight: '600', fontSize: 14 }}>Delete</Text>
+              <Icon name="trash-2" size={18} color={dangerColor} />
             </Pressable>
           )}
         </View>
@@ -264,7 +265,7 @@ export default function ManageMembers() {
 
   return (
     <>
-      {/* Main Tab Title Animation - Floating Gradient Header (Fixed at top, outside scroll) */}
+      {/* Floating Gradient Header */}
       <Animated.View
         style={[
           {
@@ -316,7 +317,7 @@ export default function ManageMembers() {
         scrollEventThrottle={16}
         contentStyle={{
           paddingTop: spacing.s16,
-          paddingBottom: spacing.s24
+          paddingBottom: 0,
         }}
       >
         <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s20 }}>
@@ -343,26 +344,39 @@ export default function ManageMembers() {
           </View>
 
         {/* Add Member Button */}
-        <Button
-          title="Add member"
-          icon="user-plus"
-          variant="primary"
+        <Pressable
           onPress={() => nav.navigate('AddMember', { groupId: group.id })}
-        />
+          style={({ pressed }) => ({
+            backgroundColor: surface1,
+            borderRadius: radius.lg,
+            padding: spacing.s14,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: spacing.s8,
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <Icon name="user-plus" size={20} colorToken="accent.primary" />
+          <Text style={{ color: accentPrimary, fontWeight: '600', fontSize: 15 }}>
+            Add member
+          </Text>
+        </Pressable>
 
         {/* Active Members */}
         <View>
-          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16, marginBottom: spacing.s12 }}>
-            Active Members ({active.length})
-          </Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.s12 }}>
+            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 17 }}>Active Members</Text>
+            <Text style={{ color: textMuted, fontSize: 13, fontWeight: '600' }}>
+              {active.length} member{active.length === 1 ? '' : 's'}
+            </Text>
+          </View>
           {active.length === 0 ? (
             <View style={{
               backgroundColor: surface1,
               borderRadius: radius.lg,
               padding: spacing.s24,
               alignItems: 'center',
-              borderWidth: 1,
-              borderColor: borderSubtle,
             }}>
               <View style={{
                 width: 56,
@@ -381,7 +395,15 @@ export default function ManageMembers() {
               </Text>
             </View>
           ) : (
-            active.map((m) => <Row key={m.id} m={m} />)
+            <View style={{
+              backgroundColor: surface1,
+              borderRadius: radius.lg,
+              overflow: 'hidden',
+            }}>
+              {active.map((m, idx) => (
+                <MemberRow key={m.id} m={m} isLast={idx === active.length - 1} />
+              ))}
+            </View>
           )}
         </View>
 
@@ -401,18 +423,43 @@ export default function ManageMembers() {
                 marginBottom: showArchived ? spacing.s12 : 0,
               })}
             >
-              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>
-                Archived Members ({archived.length})
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 17 }}>
+                  Archived Members
+                </Text>
+                <View style={{
+                  backgroundColor: withAlpha(textMuted, isDark ? 0.15 : 0.1),
+                  paddingHorizontal: spacing.s8,
+                  paddingVertical: spacing.s4,
+                  borderRadius: radius.sm,
+                }}>
+                  <Text style={{ color: textMuted, fontSize: 12, fontWeight: '700' }}>
+                    {archived.length}
+                  </Text>
+                </View>
+              </View>
               <Icon
                 name={showArchived ? "chevron-up" : "chevron-down"}
                 size={20}
                 colorToken="text.muted"
               />
             </Pressable>
-            {showArchived && archived.map((m) => <Row key={m.id} m={m} />)}
+            {showArchived && (
+              <View style={{
+                backgroundColor: surface1,
+                borderRadius: radius.lg,
+                overflow: 'hidden',
+              }}>
+                {archived.map((m, idx) => (
+                  <MemberRow key={m.id} m={m} isLast={idx === archived.length - 1} />
+                ))}
+              </View>
+            )}
           </View>
         )}
+
+        {/* Extra spacing to extend to bottom */}
+        <View style={{ height: spacing.s32 }} />
       </View>
     </ScreenScroll>
     </>

@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, Alert, Pressable, ScrollView } from 'react-native';
-import { ScreenScroll } from '../../components/ScreenScroll';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import Icon from '../../components/Icon';
-import { spacing, radius } from '../../theme/tokens';
+import { ScreenScroll } from '../../../components/ScreenScroll';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import Icon from '../../../components/Icon';
+import { spacing, radius } from '../../../theme/tokens';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useGroupsStore } from '../store';
-import { scheduleDaily, getSettings } from '../../lib/notifications';
+import { scheduleDaily, getSettings } from '../../../lib/notifications';
 
 function withAlpha(hex: string, alpha: number) {
   if (!hex || typeof hex !== 'string') return hex;
@@ -117,8 +117,8 @@ export default function AddReminder() {
             borderRadius: radius.lg,
             padding: spacing.s24,
             alignItems: 'center',
-            borderWidth: 1,
-            borderColor: borderSubtle,
+            
+            
           }}>
             <View style={{
               width: 56,
@@ -265,8 +265,8 @@ export default function AddReminder() {
               backgroundColor: surface1,
               borderRadius: radius.lg,
               padding: spacing.s16,
-              borderWidth: 1,
-              borderColor: borderSubtle,
+              
+              
             }}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.s8 }}>
                 {Array.from({ length: 24 }, (_, i) => i).map(h => (

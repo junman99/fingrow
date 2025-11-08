@@ -1,13 +1,13 @@
 import React, { useMemo } from 'react';
 import { View, Text, Share, Alert } from 'react-native';
-import { ScreenScroll } from '../../components/ScreenScroll';
-import Button from '../../components/Button';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
+import { ScreenScroll } from '../../../components/ScreenScroll';
+import Button from '../../../components/Button';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useGroupsStore } from '../store';
-import type { ID } from '../../types/groups';
-import { formatCurrency } from '../../lib/format';
+import type { ID } from '../../../types/groups';
+import { formatCurrency } from '../../../lib/format';
 
 type Edge = { fromId: ID; toId: ID; amount: number };
 

@@ -7,18 +7,18 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
-import { ScreenScroll } from '../components/ScreenScroll';
-import { useThemeTokens } from '../theme/ThemeProvider';
-import { spacing, radius } from '../theme/tokens';
-import Icon from '../components/Icon';
-import { Card } from '../components/Card';
-import Button from '../components/Button';
-import BottomSheet from '../components/BottomSheet';
-import { useAccountsStore } from '../store/accounts';
+import { ScreenScroll } from '../../../components/ScreenScroll';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
+import Icon from '../../../components/Icon';
+import { Card } from '../../../components/Card';
+import Button from '../../../components/Button';
+import BottomSheet from '../../../components/BottomSheet';
+import { useAccountsStore } from '../../../store/accounts';
 import { useInvestStore } from '../store/invest';
-import { useProfileStore } from '../store/profile';
-import { formatCurrency } from '../lib/format';
-import { convertCurrency } from '../lib/fx';
+import { useProfileStore } from '../../../store/profile';
+import { formatCurrency } from '../../../lib/format';
+import { convertCurrency } from '../../../lib/fx';
 
 function withAlpha(color: string, alpha: number) {
   if (!color) return `rgba(0,0,0,${alpha})`;

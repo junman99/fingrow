@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { FlatList, View, Text, Pressable, Animated, Alert } from 'react-native';
+import { FlatList, View, Text, Pressable, Animated, Alert, PanResponder, ScrollView } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,18 +10,18 @@ import AnimatedRN, {
   interpolate,
   Extrapolate,
 } from 'react-native-reanimated';
-import { Screen } from '../../components/Screen';
-import Button from '../../components/Button';
-import Icon, { IconName } from '../../components/Icon';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius, elevation } from '../../theme/tokens';
+import { Screen } from '../../../components/Screen';
+import Button from '../../../components/Button';
+import Icon, { IconName } from '../../../components/Icon';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius, elevation } from '../../../theme/tokens';
 import { useGroupsStore } from '../store';
-import { useProfileStore } from '../../store/profile';
-import { useTxStore } from '../../store/transactions';
-import { formatCurrency, sum } from '../../lib/format';
-import type { ID } from '../../types/groups';
+import { useProfileStore } from '../../../store/profile';
+import { useTxStore } from '../../../store/transactions';
+import { formatCurrency, sum } from '../../../lib/format';
+import type { ID } from '../../../types/groups';
 
-// Settlement Transfer Row with Animation
+// Settlement Transfer Row with Swipe to Complete
 const SettlementTransferRow: React.FC<{
   fromInitials: string;
   toInitials: string;
@@ -34,13 +34,19 @@ const SettlementTransferRow: React.FC<{
   surface2: string;
   isDark: boolean;
   formatCurrency: (n: number) => string;
-}> = ({ fromInitials, toInitials, amount, warningColor, successColor, accentPrimary, textPrimary, textMuted, surface2, isDark, formatCurrency }) => {
+  onComplete: () => void;
+  completed: boolean;
+}> = ({ fromInitials, toInitials, amount, warningColor, successColor, accentPrimary, textPrimary, textMuted, surface2, isDark, formatCurrency, onComplete, completed }) => {
+  const [isPaid, setIsPaid] = useState(completed);
+  const slideAnim = useRef(new Animated.Value(0)).current;
   const flowAnim = useRef(new Animated.Value(0)).current;
   const dotAnim1 = useRef(new Animated.Value(0)).current;
   const dotAnim2 = useRef(new Animated.Value(0)).current;
   const dotAnim3 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (isPaid) return;
+
     // Start flow animation
     Animated.loop(
       Animated.timing(flowAnim, {
@@ -80,7 +86,7 @@ const SettlementTransferRow: React.FC<{
         })
       ])
     ).start();
-  }, []);
+  }, [isPaid]);
 
   const withAlphaLocal = (hex: string, alpha: number) => {
     if (!hex || typeof hex !== 'string') return hex;
@@ -95,112 +101,167 @@ const SettlementTransferRow: React.FC<{
 
   const dotAnims = [dotAnim1, dotAnim2, dotAnim3];
 
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => !isPaid,
+      onMoveShouldSetPanResponder: () => !isPaid,
+      onPanResponderMove: (_, gestureState) => {
+        if (isPaid) return;
+        const clampedDx = Math.max(0, Math.min(gestureState.dx, 150));
+        slideAnim.setValue(clampedDx);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (isPaid) return;
+        if (gestureState.dx > 100) {
+          Animated.spring(slideAnim, {
+            toValue: 150,
+            useNativeDriver: true,
+          }).start(() => {
+            setIsPaid(true);
+            onComplete();
+          });
+        } else {
+          Animated.spring(slideAnim, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
   return (
     <View style={{
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: spacing.s14,
-      paddingHorizontal: spacing.s16,
-      backgroundColor: surface2,
       borderRadius: radius.lg,
       marginBottom: spacing.s8,
-      overflow: 'hidden'
+      overflow: 'hidden',
+      position: 'relative'
     }}>
-      {/* Animated gradient background */}
-      <Animated.View style={{
+      {/* Green checkmark background (shown when paid) */}
+      <View style={{
         position: 'absolute',
-        left: 0,
+        right: 0,
         top: 0,
         bottom: 0,
-        width: '100%',
-        opacity: flowAnim.interpolate({
-          inputRange: [0, 0.5, 1],
-          outputRange: [0, 0.3, 0]
-        }),
-        transform: [{
-          translateX: flowAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [-300, 300]
-          })
-        }]
+        width: 70,
+        backgroundColor: successColor,
+        alignItems: 'center',
+        justifyContent: 'center'
       }}>
+        <Text style={{ fontSize: 24 }}>✓</Text>
+      </View>
+
+      {/* Main content */}
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingVertical: spacing.s10,
+          paddingHorizontal: spacing.s12,
+          backgroundColor: isPaid ? withAlphaLocal(successColor, 0.2) : surface2,
+          transform: [{ translateX: slideAnim }],
+          opacity: isPaid ? 0.6 : 1
+        }}
+      >
+        {/* Animated gradient background */}
+        {!isPaid && (
+          <Animated.View style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: '100%',
+            opacity: flowAnim.interpolate({
+              inputRange: [0, 0.5, 1],
+              outputRange: [0, 0.3, 0]
+            }),
+            transform: [{
+              translateX: flowAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-300, 300]
+              })
+            }]
+          }}>
+            <View style={{
+              flex: 1,
+              backgroundColor: isDark
+                ? 'rgba(255, 153, 51, 0.15)'
+                : 'rgba(251, 146, 60, 0.15)'
+            }} />
+          </Animated.View>
+        )}
+
+        {/* From member */}
         <View style={{
-          flex: 1,
-          backgroundColor: isDark
-            ? 'rgba(255, 153, 51, 0.15)'
-            : 'rgba(251, 146, 60, 0.15)'
-        }} />
-      </Animated.View>
-
-      {/* From member */}
-      <View style={{
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: withAlphaLocal(warningColor, isDark ? 0.25 : 0.2),
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 2,
-        borderColor: warningColor,
-        zIndex: 2
-      }}>
-        <Text style={{ color: warningColor, fontSize: 13, fontWeight: '800' }}>
-          {fromInitials}
-        </Text>
-      </View>
-
-      {/* Amount and flow line with animated dots */}
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', marginHorizontal: spacing.s12, zIndex: 1 }}>
-        <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700', marginBottom: spacing.s6 }}>
-          {formatCurrency(amount)}
-        </Text>
-        <View style={{ width: '100%', height: 2, backgroundColor: withAlphaLocal(textMuted, 0.2), position: 'relative' }}>
-          {/* Animated flowing dots */}
-          {dotAnims.map((dotAnim, i) => (
-            <Animated.View
-              key={i}
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: -2,
-                width: 6,
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: accentPrimary,
-                transform: [
-                  {
-                    translateX: dotAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, 200]
-                    })
-                  }
-                ],
-                opacity: dotAnim.interpolate({
-                  inputRange: [0, 0.2, 0.8, 1],
-                  outputRange: [0, 1, 1, 0]
-                })
-              }}
-            />
-          ))}
+          width: 36,
+          height: 36,
+          borderRadius: 18,
+          backgroundColor: isPaid ? withAlphaLocal(successColor, 0.3) : withAlphaLocal(warningColor, isDark ? 0.25 : 0.2),
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 2,
+          borderColor: isPaid ? successColor : warningColor,
+          zIndex: 2
+        }}>
+          <Text style={{ color: isPaid ? successColor : warningColor, fontSize: 12, fontWeight: '800' }}>
+            {fromInitials}
+          </Text>
         </View>
-      </View>
 
-      {/* To member */}
-      <View style={{
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: withAlphaLocal(successColor, isDark ? 0.25 : 0.2),
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 2,
-        borderColor: successColor,
-        zIndex: 2
-      }}>
-        <Text style={{ color: successColor, fontSize: 13, fontWeight: '800' }}>
-          {toInitials}
-        </Text>
-      </View>
+        {/* Amount and flow line with animated dots */}
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', marginHorizontal: spacing.s12, zIndex: 1 }}>
+          <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '700', marginBottom: spacing.s4 }}>
+            {formatCurrency(amount)}
+          </Text>
+          <View style={{ width: '100%', height: 2, backgroundColor: withAlphaLocal(textMuted, 0.2), position: 'relative' }}>
+            {/* Animated flowing dots */}
+            {!isPaid && dotAnims.map((dotAnim, i) => (
+              <Animated.View
+                key={i}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: -2,
+                  width: 6,
+                  height: 6,
+                  borderRadius: 3,
+                  backgroundColor: accentPrimary,
+                  transform: [
+                    {
+                      translateX: dotAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, 200]
+                      })
+                    }
+                  ],
+                  opacity: dotAnim.interpolate({
+                    inputRange: [0, 0.2, 0.8, 1],
+                    outputRange: [0, 1, 1, 0]
+                  })
+                }}
+              />
+            ))}
+          </View>
+        </View>
+
+        {/* To member */}
+        <View style={{
+          width: 36,
+          height: 36,
+          borderRadius: 18,
+          backgroundColor: isPaid ? withAlphaLocal(successColor, 0.3) : withAlphaLocal(successColor, isDark ? 0.25 : 0.2),
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 2,
+          borderColor: successColor,
+          zIndex: 2
+        }}>
+          <Text style={{ color: successColor, fontSize: 12, fontWeight: '800' }}>
+            {toInitials}
+          </Text>
+        </View>
+      </Animated.View>
     </View>
   );
 };
@@ -344,8 +405,6 @@ export default function GroupsRoot() {
         padding: spacing.s12,
         borderRadius: radius.lg,
         backgroundColor: surface2,
-        borderWidth: 1,
-        borderColor: borderSubtle
       }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.s6 }}>
@@ -380,7 +439,6 @@ export default function GroupsRoot() {
               width: 32, height: 32, borderRadius: 16,
               backgroundColor: cols[i],
               alignItems: 'center', justifyContent: 'center',
-              borderWidth: 1.5, borderColor: borderSubtle,
             }}>
               <Text style={{ color: textPrimary, fontSize: 12, fontWeight: '700' }}>{initials}</Text>
             </View>
@@ -479,7 +537,6 @@ export default function GroupsRoot() {
   const Row = ({ item }: { item: any }) => {
     const activeMembers = item.members.filter((m: any) => !m.archived);
     const settled = item.unsettled <= 0.009;
-    const meta = `${activeMembers.length} members`;
     const balanceMap = balances(item.id) || {};
     const me = (activeMembers || []).find((m: any) => (m.name || '').trim().toLowerCase() === meName);
     const myShare = me ? balanceMap[me.id] || 0 : 0;
@@ -489,17 +546,61 @@ export default function GroupsRoot() {
         ? `You are owed ${formatCurrency(myShare)}`
         : myShare < -0.009
           ? `You owe ${formatCurrency(Math.abs(myShare))}`
-          : 'You are settled in this group';
+          : 'Settled up';
     const myShareColor = myShare > 0.009
       ? get('semantic.success') as string
       : myShare < -0.009
         ? get('semantic.warning') as string
         : textMuted;
-    const lastActive = item.last ? timeAgo(item.last) : 'Just created';
-    const billCount = item.bills?.length ?? 0;
-    const chipBg = settled ? surface2 : withAlpha(accentSecondary, isDark ? 0.20 : 0.12);
-    const chipColor = settled ? textMuted : accentSecondary;
-    const borderColor = settled ? borderSubtle : withAlpha(accentSecondary, 0.35);
+
+    // Render mini avatar stack (smaller, inline with title)
+    const renderMiniAvatarStack = (names: string[]) => {
+      const displayed = names.slice(0, 3);
+      const remaining = Math.max(0, names.length - 3);
+
+      return (
+        <View style={{ flexDirection: 'row', marginRight: spacing.s8 }}>
+          {displayed.map((name, i) => {
+            const initials = name.trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase() || '').join('') || '?';
+            return (
+              <View
+                key={i}
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 12,
+                  backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
+                  borderWidth: 2,
+                  borderColor: surface1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginLeft: i > 0 ? -8 : 0
+                }}
+              >
+                <Text style={{ color: accentPrimary, fontSize: 9, fontWeight: '800' }}>{initials}</Text>
+              </View>
+            );
+          })}
+          {remaining > 0 && (
+            <View
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: 12,
+                backgroundColor: surface2,
+                borderWidth: 2,
+                borderColor: surface1,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginLeft: -8
+              }}
+            >
+              <Text style={{ color: textMuted, fontSize: 9, fontWeight: '800' }}>+{remaining}</Text>
+            </View>
+          )}
+        </View>
+      );
+    };
 
     return (
       <Pressable
@@ -509,14 +610,10 @@ export default function GroupsRoot() {
           {
             backgroundColor: surface1,
             borderRadius: radius.xl,
-            paddingVertical: spacing.s16,
+            paddingVertical: spacing.s14,
             paddingHorizontal: spacing.s16,
-            marginBottom: spacing.s16,
-            flexDirection: 'row',
-            alignItems: 'center',
+            marginBottom: spacing.s12,
             overflow: 'hidden',
-            borderWidth: 1,
-            borderColor,
             opacity: pressed ? 0.95 : 1
           },
           elevation.level1 as any
@@ -528,60 +625,29 @@ export default function GroupsRoot() {
             top: 0,
             left: 0,
             bottom: 0,
-            width: 6,
+            width: 4,
             backgroundColor: accentSecondary
           }} />
         )}
-        {renderAvatarStack(activeMembers.map((m: any) => m.name))}
-        <View style={{ flex: 1, marginLeft: spacing.s12 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <View style={{ flex: 1, paddingRight: spacing.s8 }}>
-              <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 16 }} numberOfLines={1}>{item.name}</Text>
-              <Text style={{ color: textMuted, marginTop: spacing.s4 }} numberOfLines={1}>{`${meta} • ${lastActive}`}</Text>
-            </View>
-            <View style={{
-              paddingHorizontal: spacing.s10,
-              paddingVertical: spacing.s6,
-              borderRadius: radius.pill,
-              backgroundColor: chipBg
-            }}>
-              <Text style={{ color: chipColor, fontWeight: '700', fontSize: 12 }}>
-                {settled ? 'Settled up' : `${formatCurrency(item.unsettled)} unsettled`}
+
+        <View style={{ gap: spacing.s12 }}>
+          {/* Group name with mini avatars and balance status */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: spacing.s8 }}>
+              {renderMiniAvatarStack(activeMembers.map((m: any) => m.name))}
+              <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 17, flex: 1 }} numberOfLines={1}>
+                {item.name}
               </Text>
             </View>
+            {me && (
+              <Text style={{ color: myShareColor, fontWeight: '600', fontSize: 13 }} numberOfLines={1}>
+                {myShareLabel}
+              </Text>
+            )}
           </View>
 
-          {me && (
-            <View style={{
-              marginTop: spacing.s12,
-              padding: spacing.s12,
-              borderRadius: radius.lg,
-              backgroundColor: settled ? surface2 : withAlpha(accentSecondary, isDark ? 0.15 : 0.10)
-            }}>
-              <Text style={{ color: myShareColor, fontWeight: '600' }}>{myShareLabel}</Text>
-            </View>
-          )}
-
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8, marginTop: spacing.s12 }}>
-            <View style={{
-              paddingHorizontal: spacing.s10,
-              paddingVertical: spacing.s6,
-              borderRadius: radius.pill,
-              backgroundColor: surface2
-            }}>
-              <Text style={{ color: textMuted, fontWeight: '600', fontSize: 12 }}>{billCount} bills logged</Text>
-            </View>
-            <View style={{
-              paddingHorizontal: spacing.s10,
-              paddingVertical: spacing.s6,
-              borderRadius: radius.pill,
-              backgroundColor: surface2
-            }}>
-              <Text style={{ color: textMuted, fontWeight: '600', fontSize: 12 }}>{activeMembers.length} active members</Text>
-            </View>
-          </View>
-
-          <View style={{ flexDirection: 'row', gap: spacing.s8, marginTop: spacing.s12 }}>
+          {/* Action buttons */}
+          <View style={{ flexDirection: 'row', gap: spacing.s8 }}>
             <Button
               size="sm"
               variant="secondary"
@@ -739,8 +805,6 @@ export default function GroupsRoot() {
                   borderRadius: radius.pill,
                   padding: spacing.s4,
                   flexDirection: 'row',
-                  borderWidth: 1,
-                  borderColor: borderSubtle,
                   flex: 1,
                 }}>
                   <Pressable
@@ -776,15 +840,14 @@ export default function GroupsRoot() {
                 </View>
                 <Pressable
                   onPress={() => nav.navigate('CreateGroup')}
-                  style={({ pressed }) => ({
+                  style={{
                     width: 40,
                     height: 40,
                     borderRadius: radius.pill,
                     backgroundColor: accentPrimary,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    opacity: pressed ? 0.85 : 1,
-                  })}
+                  }}
                 >
                   <Icon name="plus" size={20} color={textOnPrimary} />
                 </Pressable>
@@ -797,8 +860,6 @@ export default function GroupsRoot() {
                 borderRadius: radius.xl,
                 backgroundColor: surface1,
                 padding: spacing.s16,
-                borderWidth: 1,
-                borderColor: borderSubtle,
                 ...(elevation.level1 as any)
               }}>
                 <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 18, marginBottom: spacing.s8 }}>

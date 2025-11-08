@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
-import CenterModal from '../CenterModal';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
-import Button from '../Button';
-import Icon from '../Icon';
-import { currencies, findCurrency, type CurrencyMeta } from '../../lib/currencies';
+import CenterModal from '../../../components/CenterModal';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
+import Button from '../../../components/Button';
+import Icon from '../../../components/Icon';
+import { currencies, findCurrency, type CurrencyMeta } from '../../../lib/currencies';
 import CurrencyPickerSheet from './CurrencyPickerSheet';
 
 type Props = {

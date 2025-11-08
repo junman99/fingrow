@@ -2,13 +2,13 @@
 import React from 'react';
 import { useNavigation } from '@react-navigation/native';
 import { Pressable, View, Text, Image, InteractionManager } from 'react-native';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 import SparklineMini from './SparklineMini';
 import { useInvestStore } from '../store';
-import { useProfileStore } from '../../store/profile';
-import { formatCurrency, formatPercent } from '../../lib/format';
-import { convertCurrency } from '../../lib/fx';
+import { useProfileStore } from '../../../store/profile';
+import { formatCurrency, formatPercent } from '../../../lib/format';
+import { convertCurrency } from '../../../lib/fx';
 
 function getLogoColor(symbol: string): string {
   // Generate consistent color based on symbol

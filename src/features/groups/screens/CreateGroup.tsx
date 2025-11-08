@@ -1,29 +1,22 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, Alert, Switch, Pressable, Animated, PanResponder } from 'react-native';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { View, Text, TextInput, Alert, Switch, Pressable, Animated, PanResponder, ScrollView, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
-import { ScreenScroll } from '../../components/ScreenScroll';
-import Button from '../../components/Button';
-import Icon from '../../components/Icon';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
+import { ScreenScroll } from '../../../components/ScreenScroll';
+import Button from '../../../components/Button';
+import Icon from '../../../components/Icon';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 import { useGroupsStore } from '../store';
-import { useProfileStore } from '../../store/profile';
+import { useProfileStore } from '../../../store/profile';
+import BottomSheet from '../../../components/BottomSheet';
+import { currencies, findCurrency } from '../../../lib/currencies';
+import { setMembersUpdateCallback } from './ManageMembersCreate';
 
 type Row = { name: string; contact?: string };
 
 const KEY_INCLUDE_ME = 'fingrow/ui/createGroup/includeMeDefault';
-
-const CURRENCIES = [
-  { code: 'USD', symbol: '$', name: 'US Dollar' },
-  { code: 'EUR', symbol: '€', name: 'Euro' },
-  { code: 'GBP', symbol: '£', name: 'British Pound' },
-  { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
-  { code: 'SGD', symbol: 'S$', name: 'Singapore Dollar' },
-  { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
-  { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' },
-  { code: 'CNY', symbol: '¥', name: 'Chinese Yuan' },
-];
 
 const SwipeableMemberCard: React.FC<{
   row: Row;
@@ -99,8 +92,6 @@ const SwipeableMemberCard: React.FC<{
           backgroundColor: cardBg,
           borderRadius: radius.lg,
           padding: spacing.s14,
-          borderWidth: 1,
-          borderColor: borderSubtle,
           gap: spacing.s10,
         }}
         {...(canDelete ? panResponder.panHandlers : {})}
@@ -164,10 +155,12 @@ export default function CreateGroup() {
   const { profile } = useProfileStore();
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
-  const [currency, setCurrency] = useState('USD');
+  const [currency, setCurrency] = useState(profile?.currency || 'USD');
   const [rows, setRows] = useState<Row[]>([]);
   const [includeMe, setIncludeMe] = useState(true);
-  const [remember, setRemember] = useState(false);
+  const [currencySheet, setCurrencySheet] = useState(false);
+  const [currencyQuery, setCurrencyQuery] = useState('');
+  const nameInputRef = useRef<TextInput>(null);
 
   const myName = profile?.name || 'Me';
 
@@ -176,6 +169,21 @@ export default function CreateGroup() {
       if (v === 'true') setIncludeMe(true);
       if (v === 'false') setIncludeMe(false);
     });
+
+    // Delay keyboard opening until after navigation animation completes (typically 300-350ms)
+    const timer = setTimeout(() => {
+      nameInputRef.current?.focus();
+    }, 500);
+
+    // Set up callback for ManageMembersCreate to update state
+    setMembersUpdateCallback((updatedRows: Row[]) => {
+      setRows(updatedRows);
+    });
+
+    return () => {
+      clearTimeout(timer);
+      setMembersUpdateCallback(() => {});
+    };
   }, []);
 
   useEffect(() => {
@@ -194,9 +202,30 @@ export default function CreateGroup() {
   const updateRow = (i: number, patch: Partial<Row>) => setRows(r => r.map((row, idx) => idx === i ? { ...row, ...patch } : row));
   const removeRow = (i: number) => setRows(r => r.filter((_, idx) => idx !== i));
 
+  const selectedCurrency = useMemo(
+    () => findCurrency(currency || 'USD'),
+    [currency]
+  );
+
+  const filteredCurrencies = useMemo(() => {
+    const q = currencyQuery.trim().toLowerCase();
+    if (!q.length) return currencies;
+    return currencies.filter(
+      c =>
+        c.code.toLowerCase().includes(q) ||
+        c.name.toLowerCase().includes(q) ||
+        (c.regions || []).some(r => r.toLowerCase().includes(q)),
+    );
+  }, [currencyQuery]);
+
+  const handleCurrencyChange = (code: string) => {
+    setCurrency(code.toUpperCase());
+    setCurrencySheet(false);
+    setCurrencyQuery('');
+  };
+
   const onSave = async () => {
     if (!name.trim()) { Alert.alert('Enter a group name'); return; }
-    if (remember) await AsyncStorage.setItem(KEY_INCLUDE_ME, includeMe ? 'true' : 'false');
     const members = rows
       .map(r => ({ name: r.name.trim(), contact: r.contact?.trim() || undefined }))
       .filter(r => r.name.length > 0);
@@ -207,215 +236,261 @@ export default function CreateGroup() {
   const accentPrimary = get('accent.primary') as string;
   const textPrimary = get('text.primary') as string;
   const textMuted = get('text.muted') as string;
+  const textOnPrimary = get('text.onPrimary') as string;
   const surface1 = get('surface.level1') as string;
   const surface2 = get('surface.level2') as string;
   const borderSubtle = get('border.subtle') as string;
   const cardBg = get('surface.level1') as string;
 
   const inputStyle = useMemo(() => ({
-    borderWidth: 1,
-    borderColor: borderSubtle,
     borderRadius: radius.md,
     paddingVertical: spacing.s12,
     paddingHorizontal: spacing.s14,
     color: textPrimary,
     backgroundColor: surface2,
     fontSize: 15,
-  }), [borderSubtle, textPrimary, surface2]);
+  }), [textPrimary, surface2]);
 
   const placeholder = get('text.muted') as string;
+  const bgDefault = get('background.default') as string;
 
   return (
-    <ScreenScroll contentStyle={{ paddingBottom: spacing.s32 }}>
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s20 }}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: bgDefault }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1 }}
+          bounces={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, gap: spacing.s16, paddingBottom: spacing.s24 }}>
         {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.s12 }}>
           <Pressable
             onPress={() => nav.goBack()}
             style={({ pressed }) => ({
+              position: 'absolute',
+              left: -spacing.s8,
               padding: spacing.s8,
-              marginLeft: -spacing.s8,
               borderRadius: radius.md,
               backgroundColor: pressed ? cardBg : 'transparent',
             })}
             hitSlop={8}
           >
-            <Icon name="x" size={24} color={textPrimary} />
+            <Icon name="chevron-left" size={28} color={textPrimary} />
           </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
-              Create group
-            </Text>
-          </View>
-        </View>
-
-        {/* Group Name */}
-        <View style={{ gap: spacing.s10 }}>
-          <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>Group name</Text>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. Roommates, Weekend Trip"
-            placeholderTextColor={placeholder}
-            style={inputStyle}
-            autoFocus
-          />
-        </View>
-
-        {/* Currency Selection */}
-        <View style={{ gap: spacing.s10 }}>
-          <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>Currency</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
-            {CURRENCIES.map(curr => (
-              <Pressable
-                key={curr.code}
-                onPress={() => setCurrency(curr.code)}
-                style={({ pressed }) => ({
-                  paddingVertical: spacing.s10,
-                  paddingHorizontal: spacing.s14,
-                  borderRadius: radius.md,
-                  borderWidth: 2,
-                  borderColor: currency === curr.code ? accentPrimary : borderSubtle,
-                  backgroundColor: currency === curr.code ? withAlpha(accentPrimary, isDark ? 0.2 : 0.1) : cardBg,
-                  opacity: pressed ? 0.7 : 1,
-                  minWidth: 80,
-                })}
-              >
-                <Text style={{
-                  color: currency === curr.code ? accentPrimary : textPrimary,
-                  fontWeight: currency === curr.code ? '700' : '600',
-                  fontSize: 14,
-                  textAlign: 'center',
-                }}>
-                  {curr.symbol} {curr.code}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        {/* Note (Optional) */}
-        <View style={{ gap: spacing.s10 }}>
-          <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
-            Note <Text style={{ color: textMuted, fontWeight: '400' }}>(optional)</Text>
+          <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800' }}>
+            Create group
           </Text>
-          <TextInput
-            value={note}
-            onChangeText={setNote}
-            placeholder="Add a description or purpose for this group"
-            placeholderTextColor={placeholder}
-            style={[inputStyle, { minHeight: 80, textAlignVertical: 'top' }]}
-            multiline
-          />
         </View>
 
-        {/* Include Me Toggle */}
+        {/* Group Details Card */}
         <View
           style={{
             backgroundColor: cardBg,
             borderRadius: radius.lg,
             padding: spacing.s16,
-            borderWidth: 1,
-            borderColor: borderSubtle,
-            gap: spacing.s12,
+            gap: spacing.s16,
           }}
         >
+          {/* Group Name Row */}
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View style={{ flex: 1, paddingRight: spacing.s12 }}>
-              <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 15 }}>Include me in this group</Text>
-              <Text style={{ color: textMuted, marginTop: spacing.s4, fontSize: 13 }}>
-                Add yourself as a member to track your share
-              </Text>
-            </View>
+            <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
+              Group name
+            </Text>
+            <TextInput
+              ref={nameInputRef}
+              value={name}
+              onChangeText={setName}
+              placeholder="e.g. Roommates, Weekend Trip"
+              placeholderTextColor={placeholder}
+              style={{ flex: 1, color: textPrimary, fontSize: 15, textAlign: 'right', marginLeft: spacing.s12 }}
+            />
+          </View>
+
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: borderSubtle }} />
+
+          {/* Note Row */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
+              Note
+            </Text>
+            <TextInput
+              value={note}
+              onChangeText={setNote}
+              placeholder="Add a description or purpose"
+              placeholderTextColor={placeholder}
+              style={{ flex: 1, color: textPrimary, fontSize: 15, textAlign: 'right', marginLeft: spacing.s12 }}
+              multiline={false}
+            />
+          </View>
+
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: borderSubtle }} />
+
+          {/* Include Me Toggle Row */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 15 }}>Include me in this group</Text>
             <Switch value={includeMe} onValueChange={setIncludeMe} />
           </View>
 
-          {includeMe && (
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                backgroundColor: surface2,
-                borderRadius: radius.md,
-                padding: spacing.s12,
-              }}
-            >
-              <View style={{ flex: 1, paddingRight: spacing.s12 }}>
-                <Text style={{ color: textPrimary, fontWeight: '500', fontSize: 14 }}>Remember this choice</Text>
-                <Text style={{ color: textMuted, fontSize: 12, marginTop: 2 }}>
-                  Use this as default for new groups
-                </Text>
-              </View>
-              <Switch value={remember} onValueChange={setRemember} />
-            </View>
-          )}
-        </View>
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: borderSubtle }} />
 
-        {/* Members Section */}
-        <View style={{ gap: spacing.s12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 17 }}>Members</Text>
-            <Text style={{ color: textMuted, fontSize: 13, fontWeight: '600' }}>
-              {rows.filter(r => r.name.trim().length > 0).length} added
-            </Text>
-          </View>
-
-          <View style={{ gap: spacing.s10 }}>
-            {rows.map((row, i) => {
-              const isMeRow = includeMe && row.name === myName;
-              const canDelete = rows.length > 1 && !isMeRow;
-              return (
-                <SwipeableMemberCard
-                  key={`${i}-${row.name || 'member'}`}
-                  row={row}
-                  index={i}
-                  isMeRow={isMeRow}
-                  canDelete={canDelete}
-                  onUpdate={updateRow}
-                  onRemove={removeRow}
-                  inputStyle={inputStyle}
-                  placeholder={placeholder}
-                  accentPrimary={accentPrimary}
-                  textPrimary={textPrimary}
-                  textMuted={textMuted}
-                  cardBg={cardBg}
-                  borderSubtle={borderSubtle}
-                  isDark={isDark}
-                />
-              );
-            })}
-          </View>
-
+          {/* Currency Selection Row */}
           <Pressable
-            onPress={addRow}
+            onPress={() => {
+              Keyboard.dismiss();
+              setTimeout(() => setCurrencySheet(true), 150);
+            }}
             style={({ pressed }) => ({
-              backgroundColor: cardBg,
-              borderRadius: radius.lg,
-              padding: spacing.s14,
-              borderWidth: 1,
-              borderColor: borderSubtle,
-              borderStyle: 'dashed',
               flexDirection: 'row',
               alignItems: 'center',
-              justifyContent: 'center',
-              gap: spacing.s8,
+              justifyContent: 'space-between',
               opacity: pressed ? 0.7 : 1,
             })}
           >
-            <Icon name="plus" size={20} colorToken="accent.primary" />
-            <Text style={{ color: accentPrimary, fontWeight: '600', fontSize: 15 }}>
-              Add member
-            </Text>
+            <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 15 }}>Currency</Text>
+            <View style={{ alignItems: 'flex-end', flex: 1, marginLeft: spacing.s12, marginRight: spacing.s8 }}>
+              <Text style={{ color: textPrimary, fontSize: 15, textAlign: 'right' }}>
+                {selectedCurrency?.code || 'USD'}
+              </Text>
+              <Text style={{ color: textMuted, fontSize: 13, marginTop: 2, textAlign: 'right' }}>
+                1 {profile?.currency || 'USD'} ≈ {selectedCurrency?.code === (profile?.currency || 'USD') ? '1.00' : '0.00'} {selectedCurrency?.code || 'USD'}
+              </Text>
+            </View>
+            <Icon name="chevron-right" size={20} color={textMuted} />
           </Pressable>
         </View>
+
+        {/* Members Card */}
+        <Pressable
+          onPress={() => {
+            nav.navigate('ManageMembersCreate', {
+              rows: JSON.parse(JSON.stringify(rows)),
+              includeMe,
+              myName,
+            });
+          }}
+          style={({ pressed }) => ({
+            backgroundColor: cardBg,
+            borderRadius: radius.lg,
+            padding: spacing.s16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+            <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
+              Members
+            </Text>
+            <Text
+              style={{ color: textMuted, fontSize: 15, flex: 1, textAlign: 'right' }}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {rows.filter(r => r.name.trim().length > 0).map(r => r.name).join(', ') || 'Add members'}
+            </Text>
+          </View>
+          <Icon name="chevron-right" size={20} color={textMuted} />
+        </Pressable>
 
         {/* Action Buttons */}
         <View style={{ marginTop: spacing.s8 }}>
           <Button title="Create group" onPress={onSave} />
         </View>
-      </View>
-    </ScreenScroll>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Currency Picker Bottom Sheet */}
+      <BottomSheet
+        visible={currencySheet}
+        onClose={() => setCurrencySheet(false)}
+      >
+        <View style={{ height: '100%' }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: textPrimary, textAlign: 'center', marginBottom: spacing.s16 }}>
+            Choose currency
+          </Text>
+
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingBottom: spacing.s8,
+              borderBottomWidth: 1,
+              borderBottomColor: borderSubtle,
+            }}
+          >
+            <Icon name="search" size={18} color={textMuted} />
+            <TextInput
+              value={currencyQuery}
+              onChangeText={setCurrencyQuery}
+              placeholder="Search currencies..."
+              placeholderTextColor={textMuted}
+              style={{
+                flex: 1,
+                height: 36,
+                color: textPrimary,
+                paddingHorizontal: spacing.s12,
+                fontSize: 15,
+              }}
+            />
+          </View>
+
+          <ScrollView
+            style={{ flex: 1, marginHorizontal: -spacing.s16, marginBottom: -spacing.s16 }}
+            contentContainerStyle={{ paddingHorizontal: spacing.s16, paddingBottom: spacing.s16 }}
+            showsVerticalScrollIndicator={false}
+            alwaysBounceVertical={true}
+            bounces={true}
+          >
+            {filteredCurrencies.map((cur, idx) => {
+              const active = currency?.toUpperCase() === cur.code;
+              const primaryCurrency = profile?.currency || 'USD';
+              const exchangeRate = cur.code === primaryCurrency ? '1.00' : '0.00'; // TODO: Add real exchange rates
+
+              return (
+                <View key={cur.code}>
+                  <Pressable
+                    onPress={() => handleCurrencyChange(cur.code)}
+                    style={({ pressed }) => ({
+                      paddingVertical: spacing.s12,
+                      paddingHorizontal: spacing.s4,
+                      opacity: pressed ? 0.6 : 1,
+                      backgroundColor: active ? withAlpha(accentPrimary, isDark ? 0.15 : 0.08) : 'transparent',
+                      marginHorizontal: -spacing.s16,
+                      paddingHorizontal: spacing.s16,
+                    })}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+                      <Text style={{ fontSize: 28 }}>{cur.flag || '🏳️'}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 15 }}>
+                          {cur.name}
+                        </Text>
+                        <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>
+                          {cur.code} · {cur.symbol}
+                        </Text>
+                      </View>
+                      <Text style={{ color: textMuted, fontSize: 13, fontWeight: '600' }}>
+                        1 {primaryCurrency} ≈ {exchangeRate}
+                      </Text>
+                    </View>
+                  </Pressable>
+                  {idx < filteredCurrencies.length - 1 && (
+                    <View style={{ height: 1, backgroundColor: borderSubtle }} />
+                  )}
+                </View>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </BottomSheet>
+    </SafeAreaView>
   );
 }
 

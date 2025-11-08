@@ -1,13 +1,13 @@
 
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchDailyHistoryYahoo, fetchYahooFundamentals } from '../lib/yahoo';
-import { fetchDailyHistoryFMP, fetchFMPFundamentals, fetchFMPBatchQuotes, setFMPApiKey } from '../lib/fmp';
-import { setFinnhubApiKey } from '../lib/finnhub';
-import { isCryptoSymbol, fetchCrypto, baseCryptoSymbol, fetchCryptoOhlc } from '../lib/coingecko';
-import { fetchFxUSD, type FxRates } from '../lib/fx';
-import { computePnL } from '../lib/positions';
-import { fixHoldingsCurrency } from '../lib/fixHoldingsCurrency';
+import { fetchDailyHistoryYahoo, fetchYahooFundamentals } from '../../../lib/yahoo';
+import { fetchDailyHistoryFMP, fetchFMPFundamentals, fetchFMPBatchQuotes, setFMPApiKey } from '../../../lib/fmp';
+import { setFinnhubApiKey } from '../../../lib/finnhub';
+import { isCryptoSymbol, fetchCrypto, baseCryptoSymbol, fetchCryptoOhlc } from '../../../lib/coingecko';
+import { fetchFxUSD, type FxRates } from '../../../lib/fx';
+import { computePnL } from '../../../lib/positions';
+import { fixHoldingsCurrency } from '../../../lib/fixHoldingsCurrency';
 
 export type InstrumentType = 'stock' | 'bond' | 'crypto' | 'fund' | 'etf';
 
@@ -795,7 +795,7 @@ addLot: async (symbol, lot, meta, opts) => {
 
       // Finnhub
       if (dataSource === 'finnhub' && finnhubApiKey && equitySymbols.length > 0) {
-        const { fetchFinnhubQuote, fetchFinnhubCandles, fetchFinnhubProfile } = await import('../lib/finnhub');
+        const { fetchFinnhubQuote, fetchFinnhubCandles, fetchFinnhubProfile } = await import('../../../lib/finnhub');
 
         for (const sym of equitySymbols) {
           try {

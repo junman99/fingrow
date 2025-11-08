@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Switch, Share, Alert, Pressable, StyleSheet, ScrollView } from 'react-native';
-import { ScreenScroll } from '../../components/ScreenScroll';
-import Button from '../../components/Button';
-import Icon from '../../components/Icon';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
+import { ScreenScroll } from '../../../components/ScreenScroll';
+import Button from '../../../components/Button';
+import Icon from '../../../components/Icon';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useGroupsStore } from '../store';
-import { scheduleDaily, cancel, listReminders } from '../../lib/notifications';
-import { formatCurrency } from '../../lib/format';
+import { scheduleDaily, cancel, listReminders } from '../../../lib/notifications';
+import { formatCurrency } from '../../../lib/format';
 
 function withAlpha(hex: string, alpha: number) {
   if (!hex || typeof hex !== 'string') return hex;
@@ -216,7 +216,7 @@ export default function BillDetails() {
               backgroundColor: surface1,
               borderRadius: radius.lg,
               padding: spacing.s12,
-              borderWidth: 1,
+              
               borderColor: withAlpha(borderSubtle, 0.3)
             }}>
               <Text style={{ color: textMuted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Status</Text>
@@ -234,7 +234,7 @@ export default function BillDetails() {
               backgroundColor: surface1,
               borderRadius: radius.lg,
               padding: spacing.s12,
-              borderWidth: 1,
+              
               borderColor: withAlpha(borderSubtle, 0.3)
             }}>
               <Text style={{ color: textMuted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Outstanding</Text>
@@ -284,8 +284,8 @@ export default function BillDetails() {
                     backgroundColor: surface1,
                     borderRadius: radius.lg,
                     padding: spacing.s14,
-                    borderWidth: 1,
-                    borderColor: borderSubtle,
+                    
+                    
                     gap: spacing.s12
                   }}
                 >
@@ -342,8 +342,8 @@ export default function BillDetails() {
                     backgroundColor: surface1,
                     borderRadius: radius.lg,
                     padding: spacing.s16,
-                    borderWidth: 1,
-                    borderColor: borderSubtle,
+                    
+                    
                     alignItems: 'center'
                   }}>
                     <Icon name="check-circle" size={48} color={successColor} />
@@ -371,7 +371,7 @@ export default function BillDetails() {
                     backgroundColor: surface1,
                     borderRadius: radius.lg,
                     padding: spacing.s16,
-                    borderWidth: 1,
+                    
                     borderColor: s.settled ? withAlpha(successColor, 0.3) : borderSubtle,
                     gap: spacing.s12
                   }}
@@ -502,8 +502,8 @@ export default function BillDetails() {
             backgroundColor: surface1,
             borderRadius: radius.lg,
             padding: spacing.s16,
-            borderWidth: 1,
-            borderColor: borderSubtle,
+            
+            
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'center',

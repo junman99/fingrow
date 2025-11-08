@@ -1,9 +1,9 @@
 
 import React from 'react';
 import { View, Text, Pressable, TextInput, Alert } from 'react-native';
-import BottomSheet from '../BottomSheet';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
+import BottomSheet from '../../../components/BottomSheet';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 
 type Item = { id: string; name: string; baseCurrency?: string; type?: 'Live'|'Paper' };
 

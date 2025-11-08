@@ -1,16 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { ScreenScroll } from '../components/ScreenScroll';
-import Input from '../components/Input';
-import Button from '../components/Button';
-import Icon from '../components/Icon';
-import { spacing, radius } from '../theme/tokens';
+import { ScreenScroll } from '../../../components/ScreenScroll';
+import Input from '../../../components/Input';
+import Button from '../../../components/Button';
+import Icon from '../../../components/Icon';
+import { spacing, radius } from '../../../theme/tokens';
 import { useInvestStore } from '../store/invest';
 import { useNavigation } from '@react-navigation/native';
-import { useThemeTokens } from '../theme/ThemeProvider';
-import { useProfileStore } from '../store/profile';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { useProfileStore } from '../../../store/profile';
 import CurrencyPickerSheet from '../components/CurrencyPickerSheet';
-import { findCurrency, type CurrencyMeta } from '../lib/currencies';
+import { findCurrency, type CurrencyMeta } from '../../../lib/currencies';
 
 function withAlpha(color: string, alpha: number) {
   if (!color) return color;

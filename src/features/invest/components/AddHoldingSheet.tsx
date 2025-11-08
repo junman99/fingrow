@@ -2,15 +2,15 @@ import React from 'react';
 import { View, Text, TextInput, FlatList, Pressable, Dimensions, Platform, Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import BottomSheet from '../BottomSheet';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
-import Icon from '../Icon';
-import { toYahooSymbol } from '../../lib/yahoo';
-import { baseCryptoSymbol, fetchCryptoOhlc } from '../../lib/coingecko';
-import { fetchDailyHistoryYahoo } from '../../lib/yahoo';
+import BottomSheet from '../../../components/BottomSheet';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
+import Icon from '../../../components/Icon';
+import { toYahooSymbol } from '../../../lib/yahoo';
+import { baseCryptoSymbol, fetchCryptoOhlc } from '../../../lib/coingecko';
+import { fetchDailyHistoryYahoo } from '../../../lib/yahoo';
 import { useInvestStore } from '../store';
-import { useProfileStore } from '../../store/profile';
+import { useProfileStore } from '../../../store/profile';
 
 type Item = { key: string; symbol: string; provider: 'Yahoo'|'CoinGecko' };
 

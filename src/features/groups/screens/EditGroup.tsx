@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Alert, Pressable } from 'react-native';
-import { ScreenScroll } from '../../components/ScreenScroll';
-import Button from '../../components/Button';
-import Icon from '../../components/Icon';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
+import { ScreenScroll } from '../../../components/ScreenScroll';
+import Button from '../../../components/Button';
+import Icon from '../../../components/Icon';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useGroupsStore } from '../store';
 
@@ -73,8 +73,8 @@ export default function EditGroup() {
   };
 
   const inputStyle = {
-    borderWidth: 1,
-    borderColor: borderSubtle,
+    
+    
     borderRadius: radius.md,
     paddingVertical: spacing.s12,
     paddingHorizontal: spacing.s14,

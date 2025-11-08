@@ -1,22 +1,22 @@
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { ScreenScroll } from '../components/ScreenScroll';
-import { useThemeTokens } from '../theme/ThemeProvider';
-import { spacing, radius } from '../theme/tokens';
+import { ScreenScroll } from '../../../components/ScreenScroll';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 import { useInvestStore } from '../store/invest';
-import { useProfileStore } from '../store/profile';
-import Icon from '../components/Icon';
-import { formatCurrency } from '../lib/format';
-import { computePnL } from '../lib/positions';
-import { convertCurrency } from '../lib/fx';
-import LineChart from '../components/LineChart';
+import { useProfileStore } from '../../../store/profile';
+import Icon from '../../../components/Icon';
+import { formatCurrency } from '../../../lib/format';
+import { computePnL } from '../../../lib/positions';
+import { convertCurrency } from '../../../lib/fx';
+import LineChart from '../../../components/LineChart';
 import WatchRow from '../components/WatchRow';
 import HoldingRow from '../components/HoldingRow';
 import AddHoldingSheet from '../components/AddHoldingSheet';
 import HoldingsFilterSheet from '../components/HoldingsFilterSheet';
 import HoldingsSortSheet from '../components/HoldingsSortSheet';
-import PopoverMenu from '../components/PopoverMenu';
+import PopoverMenu from '../../../components/PopoverMenu';
 
 function withAlpha(color: string, alpha: number) {
   if (!color) return color;

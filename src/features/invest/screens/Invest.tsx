@@ -3,16 +3,16 @@ import { Pressable, ScrollView, Text, View, Animated as RNAnimated, Dimensions }
 import Animated, { useAnimatedStyle, useSharedValue, useAnimatedScrollHandler, interpolate, Extrapolate } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ScreenScroll } from '../components/ScreenScroll';
-import { spacing, radius } from '../theme/tokens';
-import { useThemeTokens } from '../theme/ThemeProvider';
+import { ScreenScroll } from '../../../components/ScreenScroll';
+import { spacing, radius } from '../../../theme/tokens';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
 import { useInvestStore } from '../store/invest';
-import { formatCurrency } from '../lib/format';
-import { useProfileStore } from '../store/profile';
+import { formatCurrency } from '../../../lib/format';
+import { useProfileStore } from '../../../store/profile';
 import { useNavigation } from '@react-navigation/native';
-import LineChart from '../components/LineChart';
-import { computePnL } from '../lib/positions';
-import { convertCurrency } from '../lib/fx';
+import LineChart from '../../../components/LineChart';
+import { computePnL } from '../../../lib/positions';
+import { convertCurrency } from '../../../lib/fx';
 import PortfolioListCard from '../components/PortfolioListCard';
 // CreatePortfolioModal removed - now using CreatePortfolio screen
 import PortfolioDetailSheet from '../components/PortfolioDetailSheet';
@@ -21,8 +21,8 @@ import PortfolioManagerModal from '../components/PortfolioManagerModal';
 import EditPortfolioModal from '../components/EditPortfolioModal';
 import HoldingsFilterSheet from '../components/HoldingsFilterSheet';
 import HoldingsSortSheet from '../components/HoldingsSortSheet';
-import Icon from '../components/Icon';
-import { GlobalIndicesTicker } from '../components/GlobalIndicesTicker';
+import Icon from '../../../components/Icon';
+import { GlobalIndicesTicker } from '../../../components/GlobalIndicesTicker';
 
 function withAlpha(hex: string, alpha: number) {
   if (!hex) return hex;

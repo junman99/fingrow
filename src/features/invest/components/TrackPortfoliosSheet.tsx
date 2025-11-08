@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
-import BottomSheet from '../BottomSheet';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
+import BottomSheet from '../../../components/BottomSheet';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 import { useInvestStore } from '../store';
-import Icon from '../Icon';
+import Icon from '../../../components/Icon';
 
 type Props = {
   visible: boolean;

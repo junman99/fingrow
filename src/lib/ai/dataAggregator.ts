@@ -6,7 +6,7 @@
 
 import { useTxStore } from '../../store/transactions';
 import { useAccountsStore } from '../../store/accounts';
-import { useInvestStore } from '../../store/invest';
+import { useInvestStore } from '../../features/invest';
 import { useBudgetsStore } from '../../store/budgets';
 import { useDebtsStore } from '../../store/debts';
 import { useProfileStore } from '../../store/profile';

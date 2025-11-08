@@ -1,8 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, TextInput, Pressable, Alert } from 'react-native';
-import CenterModal from '../CenterModal';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
+import CenterModal from '../../../components/CenterModal';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 import { useInvestStore } from '../store';
 
 type Props = {

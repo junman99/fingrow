@@ -1,19 +1,19 @@
 import React from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import BottomSheet from '../BottomSheet';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
+import BottomSheet from '../../../components/BottomSheet';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 import { useInvestStore } from '../store';
-import { useProfileStore } from '../../store/profile';
+import { useProfileStore } from '../../../store/profile';
 import HoldingRow from './HoldingRow';
 import WatchRow from './WatchRow';
-import Icon, { type IconName } from '../Icon';
-import PopoverMenu from '../PopoverMenu';
-import { computePnL } from '../../lib/positions';
-import { formatCurrency } from '../../lib/format';
-import { convertCurrency } from '../../lib/fx';
-import { exportPortfolioCsv } from '../../lib/export';
+import Icon, { type IconName } from '../../../components/Icon';
+import PopoverMenu from '../../../components/PopoverMenu';
+import { computePnL } from '../../../lib/positions';
+import { formatCurrency } from '../../../lib/format';
+import { convertCurrency } from '../../../lib/fx';
+import { exportPortfolioCsv } from '../../../lib/export';
 import CashEditorSheet from './CashEditorSheet';
 
 type Props = {

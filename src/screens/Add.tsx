@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Screen } from '../components/Screen';
 import Keypad from '../components/Keypad';
-import DateTimeSheet from '../components/DateTimeSheet';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import AddCategoryModal from './AddCategory';
 import Icon from '../components/Icon';
 
@@ -155,7 +155,8 @@ export default function Add() {
 
   // Quick time & account selection
   const [txDate, setTxDate] = useState<Date>(new Date());
-  const [dtOpen, setDtOpen] = useState<boolean>(false);
+  const [showDateTimePicker, setShowDateTimePicker] = useState<boolean>(false);
+  const [showTimeOverlay, setShowTimeOverlay] = useState<boolean>(false);
   const [account, setAccount] = useState<string>('');
   const [accountOpen, setAccountOpen] = useState<boolean>(false);
 
@@ -626,8 +627,10 @@ export default function Add() {
   const [recEndDate, setRecEndDate] = useState<Date>(new Date());
   const [recAutoPost, setRecAutoPost] = useState<boolean>(false);
   const [recRemind, setRecRemind] = useState<boolean>(true);
-  const [recDateOpen, setRecDateOpen] = useState<boolean>(false);
-  const [recEndDateOpen, setRecEndDateOpen] = useState<boolean>(false);
+  const [showRecDateTimePicker, setShowRecDateTimePicker] = useState<boolean>(false);
+  const [showRecTimeOverlay, setShowRecTimeOverlay] = useState<boolean>(false);
+  const [showRecEndDateTimePicker, setShowRecEndDateTimePicker] = useState<boolean>(false);
+  const [showRecEndTimeOverlay, setShowRecEndTimeOverlay] = useState<boolean>(false);
   const [recAmount, setRecAmount] = useState<string>('0.00');
   const [addCategoryOpen, setAddCategoryOpen] = useState<boolean>(false);
   const [deleteMode, setDeleteMode] = useState<boolean>(false);
@@ -778,7 +781,7 @@ export default function Add() {
           label={whenLabel}
           onPress={() => {
             setAccountOpen(false);
-            setDtOpen(true);
+            setShowDateTimePicker(true);
           }}
         />
         <SummaryChip
@@ -911,15 +914,196 @@ export default function Add() {
           </View>
         ) : null}
 
-        <DateTimeSheet
-          visible={dtOpen}
-          date={txDate}
-          onCancel={() => setDtOpen(false)}
-          onConfirm={(d) => {
-            setTxDate(d);
-            setDtOpen(false);
+        {/* Date & Time Picker Modal */}
+        <Modal
+          visible={showDateTimePicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            setShowDateTimePicker(false);
+            setShowTimeOverlay(false);
           }}
-        />
+        >
+          <View style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: spacing.s16,
+          }}>
+            <TouchableWithoutFeedback onPress={() => {
+              setShowDateTimePicker(false);
+              setShowTimeOverlay(false);
+            }}>
+              <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }} />
+            </TouchableWithoutFeedback>
+
+            <View style={{
+              width: '100%',
+              maxWidth: 400,
+              backgroundColor: get('background.default') as string,
+              borderRadius: 20,
+              paddingHorizontal: spacing.s8,
+              paddingTop: spacing.s8,
+              paddingBottom: spacing.s8,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.4,
+              shadowRadius: 24,
+              elevation: 12,
+              position: 'relative',
+            }}>
+              {/* Date Picker */}
+              <View style={{ alignItems: 'center' }}>
+                <DateTimePicker
+                  value={txDate}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  onChange={(event, selectedDate) => {
+                    if (selectedDate) {
+                      setTxDate(selectedDate);
+                    }
+                  }}
+                  themeVariant={isDark ? 'dark' : 'light'}
+                />
+              </View>
+
+              {/* Time Selector Button - Bottom Right */}
+              <View style={{
+                flexDirection: 'row',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                marginTop: spacing.s4,
+                gap: spacing.s12,
+                paddingHorizontal: spacing.s4,
+              }}>
+                <Pressable
+                  onPress={() => setShowTimeOverlay(!showTimeOverlay)}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: spacing.s8,
+                    backgroundColor: get('surface.level1') as string,
+                    paddingHorizontal: spacing.s16,
+                    paddingVertical: spacing.s10,
+                    borderRadius: radius.lg,
+                    borderWidth: 1,
+                    borderColor: borderSubtle,
+                    opacity: pressed ? 0.7 : 1,
+                  })}
+                >
+                  <Icon name="clock" size={18} color={accentPrimary} />
+                  <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
+                    {txDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    setShowDateTimePicker(false);
+                    setShowTimeOverlay(false);
+                  }}
+                  style={({ pressed }) => ({
+                    backgroundColor: accentPrimary,
+                    borderRadius: radius.lg,
+                    paddingHorizontal: spacing.s20,
+                    paddingVertical: spacing.s10,
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Text style={{ color: textOnPrimary, fontSize: 15, fontWeight: '700' }}>
+                    Done
+                  </Text>
+                </Pressable>
+              </View>
+
+              {/* Time Picker Overlay - Compact Modal */}
+              {showTimeOverlay && (
+                <View style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: [{ translateX: -140 }, { translateY: -125 }],
+                  width: 280,
+                  backgroundColor: get('background.default') as string,
+                  borderRadius: 16,
+                  padding: spacing.s16,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 12,
+                  elevation: 10,
+                }}>
+                  <TouchableWithoutFeedback>
+                    <View style={{ alignItems: 'center' }}>
+                      <View style={{ height: 180, justifyContent: 'center', width: '100%' }}>
+                        <DateTimePicker
+                          value={txDate}
+                          mode="time"
+                          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                          onChange={(event, selectedDate) => {
+                            if (selectedDate) {
+                              setTxDate(selectedDate);
+                            }
+                          }}
+                          themeVariant={isDark ? 'dark' : 'light'}
+                        />
+                      </View>
+
+                      {/* Buttons */}
+                      <View style={{
+                        flexDirection: 'row',
+                        gap: spacing.s10,
+                        marginTop: spacing.s12,
+                        width: '100%',
+                      }}>
+                        {/* Now button */}
+                        <Pressable
+                          onPress={() => {
+                            const now = new Date();
+                            setTxDate(now);
+                            setShowTimeOverlay(false);
+                          }}
+                          style={({ pressed }) => ({
+                            flex: 1,
+                            backgroundColor: get('surface.level1') as string,
+                            borderRadius: radius.lg,
+                            paddingVertical: spacing.s8,
+                            alignItems: 'center',
+                            borderWidth: 1,
+                            borderColor: borderSubtle,
+                            opacity: pressed ? 0.7 : 1,
+                          })}
+                        >
+                          <Text style={{ color: textPrimary, fontSize: 14, fontWeight: '600' }}>
+                            Now
+                          </Text>
+                        </Pressable>
+
+                        {/* Done button */}
+                        <Pressable
+                          onPress={() => setShowTimeOverlay(false)}
+                          style={({ pressed }) => ({
+                            flex: 1,
+                            backgroundColor: accentPrimary,
+                            borderRadius: radius.lg,
+                            paddingVertical: spacing.s8,
+                            alignItems: 'center',
+                            opacity: pressed ? 0.85 : 1,
+                          })}
+                        >
+                          <Text style={{ color: textOnPrimary, fontSize: 14, fontWeight: '700' }}>
+                            Done
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </TouchableWithoutFeedback>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
 
         <Modal visible={accountOpen} transparent animationType="fade" onRequestClose={() => setAccountOpen(false)}>
           <View style={{ flex: 1, backgroundColor: withAlpha(backgroundDefault, 0.92), justifyContent: 'center', alignItems: 'center', padding: spacing.s16 }}>
@@ -1266,7 +1450,7 @@ export default function Add() {
 
                   <View>
                     <Text style={{ color: textMuted, fontSize: 12, marginBottom: spacing.s4 }}>Start date</Text>
-                    <Pressable onPress={() => setRecDateOpen(true)} style={{ padding: spacing.s10, borderRadius: radius.lg, backgroundColor: surface2, borderWidth: 1, borderColor: borderSubtle }}>
+                    <Pressable onPress={() => setShowRecDateTimePicker(true)} style={{ padding: spacing.s10, borderRadius: radius.lg, backgroundColor: surface2, borderWidth: 1, borderColor: borderSubtle }}>
                       <Text style={{ color: textPrimary }}>{recStart.toLocaleDateString()}</Text>
                     </Pressable>
                   </View>
@@ -1280,7 +1464,7 @@ export default function Add() {
                       <Switch value={recEndEnabled} onValueChange={setRecEndEnabled} thumbColor={recEndEnabled ? accentPrimary : undefined} />
                     </View>
                     {recEndEnabled ? (
-                      <Pressable onPress={() => setRecEndDateOpen(true)} style={{ marginTop: spacing.s8, padding: spacing.s10, borderRadius: radius.lg, backgroundColor: surface2, borderWidth: 1, borderColor: borderSubtle }}>
+                      <Pressable onPress={() => setShowRecEndDateTimePicker(true)} style={{ marginTop: spacing.s8, padding: spacing.s10, borderRadius: radius.lg, backgroundColor: surface2, borderWidth: 1, borderColor: borderSubtle }}>
                         <Text style={{ color: textPrimary }}>{recEndDate.toLocaleDateString()}</Text>
                       </Pressable>
                     ) : null}
@@ -1316,27 +1500,389 @@ export default function Add() {
           </KeyboardAvoidingView>
         </Modal>
 
-        <DateTimeSheet
-          visible={recDateOpen}
-          date={recStart}
-          onCancel={() => setRecDateOpen(false)}
-          onConfirm={(d) => {
-            setRecStart(d);
-            setRecDateOpen(false);
+        {/* Recurring Start Date & Time Picker Modal */}
+        <Modal
+          visible={showRecDateTimePicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            setShowRecDateTimePicker(false);
+            setShowRecTimeOverlay(false);
           }}
-        />
+        >
+          <View style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: spacing.s16,
+          }}>
+            <TouchableWithoutFeedback onPress={() => {
+              setShowRecDateTimePicker(false);
+              setShowRecTimeOverlay(false);
+            }}>
+              <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }} />
+            </TouchableWithoutFeedback>
 
-        <DateTimeSheet
-          visible={recEndDateOpen}
-          date={recEndDate}
-          onCancel={() => setRecEndDateOpen(false)}
-          onConfirm={(d) => {
-            setRecEndDate(d);
-            setRecEndDateOpen(false);
+            <View style={{
+              width: '100%',
+              maxWidth: 400,
+              backgroundColor: get('background.default') as string,
+              borderRadius: 20,
+              paddingHorizontal: spacing.s8,
+              paddingTop: spacing.s8,
+              paddingBottom: spacing.s8,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.4,
+              shadowRadius: 24,
+              elevation: 12,
+              position: 'relative',
+            }}>
+              {/* Date Picker */}
+              <View style={{ alignItems: 'center' }}>
+                <DateTimePicker
+                  value={recStart}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  onChange={(event, selectedDate) => {
+                    if (selectedDate) {
+                      setRecStart(selectedDate);
+                    }
+                  }}
+                  themeVariant={isDark ? 'dark' : 'light'}
+                />
+              </View>
+
+              {/* Time Selector Button - Bottom Right */}
+              <View style={{
+                flexDirection: 'row',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                marginTop: spacing.s4,
+                gap: spacing.s12,
+                paddingHorizontal: spacing.s4,
+              }}>
+                <Pressable
+                  onPress={() => setShowRecTimeOverlay(!showRecTimeOverlay)}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: spacing.s8,
+                    backgroundColor: get('surface.level1') as string,
+                    paddingHorizontal: spacing.s16,
+                    paddingVertical: spacing.s10,
+                    borderRadius: radius.lg,
+                    borderWidth: 1,
+                    borderColor: borderSubtle,
+                    opacity: pressed ? 0.7 : 1,
+                  })}
+                >
+                  <Icon name="clock" size={18} color={accentPrimary} />
+                  <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
+                    {recStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    setShowRecDateTimePicker(false);
+                    setShowRecTimeOverlay(false);
+                  }}
+                  style={({ pressed }) => ({
+                    backgroundColor: accentPrimary,
+                    borderRadius: radius.lg,
+                    paddingHorizontal: spacing.s20,
+                    paddingVertical: spacing.s10,
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Text style={{ color: textOnPrimary, fontSize: 15, fontWeight: '700' }}>
+                    Done
+                  </Text>
+                </Pressable>
+              </View>
+
+              {/* Time Picker Overlay - Compact Modal */}
+              {showRecTimeOverlay && (
+                <View style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: [{ translateX: -140 }, { translateY: -125 }],
+                  width: 280,
+                  backgroundColor: get('background.default') as string,
+                  borderRadius: 16,
+                  padding: spacing.s16,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 12,
+                  elevation: 10,
+                }}>
+                  <TouchableWithoutFeedback>
+                    <View style={{ alignItems: 'center' }}>
+                      <View style={{ height: 180, justifyContent: 'center', width: '100%' }}>
+                        <DateTimePicker
+                          value={recStart}
+                          mode="time"
+                          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                          onChange={(event, selectedDate) => {
+                            if (selectedDate) {
+                              setRecStart(selectedDate);
+                            }
+                          }}
+                          themeVariant={isDark ? 'dark' : 'light'}
+                        />
+                      </View>
+
+                      {/* Buttons */}
+                      <View style={{
+                        flexDirection: 'row',
+                        gap: spacing.s10,
+                        marginTop: spacing.s12,
+                        width: '100%',
+                      }}>
+                        {/* Now button */}
+                        <Pressable
+                          onPress={() => {
+                            const now = new Date();
+                            setRecStart(now);
+                            setShowRecTimeOverlay(false);
+                          }}
+                          style={({ pressed }) => ({
+                            flex: 1,
+                            backgroundColor: get('surface.level1') as string,
+                            borderRadius: radius.lg,
+                            paddingVertical: spacing.s8,
+                            alignItems: 'center',
+                            borderWidth: 1,
+                            borderColor: borderSubtle,
+                            opacity: pressed ? 0.7 : 1,
+                          })}
+                        >
+                          <Text style={{ color: textPrimary, fontSize: 14, fontWeight: '600' }}>
+                            Now
+                          </Text>
+                        </Pressable>
+
+                        {/* Done button */}
+                        <Pressable
+                          onPress={() => setShowRecTimeOverlay(false)}
+                          style={({ pressed }) => ({
+                            flex: 1,
+                            backgroundColor: accentPrimary,
+                            borderRadius: radius.lg,
+                            paddingVertical: spacing.s8,
+                            alignItems: 'center',
+                            opacity: pressed ? 0.85 : 1,
+                          })}
+                        >
+                          <Text style={{ color: textOnPrimary, fontSize: 14, fontWeight: '700' }}>
+                            Done
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </TouchableWithoutFeedback>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Recurring End Date & Time Picker Modal */}
+        <Modal
+          visible={showRecEndDateTimePicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            setShowRecEndDateTimePicker(false);
+            setShowRecEndTimeOverlay(false);
           }}
-        />
+        >
+          <View style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: spacing.s16,
+          }}>
+            <TouchableWithoutFeedback onPress={() => {
+              setShowRecEndDateTimePicker(false);
+              setShowRecEndTimeOverlay(false);
+            }}>
+              <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }} />
+            </TouchableWithoutFeedback>
 
-        {!recurringOpen && !noteOpen && !accountOpen && !dtOpen && !recDateOpen && !recEndDateOpen ? (
+            <View style={{
+              width: '100%',
+              maxWidth: 400,
+              backgroundColor: get('background.default') as string,
+              borderRadius: 20,
+              paddingHorizontal: spacing.s8,
+              paddingTop: spacing.s8,
+              paddingBottom: spacing.s8,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.4,
+              shadowRadius: 24,
+              elevation: 12,
+              position: 'relative',
+            }}>
+              {/* Date Picker */}
+              <View style={{ alignItems: 'center' }}>
+                <DateTimePicker
+                  value={recEndDate}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  onChange={(event, selectedDate) => {
+                    if (selectedDate) {
+                      setRecEndDate(selectedDate);
+                    }
+                  }}
+                  themeVariant={isDark ? 'dark' : 'light'}
+                />
+              </View>
+
+              {/* Time Selector Button - Bottom Right */}
+              <View style={{
+                flexDirection: 'row',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                marginTop: spacing.s4,
+                gap: spacing.s12,
+                paddingHorizontal: spacing.s4,
+              }}>
+                <Pressable
+                  onPress={() => setShowRecEndTimeOverlay(!showRecEndTimeOverlay)}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: spacing.s8,
+                    backgroundColor: get('surface.level1') as string,
+                    paddingHorizontal: spacing.s16,
+                    paddingVertical: spacing.s10,
+                    borderRadius: radius.lg,
+                    borderWidth: 1,
+                    borderColor: borderSubtle,
+                    opacity: pressed ? 0.7 : 1,
+                  })}
+                >
+                  <Icon name="clock" size={18} color={accentPrimary} />
+                  <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
+                    {recEndDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    setShowRecEndDateTimePicker(false);
+                    setShowRecEndTimeOverlay(false);
+                  }}
+                  style={({ pressed }) => ({
+                    backgroundColor: accentPrimary,
+                    borderRadius: radius.lg,
+                    paddingHorizontal: spacing.s20,
+                    paddingVertical: spacing.s10,
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Text style={{ color: textOnPrimary, fontSize: 15, fontWeight: '700' }}>
+                    Done
+                  </Text>
+                </Pressable>
+              </View>
+
+              {/* Time Picker Overlay - Compact Modal */}
+              {showRecEndTimeOverlay && (
+                <View style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: [{ translateX: -140 }, { translateY: -125 }],
+                  width: 280,
+                  backgroundColor: get('background.default') as string,
+                  borderRadius: 16,
+                  padding: spacing.s16,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 12,
+                  elevation: 10,
+                }}>
+                  <TouchableWithoutFeedback>
+                    <View style={{ alignItems: 'center' }}>
+                      <View style={{ height: 180, justifyContent: 'center', width: '100%' }}>
+                        <DateTimePicker
+                          value={recEndDate}
+                          mode="time"
+                          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                          onChange={(event, selectedDate) => {
+                            if (selectedDate) {
+                              setRecEndDate(selectedDate);
+                            }
+                          }}
+                          themeVariant={isDark ? 'dark' : 'light'}
+                        />
+                      </View>
+
+                      {/* Buttons */}
+                      <View style={{
+                        flexDirection: 'row',
+                        gap: spacing.s10,
+                        marginTop: spacing.s12,
+                        width: '100%',
+                      }}>
+                        {/* Now button */}
+                        <Pressable
+                          onPress={() => {
+                            const now = new Date();
+                            setRecEndDate(now);
+                            setShowRecEndTimeOverlay(false);
+                          }}
+                          style={({ pressed }) => ({
+                            flex: 1,
+                            backgroundColor: get('surface.level1') as string,
+                            borderRadius: radius.lg,
+                            paddingVertical: spacing.s8,
+                            alignItems: 'center',
+                            borderWidth: 1,
+                            borderColor: borderSubtle,
+                            opacity: pressed ? 0.7 : 1,
+                          })}
+                        >
+                          <Text style={{ color: textPrimary, fontSize: 14, fontWeight: '600' }}>
+                            Now
+                          </Text>
+                        </Pressable>
+
+                        {/* Done button */}
+                        <Pressable
+                          onPress={() => setShowRecEndTimeOverlay(false)}
+                          style={({ pressed }) => ({
+                            flex: 1,
+                            backgroundColor: accentPrimary,
+                            borderRadius: radius.lg,
+                            paddingVertical: spacing.s8,
+                            alignItems: 'center',
+                            opacity: pressed ? 0.85 : 1,
+                          })}
+                        >
+                          <Text style={{ color: textOnPrimary, fontSize: 14, fontWeight: '700' }}>
+                            Done
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </TouchableWithoutFeedback>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        {!recurringOpen && !noteOpen && !accountOpen && !showDateTimePicker && !showRecDateTimePicker && !showRecEndDateTimePicker ? (
           <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}>
             <Keypad
               onKey={onKey}

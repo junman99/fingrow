@@ -1,7 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
-import { useThemeTokens } from '../../theme/ThemeProvider';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
 
 type Props = {
   data?: Array<number> | Array<{ v: number }> | Array<{ t: number; v: number }>;

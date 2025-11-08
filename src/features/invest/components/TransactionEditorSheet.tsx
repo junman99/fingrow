@@ -1,15 +1,15 @@
 
 import React from 'react';
-import { View, Text, TextInput, Pressable, Keyboard, ScrollView, Platform, Image, Switch } from 'react-native';
-import BottomSheet from '../BottomSheet';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
+import { View, Text, TextInput, Pressable, Keyboard, ScrollView, Platform, Image, Switch, Modal, TouchableWithoutFeedback } from 'react-native';
+import BottomSheet from '../../../components/BottomSheet';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 import { useInvestStore } from '../store';
-import { useProfileStore } from '../../store/profile';
-import DateTimeSheet from '../DateTimeSheet';
+import { useProfileStore } from '../../../store/profile';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Icon from '../Icon';
-import { convertCurrency } from '../../lib/fx';
+import Icon from '../../../components/Icon';
+import { convertCurrency } from '../../../lib/fx';
 
 type Props = {
   mode?: 'add'|'edit';
@@ -22,7 +22,7 @@ type Props = {
 };
 
 const TransactionEditorSheet = React.memo(({ visible, onClose, symbol, portfolioId, mode='add', lotId, initial }: Props) => {
-  const { get } = useThemeTokens();
+  const { get, isDark } = useThemeTokens();
   const store = useInvestStore() as any;
   const { profile } = useProfileStore();
   const insets = useSafeAreaInsets();
@@ -61,14 +61,15 @@ const TransactionEditorSheet = React.memo(({ visible, onClose, symbol, portfolio
   const [priceInput, setPriceInput] = React.useState(initial?.price != null ? String(initial.price.toFixed(2)) : (currentPrice ? String(currentPrice.toFixed(2)) : ''));
   const [feesInput, setFeesInput] = React.useState(initial?.fees != null ? String(initial.fees) : '');
   const [date, setDate] = React.useState<Date>(initial?.date ? new Date(initial.date) : new Date());
-  const [openDate, setOpenDate] = React.useState(false);
+  const [showDateTimePicker, setShowDateTimePicker] = React.useState(false);
+  const [showTimeOverlay, setShowTimeOverlay] = React.useState(false);
   const [affectCash, setAffectCash] = React.useState(mode !== 'edit');
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
     if (!visible) {
       // Reset on close
-      setSide('buy'); setQtyInput(''); setFeesInput(''); setDate(new Date()); setOpenDate(false);
+      setSide('buy'); setQtyInput(''); setFeesInput(''); setDate(new Date()); setShowDateTimePicker(false); setShowTimeOverlay(false);
       // Reset price to current price (2 decimals)
       setPriceInput(currentPrice ? String(currentPrice.toFixed(2)) : '');
     }
@@ -78,6 +79,7 @@ const TransactionEditorSheet = React.memo(({ visible, onClose, symbol, portfolio
   const muted = get('text.muted') as string;
   const border = get('border.subtle') as string;
   const onPrimary = get('text.onPrimary') as string;
+  const accentPrimary = get('accent.primary') as string;
 
   const onSave = React.useCallback(async () => {
     if (saving) return;
@@ -339,7 +341,7 @@ const TransactionEditorSheet = React.memo(({ visible, onClose, symbol, portfolio
               <View>
                 <Text style={{ color: muted, fontSize: 11, fontWeight: '700', marginBottom: spacing.s6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Date</Text>
                 <Pressable
-                  onPress={() => setOpenDate(true)}
+                  onPress={() => setShowDateTimePicker(true)}
                   style={({ pressed }) => ({
                     backgroundColor: get('surface.level1') as string,
                     borderRadius: radius.lg,
@@ -384,7 +386,196 @@ const TransactionEditorSheet = React.memo(({ visible, onClose, symbol, portfolio
         </ScrollView>
       </View>
 
-      <DateTimeSheet visible={openDate} date={date} onCancel={() => setOpenDate(false)} onConfirm={(d) => { setDate(d); setOpenDate(false); }} />
+      {/* Date & Time Picker Modal */}
+      <Modal
+        visible={showDateTimePicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowDateTimePicker(false);
+          setShowTimeOverlay(false);
+        }}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: spacing.s16,
+        }}>
+          <TouchableWithoutFeedback onPress={() => {
+            setShowDateTimePicker(false);
+            setShowTimeOverlay(false);
+          }}>
+            <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }} />
+          </TouchableWithoutFeedback>
+
+          <View style={{
+            width: '100%',
+            maxWidth: 400,
+            backgroundColor: get('background.default') as string,
+            borderRadius: 20,
+            paddingHorizontal: spacing.s8,
+            paddingTop: spacing.s8,
+            paddingBottom: spacing.s8,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.4,
+            shadowRadius: 24,
+            elevation: 12,
+            position: 'relative',
+          }}>
+            {/* Date Picker */}
+            <View style={{ alignItems: 'center' }}>
+              <DateTimePicker
+                value={date}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                onChange={(event, selectedDate) => {
+                  if (selectedDate) {
+                    setDate(selectedDate);
+                  }
+                }}
+                themeVariant={isDark ? 'dark' : 'light'}
+              />
+            </View>
+
+            {/* Time Selector Button - Bottom Right */}
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              marginTop: spacing.s4,
+              gap: spacing.s12,
+              paddingHorizontal: spacing.s4,
+            }}>
+              <Pressable
+                onPress={() => setShowTimeOverlay(!showTimeOverlay)}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: spacing.s8,
+                  backgroundColor: get('surface.level1') as string,
+                  paddingHorizontal: spacing.s16,
+                  paddingVertical: spacing.s10,
+                  borderRadius: radius.lg,
+                  borderWidth: 1,
+                  borderColor: border,
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Icon name="clock" size={18} color={accentPrimary} />
+                <Text style={{ color: text, fontSize: 15, fontWeight: '600' }}>
+                  {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setShowDateTimePicker(false);
+                  setShowTimeOverlay(false);
+                }}
+                style={({ pressed }) => ({
+                  backgroundColor: accentPrimary,
+                  borderRadius: radius.lg,
+                  paddingHorizontal: spacing.s20,
+                  paddingVertical: spacing.s10,
+                  opacity: pressed ? 0.85 : 1,
+                })}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700' }}>
+                  Done
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* Time Picker Overlay - Compact Modal */}
+            {showTimeOverlay && (
+              <View style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: [{ translateX: -140 }, { translateY: -125 }],
+                width: 280,
+                backgroundColor: get('background.default') as string,
+                borderRadius: 16,
+                padding: spacing.s16,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 12,
+                elevation: 10,
+              }}>
+                <TouchableWithoutFeedback>
+                  <View style={{ alignItems: 'center' }}>
+                    <View style={{ height: 180, justifyContent: 'center', width: '100%' }}>
+                      <DateTimePicker
+                        value={date}
+                        mode="time"
+                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                        onChange={(event, selectedDate) => {
+                          if (selectedDate) {
+                            setDate(selectedDate);
+                          }
+                        }}
+                        themeVariant={isDark ? 'dark' : 'light'}
+                      />
+                    </View>
+
+                    {/* Buttons */}
+                    <View style={{
+                      flexDirection: 'row',
+                      gap: spacing.s10,
+                      marginTop: spacing.s12,
+                      width: '100%',
+                    }}>
+                      {/* Now button */}
+                      <Pressable
+                        onPress={() => {
+                          const now = new Date();
+                          setDate(now);
+                          setShowTimeOverlay(false);
+                        }}
+                        style={({ pressed }) => ({
+                          flex: 1,
+                          backgroundColor: get('surface.level1') as string,
+                          borderRadius: radius.lg,
+                          paddingVertical: spacing.s8,
+                          alignItems: 'center',
+                          borderWidth: 1,
+                          borderColor: border,
+                          opacity: pressed ? 0.7 : 1,
+                        })}
+                      >
+                        <Text style={{ color: text, fontSize: 14, fontWeight: '600' }}>
+                          Now
+                        </Text>
+                      </Pressable>
+
+                      {/* Done button */}
+                      <Pressable
+                        onPress={() => setShowTimeOverlay(false)}
+                        style={({ pressed }) => ({
+                          flex: 1,
+                          backgroundColor: accentPrimary,
+                          borderRadius: radius.lg,
+                          paddingVertical: spacing.s8,
+                          alignItems: 'center',
+                          opacity: pressed ? 0.85 : 1,
+                        })}
+                      >
+                        <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>
+                          Done
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </TouchableWithoutFeedback>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </BottomSheet>
   );
 });

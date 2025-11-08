@@ -1,15 +1,15 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Icon from '../Icon';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
+import Icon from '../../../components/Icon';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 import { useInvestStore, type Portfolio } from '../store';
-import { useProfileStore } from '../../store/profile';
-import { formatCurrency } from '../../lib/format';
-import { convertCurrency, type FxRates } from '../../lib/fx';
-import { computePnL } from '../../lib/positions';
-import PopoverMenu from '../PopoverMenu';
+import { useProfileStore } from '../../../store/profile';
+import { formatCurrency } from '../../../lib/format';
+import { convertCurrency, type FxRates } from '../../../lib/fx';
+import { computePnL } from '../../../lib/positions';
+import PopoverMenu from '../../../components/PopoverMenu';
 import PortfolioAvatar from './PortfolioAvatar';
 
 /**

@@ -1,12 +1,12 @@
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
-import BottomSheet from '../BottomSheet';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
-import LineChart from '../LineChart';
-import Icon from '../Icon';
+import BottomSheet from '../../../components/BottomSheet';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
+import LineChart from '../../../components/LineChart';
+import Icon from '../../../components/Icon';
 import { useInvestStore } from '../store';
-import { useProfileStore } from '../../store/profile';
+import { useProfileStore } from '../../../store/profile';
 
 type IndexData = {
   symbol: string;

@@ -34,26 +34,26 @@ export default function BottomSheet({ visible, onClose, children, height, dimmed
   useEffect(() => {
     if (visible) {
       y.value = CLOSED_Y;
-      // Faster, smoother spring animation
-      y.value = withSpring(OPEN_Y, { damping: 35, stiffness: 450, mass: 0.7 });
+      // Smooth timing animation - no bounce
+      y.value = withTiming(OPEN_Y, { duration: 300 });
     } else {
       y.value = withTiming(CLOSED_Y, { duration: 180 });
     }
   }, [visible]);
 
-  // Keyboard lift: push sheet above keyboard smoothly
-  useEffect(() => {
-    const show = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hide = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const subShow = Keyboard.addListener(show as any, (e: any) => {
-      const h = e?.endCoordinates?.height || 0;
-      kb.value = withTiming(h, { duration: Platform.OS === 'ios' ? (e?.duration || 200) : 160 });
-    });
-    const subHide = Keyboard.addListener(hide as any, (e: any) => {
-      kb.value = withTiming(0, { duration: Platform.OS === 'ios' ? (e?.duration || 200) : 120 });
-    });
-    return () => { try { (subShow as any)?.remove?.(); (subHide as any)?.remove?.(); } catch {} };
-  }, []);
+  // Keyboard lift: disabled - let child components handle keyboard behavior
+  // useEffect(() => {
+  //   const show = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+  //   const hide = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+  //   const subShow = Keyboard.addListener(show as any, (e: any) => {
+  //     const h = e?.endCoordinates?.height || 0;
+  //     kb.value = withTiming(h, { duration: Platform.OS === 'ios' ? (e?.duration || 200) : 160 });
+  //   });
+  //   const subHide = Keyboard.addListener(hide as any, (e: any) => {
+  //     kb.value = withTiming(0, { duration: Platform.OS === 'ios' ? (e?.duration || 200) : 120 });
+  //   });
+  //   return () => { try { (subShow as any)?.remove?.(); (subHide as any)?.remove?.(); } catch {} };
+  // }, []);
 
   const closeAnimated = () => {
     y.value = withTiming(CLOSED_Y, { duration: 220 }, (finished) => {
@@ -96,8 +96,8 @@ export default function BottomSheet({ visible, onClose, children, height, dimmed
     default: 'rgba(0,0,0,0.36)',
   })!;
 
-  // Opaque sheet background (component token). This avoids showing UI behind it.
-  const sheetBg = get('component.sheet.bg') as string;
+  // Opaque sheet background - use default background for darker shade
+  const sheetBg = get('background.default') as string;
   const handleBg = get('border.subtle') as string;
 
   return (
@@ -115,7 +115,7 @@ export default function BottomSheet({ visible, onClose, children, height, dimmed
               {
                 position: 'absolute',
                 left: 0, right: 0, bottom: 0,
-                paddingBottom: Math.max(insets.bottom, 16),
+                paddingBottom: 0,
                 paddingTop: spacing.s12,
                 paddingHorizontal: spacing.s16,
                 backgroundColor: sheetBg,
@@ -128,7 +128,9 @@ export default function BottomSheet({ visible, onClose, children, height, dimmed
             pointerEvents={dimmed ? 'none' : 'auto'}
           >
             <View style={{ alignSelf:'center', width: 48, height: 4, borderRadius: 2, marginBottom: spacing.s12, backgroundColor: handleBg }} />
-            {children}
+            <View style={{ flex: 1 }}>
+              {children}
+            </View>
           </Animated.View>
         </GestureDetector>
       </View>

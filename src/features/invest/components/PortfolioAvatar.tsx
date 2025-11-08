@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text, View, Platform } from 'react-native';
-import { radius, spacing } from '../../theme/tokens';
-import { useThemeTokens } from '../../theme/ThemeProvider';
+import { radius, spacing } from '../../../theme/tokens';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
 import { type Portfolio } from '../store';
 
 /**

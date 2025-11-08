@@ -1,16 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, Alert, TextInput, Pressable, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, Alert, TextInput, Pressable, StyleSheet, ScrollView, Platform, Modal, TouchableWithoutFeedback, Dimensions, KeyboardAvoidingView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { ScreenScroll } from '../../components/ScreenScroll';
-import Button from '../../components/Button';
-import Icon from '../../components/Icon';
-import DateTimeSheet from '../../components/DateTimeSheet';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { ScreenScroll } from '../../../components/ScreenScroll';
+import Button from '../../../components/Button';
+import Icon from '../../../components/Icon';
+import BottomSheet from '../../../components/BottomSheet';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 import { useGroupsStore } from '../store';
-import { formatCurrency } from '../../lib/format';
-import type { ID } from '../../types/groups';
+import { formatCurrency } from '../../../lib/format';
+import type { ID } from '../../../types/groups';
 
 const KEY_ADVANCED_OPEN = 'fingrow/ui/addbill/advancedOpen';
 
@@ -43,18 +44,26 @@ export default function AddBill() {
   );
   const participantIds = Object.entries(participants).filter(([_, v]) => v).map(([k]) => k);
 
-  const [mode, setMode] = useState<'equal' | 'exact'>('equal');
+  const [mode, setMode] = useState<'equal' | 'exact' | 'weight' | 'share'>('equal');
   const [exacts, setExacts] = useState<Record<string, string>>({});
+  const [weights, setWeights] = useState<Record<string, string>>({});
+  const [shares, setShares] = useState<Record<string, string>>({});
 
   // Tax & Fees
-  const [showTaxFees, setShowTaxFees] = useState(false);
   const [tax, setTax] = useState('');
   const [serviceCharge, setServiceCharge] = useState('');
   const [vat, setVat] = useState('');
 
+  // Bottom Sheets
+  const [splitModeSheet, setSplitModeSheet] = useState(false);
+  const [taxFeesSheet, setTaxFeesSheet] = useState(false);
+  const [splitModeTab, setSplitModeTab] = useState<'equal' | 'weight' | 'share'>('equal');
+  const [showTaxFees, setShowTaxFees] = useState(false);
+
   // Date & Time
   const [billDate, setBillDate] = useState(new Date());
-  const [dtOpen, setDtOpen] = useState(false);
+  const [showDateTimePicker, setShowDateTimePicker] = useState(false);
+  const [showTimeOverlay, setShowTimeOverlay] = useState(false);
 
   const amountNum = useMemo(() => Number(amount) || 0, [amount]);
   const sumExacts = useMemo(() => participantIds.reduce((acc, id) => acc + (Number(exacts[id] || 0) || 0), 0), [exacts, participantIds]);
@@ -75,6 +84,16 @@ export default function AddBill() {
 
   const toggleParticipant = (id: string) => setParticipants(p => ({ ...p, [id]: !p[id] }));
 
+  // Sync split mode tab with current mode when sheet opens
+  useEffect(() => {
+    if (splitModeSheet) {
+      if (mode === 'equal') setSplitModeTab('equal');
+      else if (mode === 'weight') setSplitModeTab('weight');
+      else if (mode === 'share') setSplitModeTab('share');
+      else setSplitModeTab('equal');
+    }
+  }, [splitModeSheet, mode]);
+
   const onSave = async () => {
     if (!group) return;
     const amt = parseFloat(amount || '0');
@@ -88,13 +107,13 @@ export default function AddBill() {
     let combinedTaxPct = taxNum + serviceChargeNum + vatNum;
     let baseAmount = amt;
 
-    if (mode === 'exact') {
-      // In custom mode: if custom amounts don't sum to base amount, that's OK
+    if (mode === 'share') {
+      // In share mode: if custom amounts don't sum to base amount, that's OK
       // The difference will be treated as additional fees/tax split proportionally
-      exactsMap = Object.fromEntries(Object.entries(exacts).map(([k, v]) => [k as ID, Number(v) || 0]));
+      exactsMap = Object.fromEntries(Object.entries(shares).map(([k, v]) => [k as ID, Number(v) || 0]));
 
       // Calculate the sum of custom amounts
-      const customSum = participantIds.reduce((acc, id) => acc + (Number(exacts[id] || 0) || 0), 0);
+      const customSum = participantIds.reduce((acc, id) => acc + (Number(shares[id] || 0) || 0), 0);
 
       // If custom amounts don't sum to total amount, add the difference to the tax
       if (Math.abs(customSum - amt) > 0.01) {
@@ -236,11 +255,10 @@ export default function AddBill() {
           marginBottom: spacing.s24,
           gap: spacing.s16
         }}>
-          {/* Top row: Calendar button + Amount */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s16 }}>
             {/* Calendar button on left */}
             <Pressable
-              onPress={() => setDtOpen(true)}
+              onPress={() => setShowDateTimePicker(true)}
               style={({ pressed }) => ({
                 alignItems: 'center',
                 gap: spacing.s4,
@@ -268,59 +286,58 @@ export default function AddBill() {
               </View>
             </Pressable>
 
-            {/* Amount input on right */}
-            <View style={{ flex: 1, alignItems: 'flex-end' }}>
-              <TextInput
-                value={amount}
-                onChangeText={setAmount}
-                placeholder="$0"
-                keyboardType="decimal-pad"
-                placeholderTextColor={withAlpha(textMuted, 0.3)}
-                autoFocus
-                style={{
-                  color: textPrimary,
-                  fontSize: 56,
-                  fontWeight: '800',
-                  letterSpacing: -2,
-                  textAlign: 'right',
-                  width: '100%'
-                }}
-              />
-              {participantIds.length > 0 && finalTotal > 0 && (
-                <View style={{ marginTop: spacing.s4, alignItems: 'flex-end' }}>
-                  <Text style={{ color: textMuted, fontSize: 13, fontWeight: '500' }}>
-                    {formatCurrency(finalTotal / participantIds.length)} per person
-                  </Text>
-                  {totalFees > 0 && (
-                    <Text style={{ color: textMuted, fontSize: 11, marginTop: spacing.s2 }}>
-                      (includes {formatCurrency(totalFees)} in fees)
-                    </Text>
-                  )}
+            {/* Right side: Amount + Description */}
+            <View style={{ flex: 1 }}>
+              {/* Amount input */}
+              <View style={{ alignItems: 'flex-end' }}>
+                <TextInput
+                  value={amount}
+                  onChangeText={setAmount}
+                  placeholder="$0"
+                  keyboardType="decimal-pad"
+                  placeholderTextColor={withAlpha(textMuted, 0.3)}
+                  autoFocus
+                  style={{
+                    color: textPrimary,
+                    fontSize: 30,
+                    fontWeight: '800',
+                    letterSpacing: -1,
+                    textAlign: 'right',
+                    width: '100%'
+                  }}
+                />
+              </View>
+
+              {/* Bill description - single line below amount */}
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                marginTop: spacing.s12,
+                paddingTop: spacing.s12,
+                borderTopWidth: 1,
+                borderTopColor: borderSubtle,
+                gap: spacing.s12
+              }}>
+                <Text style={{ color: textMuted, fontSize: 15, fontWeight: '600' }}>
+                  Add notes
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <TextInput
+                    value={title}
+                    onChangeText={setTitle}
+                    placeholder="Dinner, groceries, rent..."
+                    placeholderTextColor={textMuted}
+                    style={{
+                      color: textPrimary,
+                      fontSize: 15,
+                      fontWeight: '500',
+                      padding: 0,
+                      textAlign: 'right'
+                    }}
+                  />
                 </View>
-              )}
+              </View>
             </View>
-          </View>
-
-          {/* Divider */}
-          <View style={{ height: 1, backgroundColor: borderSubtle }} />
-
-          {/* Bill description at bottom */}
-          <View>
-            <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600', marginBottom: spacing.s8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              For what?
-            </Text>
-            <TextInput
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Dinner, groceries, rent..."
-              placeholderTextColor={textMuted}
-              style={{
-                color: textPrimary,
-                fontSize: 16,
-                fontWeight: '500',
-                padding: 0
-              }}
-            />
           </View>
         </View>
 
@@ -332,7 +349,7 @@ export default function AddBill() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ flexDirection: 'row-reverse', gap: spacing.s12, paddingLeft: spacing.s16, justifyContent: 'flex-end', flexGrow: 1 }}
+            contentContainerStyle={{ flexDirection: 'row', gap: spacing.s12, paddingRight: spacing.s16, justifyContent: 'flex-end', flexGrow: 1 }}
           >
             {activeMembers.map((member, index) => {
               const active = !!participants[member.id];
@@ -351,11 +368,11 @@ export default function AddBill() {
                   })}
                 >
                   <View style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: 32,
+                    width: 45,
+                    height: 45,
+                    borderRadius: 22.5,
                     backgroundColor: colors.bg,
-                    borderWidth: 3,
+                    borderWidth: 2,
                     borderColor: colors.border,
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -368,23 +385,23 @@ export default function AddBill() {
                     {active && (
                       <View style={{
                         position: 'absolute',
-                        top: -4,
-                        right: -4,
-                        width: 24,
-                        height: 24,
-                        borderRadius: 12,
+                        top: -3,
+                        right: -3,
+                        width: 18,
+                        height: 18,
+                        borderRadius: 9,
                         backgroundColor: successColor,
                         alignItems: 'center',
                         justifyContent: 'center',
                         borderWidth: 2,
                         borderColor: get('background.default') as string
                       }}>
-                        <Icon name="check" size={12} color="#FFFFFF" />
+                        <Icon name="check" size={10} color="#FFFFFF" />
                       </View>
                     )}
                     <Text style={{
                       color: colors.text,
-                      fontSize: 20,
+                      fontSize: 14,
                       fontWeight: '700'
                     }}>
                       {initials}
@@ -416,7 +433,7 @@ export default function AddBill() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ flexDirection: 'row-reverse', gap: spacing.s12, paddingLeft: spacing.s16, justifyContent: 'flex-end', flexGrow: 1 }}
+            contentContainerStyle={{ flexDirection: 'row', gap: spacing.s12, paddingRight: spacing.s16, justifyContent: 'flex-end', flexGrow: 1 }}
           >
             {activeMembers.map((member, index) => {
               const active = paidBy === member.id;
@@ -435,11 +452,11 @@ export default function AddBill() {
                   })}
                 >
                   <View style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: 32,
+                    width: 45,
+                    height: 45,
+                    borderRadius: 22.5,
                     backgroundColor: colors.bg,
-                    borderWidth: 3,
+                    borderWidth: 2,
                     borderColor: colors.border,
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -452,23 +469,23 @@ export default function AddBill() {
                     {active && (
                       <View style={{
                         position: 'absolute',
-                        top: -4,
-                        right: -4,
-                        width: 24,
-                        height: 24,
-                        borderRadius: 12,
+                        top: -3,
+                        right: -3,
+                        width: 18,
+                        height: 18,
+                        borderRadius: 9,
                         backgroundColor: successColor,
                         alignItems: 'center',
                         justifyContent: 'center',
                         borderWidth: 2,
                         borderColor: get('background.default') as string
                       }}>
-                        <Icon name="check" size={12} color="#FFFFFF" />
+                        <Icon name="check" size={10} color="#FFFFFF" />
                       </View>
                     )}
                     <Text style={{
                       color: colors.text,
-                      fontSize: 20,
+                      fontSize: 14,
                       fontWeight: '700'
                     }}>
                       {initials}
@@ -492,306 +509,689 @@ export default function AddBill() {
           </ScrollView>
         </View>
 
-        {/* Split Method - Combined Card */}
+        {/* Bill Details - Combined Card */}
+        <Text style={{ color: textPrimary, fontSize: 17, fontWeight: '600', marginBottom: spacing.s14 }}>
+          Bill Details
+        </Text>
         <View style={{
           backgroundColor: surface1,
-          borderRadius: radius.xl,
+          borderRadius: radius.lg,
           borderWidth: 1,
           borderColor: borderSubtle,
-          overflow: 'hidden',
-          marginBottom: spacing.s24
         }}>
-          <View style={{ padding: spacing.s16 }}>
-            <Text style={{ color: textPrimary, fontSize: 17, fontWeight: '600', marginBottom: spacing.s12 }}>
+          {/* How to split */}
+          <Pressable
+            onPress={() => setSplitModeSheet(true)}
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingVertical: spacing.s16,
+              paddingHorizontal: spacing.s16,
+              opacity: pressed ? 0.7 : 1
+            })}
+          >
+            <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
               How to split
             </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+              <Text style={{ color: textMuted, fontSize: 15 }}>
+                {mode === 'equal' ? 'Equally' : mode === 'weight' ? 'By Weight' : mode === 'share' ? 'By Share' : 'Custom'}
+              </Text>
+              <Icon name="chevron-right" size={20} color={textMuted} />
+            </View>
+          </Pressable>
+
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: borderSubtle }} />
+
+          {/* Tax & Fees */}
+          <Pressable
+            onPress={() => setTaxFeesSheet(true)}
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingVertical: spacing.s16,
+              paddingHorizontal: spacing.s16,
+              opacity: pressed ? 0.7 : 1
+            })}
+          >
+            <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
+              Tax & Fees
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+              <Text style={{ color: textMuted, fontSize: 15 }}>
+                {totalFees > 0 ? formatCurrency(totalFees) : 'Optional'}
+              </Text>
+              <Icon name="chevron-right" size={20} color={textMuted} />
+            </View>
+          </Pressable>
+        </View>
+      </View>
+    </ScreenScroll>
+
+    {/* Split Mode Bottom Sheet */}
+    <BottomSheet
+      visible={splitModeSheet}
+      onClose={() => setSplitModeSheet(false)}
+    >
+      <View style={{ flex: 1 }}>
+      <Text style={{ fontSize: 20, fontWeight: '800', color: textPrimary, textAlign: 'center', marginBottom: spacing.s12 }}>
+        How to split
+      </Text>
+
+      {/* Tabs */}
+      <View style={{
+        flexDirection: 'row',
+        backgroundColor: isDark ? surface2 : get('background.default') as string,
+        borderRadius: radius.lg,
+        padding: 6,
+        gap: 6,
+        marginBottom: spacing.s12
+      }}>
+        <Pressable
+          onPress={() => setSplitModeTab('equal')}
+          style={({ pressed }) => ({
+            flex: 1,
+            borderRadius: radius.md,
+            backgroundColor: splitModeTab === 'equal' ? accentPrimary : 'transparent',
+            paddingVertical: spacing.s8,
+            alignItems: 'center',
+            opacity: pressed ? 0.8 : 1,
+          })}
+        >
+          <Text style={{ color: splitModeTab === 'equal' ? textOnPrimary : textPrimary, fontWeight: '700', fontSize: 15 }}>
+            Equally
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setSplitModeTab('weight')}
+          style={({ pressed }) => ({
+            flex: 1,
+            borderRadius: radius.md,
+            backgroundColor: splitModeTab === 'weight' ? accentPrimary : 'transparent',
+            paddingVertical: spacing.s8,
+            alignItems: 'center',
+            opacity: pressed ? 0.8 : 1,
+          })}
+        >
+          <Text style={{ color: splitModeTab === 'weight' ? textOnPrimary : textPrimary, fontWeight: '700', fontSize: 15 }}>
+            By Weight
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setSplitModeTab('share')}
+          style={({ pressed }) => ({
+            flex: 1,
+            borderRadius: radius.md,
+            backgroundColor: splitModeTab === 'share' ? accentPrimary : 'transparent',
+            paddingVertical: spacing.s8,
+            alignItems: 'center',
+            opacity: pressed ? 0.8 : 1,
+          })}
+        >
+          <Text style={{ color: splitModeTab === 'share' ? textOnPrimary : textPrimary, fontWeight: '700', fontSize: 15 }}>
+            By Share
+          </Text>
+        </Pressable>
+      </View>
+
+        {/* Tab Content */}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+        >
+          {splitModeTab === 'equal' && (
             <View style={{
               flexDirection: 'row',
-              backgroundColor: isDark ? surface2 : get('background.default') as string,
-              borderRadius: radius.lg,
-              padding: 6,
-              gap: 6
+              gap: spacing.s10,
+              marginTop: spacing.s12,
+              alignItems: 'flex-start'
             }}>
-              <Pressable
-                onPress={() => setMode('equal')}
-                style={({ pressed }) => ({
-                  flex: 1,
-                  borderRadius: radius.md,
-                  backgroundColor: mode === 'equal' ? accentPrimary : 'transparent',
-                  paddingVertical: spacing.s14,
-                  alignItems: 'center',
-                  opacity: pressed ? 0.8 : 1,
-                  shadowColor: mode === 'equal' ? accentPrimary : 'transparent',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 4,
-                  elevation: mode === 'equal' ? 2 : 0
-                })}
-              >
-                <Text style={{ color: mode === 'equal' ? textOnPrimary : textPrimary, fontWeight: '700', fontSize: 16 }}>
-                  Equally
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setMode('exact')}
-                style={({ pressed }) => ({
-                  flex: 1,
-                  borderRadius: radius.md,
-                  backgroundColor: mode === 'exact' ? accentPrimary : 'transparent',
-                  paddingVertical: spacing.s14,
-                  alignItems: 'center',
-                  opacity: pressed ? 0.8 : 1,
-                  shadowColor: mode === 'exact' ? accentPrimary : 'transparent',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 4,
-                  elevation: mode === 'exact' ? 2 : 0
-                })}
-              >
-                <Text style={{ color: mode === 'exact' ? textOnPrimary : textPrimary, fontWeight: '700', fontSize: 16 }}>
-                  Custom
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-
-          {/* Custom Amounts - Expands when Custom is selected */}
-          {mode === 'exact' && (
-            <View style={{
-              borderTopWidth: 1,
-              borderTopColor: borderSubtle,
-              padding: spacing.s16,
-              gap: spacing.s12
-            }}>
-              <Text style={{ color: textMuted, fontSize: 13, fontWeight: '600' }}>
-                Enter each person's share
+              <Icon name="info" size={18} color={get('semantic.info') as string} style={{ marginTop: 2 }} />
+              <Text style={{ color: textMuted, fontSize: 14, flex: 1, lineHeight: 20 }}>
+                Amount will be split equally among all participants
               </Text>
-              <View style={{ gap: spacing.s10 }}>
-                {participantIds.map(pid => {
+            </View>
+          )}
+
+          {splitModeTab === 'weight' && (
+            <>
+              <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600', marginBottom: spacing.s12, marginTop: spacing.s4 }}>
+                Assign weights to each participant
+              </Text>
+              <View style={{
+                backgroundColor: surface1,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: borderSubtle,
+              }}>
+                {participantIds.map((pid, index) => {
                   const member = activeMembers.find(m => m.id === pid);
                   if (!member) return null;
                   return (
-                    <View key={pid} style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      backgroundColor: surface2,
-                      borderRadius: radius.lg,
-                      paddingLeft: spacing.s16,
-                      paddingRight: spacing.s12,
-                      paddingVertical: spacing.s14,
-                      gap: spacing.s12
-                    }}>
-                      <Text style={{ color: textPrimary, flex: 1, fontWeight: '600', fontSize: 15 }}>{member.name}</Text>
-                      <Text style={{ color: textMuted, fontSize: 20, fontWeight: '300' }}>$</Text>
-                      <TextInput
-                        value={exacts[pid] ?? ''}
-                        onChangeText={t => setExacts(s => ({ ...s, [pid]: t }))}
-                        placeholder="0"
-                        placeholderTextColor={textMuted}
-                        keyboardType="decimal-pad"
-                        style={{
-                          width: 80,
-                          textAlign: 'right',
-                          color: textPrimary,
-                          fontWeight: '700',
-                          fontSize: 18
-                        }}
-                      />
-                    </View>
+                    <React.Fragment key={pid}>
+                      {index > 0 && <View style={{ height: 1, backgroundColor: borderSubtle }} />}
+                      <View style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingLeft: spacing.s16,
+                        paddingRight: spacing.s12,
+                        paddingVertical: spacing.s10,
+                        gap: spacing.s12,
+                      }}>
+                        <Text style={{ color: textPrimary, flex: 1, fontWeight: '600', fontSize: 15 }}>{member.name}</Text>
+                        <TextInput
+                          value={weights[pid] ?? ''}
+                          onChangeText={t => setWeights(s => ({ ...s, [pid]: t }))}
+                          placeholder="1"
+                          placeholderTextColor={textMuted}
+                          keyboardType="decimal-pad"
+                          style={{
+                            width: 80,
+                            textAlign: 'right',
+                            color: textPrimary,
+                            fontWeight: '700',
+                            fontSize: 18,
+                            backgroundColor: surface2,
+                            paddingHorizontal: spacing.s12,
+                            paddingVertical: spacing.s8,
+                            borderRadius: radius.md
+                          }}
+                        />
+                      </View>
+                    </React.Fragment>
                   );
                 })}
               </View>
-              {Math.abs(sumExacts - amountNum) > 0.01 && amountNum > 0 && (
-                <View style={{
-                  marginTop: spacing.s4,
-                  padding: spacing.s12,
-                  backgroundColor: withAlpha(get('semantic.info') as string, isDark ? 0.15 : 0.1),
-                  borderRadius: radius.md,
-                  borderLeftWidth: 3,
-                  borderLeftColor: get('semantic.info') as string
-                }}>
-                  <Text style={{ color: textPrimary, fontSize: 13, fontWeight: '600', marginBottom: spacing.s4 }}>
-                    {sumExacts < amountNum
-                      ? `${formatCurrency(amountNum - sumExacts)} unassigned`
-                      : `${formatCurrency(sumExacts - amountNum)} over base`}
-                  </Text>
-                  <Text style={{ color: textMuted, fontSize: 12 }}>
-                    {sumExacts < amountNum
-                      ? 'Any difference + tax/fees will be split proportionally based on custom amounts'
-                      : 'Tax & fees will be added on top of these amounts'}
-                  </Text>
-                </View>
-              )}
-            </View>
+              <View style={{
+                flexDirection: 'row',
+                gap: spacing.s10,
+                marginTop: spacing.s10,
+                alignItems: 'flex-start'
+              }}>
+                <Icon name="info" size={18} color={get('semantic.info') as string} style={{ marginTop: 2 }} />
+                <Text style={{ color: textMuted, fontSize: 13, flex: 1, lineHeight: 18 }}>
+                  Amount will be divided proportionally by weight. For example, weights of 1, 2, 2 would split the bill 20%, 40%, 40%.
+                </Text>
+              </View>
+            </>
           )}
-        </View>
 
-        {/* Tax & Fees (Collapsible) - At Bottom */}
-        <View>
+          {splitModeTab === 'share' && (
+            <>
+              <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600', marginBottom: spacing.s12, marginTop: spacing.s4 }}>
+                Enter each person's share amount
+              </Text>
+              <View style={{
+                backgroundColor: surface1,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: borderSubtle,
+              }}>
+                {participantIds.map((pid, index) => {
+                  const member = activeMembers.find(m => m.id === pid);
+                  if (!member) return null;
+                  return (
+                    <React.Fragment key={pid}>
+                      {index > 0 && <View style={{ height: 1, backgroundColor: borderSubtle }} />}
+                      <View style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingLeft: spacing.s16,
+                        paddingRight: spacing.s12,
+                        paddingVertical: spacing.s10,
+                        gap: spacing.s12,
+                      }}>
+                        <Text style={{ color: textPrimary, flex: 1, fontWeight: '600', fontSize: 15 }}>{member.name}</Text>
+                        <Text style={{ color: textMuted, fontSize: 20, fontWeight: '300' }}>$</Text>
+                        <TextInput
+                          value={shares[pid] ?? ''}
+                          onChangeText={t => setShares(s => ({ ...s, [pid]: t }))}
+                          placeholder="0"
+                          placeholderTextColor={textMuted}
+                          keyboardType="decimal-pad"
+                          style={{
+                            width: 80,
+                            textAlign: 'right',
+                            color: textPrimary,
+                            fontWeight: '700',
+                            fontSize: 18,
+                            backgroundColor: surface2,
+                            paddingHorizontal: spacing.s12,
+                            paddingVertical: spacing.s8,
+                            borderRadius: radius.md
+                          }}
+                        />
+                      </View>
+                    </React.Fragment>
+                  );
+                })}
+              </View>
+              {(() => {
+                const sumShares = participantIds.reduce((acc, id) => acc + (Number(shares[id] || 0) || 0), 0);
+                return Math.abs(sumShares - amountNum) > 0.01 && amountNum > 0 ? (
+                  <View style={{
+                    flexDirection: 'row',
+                    gap: spacing.s10,
+                    marginTop: spacing.s10,
+                    alignItems: 'flex-start'
+                  }}>
+                    <Icon name="alert-circle" size={18} color={get('semantic.warning') as string} style={{ marginTop: 2 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: textPrimary, fontSize: 13, fontWeight: '600', marginBottom: spacing.s2 }}>
+                        {sumShares < amountNum
+                          ? `${formatCurrency(amountNum - sumShares)} unassigned`
+                          : `${formatCurrency(sumShares - amountNum)} over base`}
+                      </Text>
+                      <Text style={{ color: textMuted, fontSize: 12, lineHeight: 16 }}>
+                        {sumShares < amountNum
+                          ? 'Any difference + tax/fees will be split proportionally based on shares'
+                          : 'Tax & fees will be added on top of these amounts'}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null;
+              })()}
+            </>
+          )}
+
+          {/* Done Button */}
+          <Pressable
+            onPress={() => {
+              // Set the mode based on current tab
+              if (splitModeTab === 'equal') {
+                setMode('equal');
+              } else if (splitModeTab === 'weight') {
+                setMode('weight');
+              } else if (splitModeTab === 'share') {
+                setMode('share');
+              }
+              setSplitModeSheet(false);
+            }}
+            style={({ pressed }) => ({
+              backgroundColor: accentPrimary,
+              borderRadius: radius.lg,
+              paddingVertical: spacing.s14,
+              alignItems: 'center',
+              marginTop: spacing.s12,
+              opacity: pressed ? 0.85 : 1,
+            })}
+          >
+            <Text style={{ color: textOnPrimary, fontSize: 16, fontWeight: '700' }}>
+              Done
+            </Text>
+          </Pressable>
+        </ScrollView>
+      </View>
+    </BottomSheet>
+
+    {/* Tax & Fees Bottom Sheet */}
+    <BottomSheet
+      visible={taxFeesSheet}
+      onClose={() => setTaxFeesSheet(false)}
+    >
+      <View style={{ flex: 1 }}>
+      <Text style={{ fontSize: 20, fontWeight: '800', color: textPrimary, textAlign: 'center', marginBottom: spacing.s12 }}>
+        Tax & Fees
+      </Text>
+
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+        >
           <View style={{
             backgroundColor: surface1,
             borderRadius: radius.lg,
             borderWidth: 1,
             borderColor: borderSubtle,
-            overflow: 'hidden'
+          }}>
+            {/* Tax */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingLeft: spacing.s16,
+              paddingRight: spacing.s12,
+              paddingVertical: spacing.s10,
+              gap: spacing.s12,
+            }}>
+              <Text style={{ color: textPrimary, flex: 1, fontSize: 15, fontWeight: '600' }}>Tax</Text>
+              <TextInput
+                value={tax}
+                onChangeText={setTax}
+                placeholder="0"
+                placeholderTextColor={textMuted}
+                keyboardType="decimal-pad"
+                style={{
+                  width: 70,
+                  textAlign: 'right',
+                  color: textPrimary,
+                  fontWeight: '700',
+                  fontSize: 18,
+                  backgroundColor: surface2,
+                  paddingHorizontal: spacing.s12,
+                  paddingVertical: spacing.s8,
+                  borderRadius: radius.md
+                }}
+              />
+              <Text style={{ color: textMuted, fontSize: 18, fontWeight: '600' }}>%</Text>
+            </View>
+
+            {/* Divider */}
+            <View style={{ height: 1, backgroundColor: borderSubtle }} />
+
+            {/* Service Charge */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingLeft: spacing.s16,
+              paddingRight: spacing.s12,
+              paddingVertical: spacing.s10,
+              gap: spacing.s12,
+            }}>
+              <Text style={{ color: textPrimary, flex: 1, fontSize: 15, fontWeight: '600' }}>Service Charge</Text>
+              <TextInput
+                value={serviceCharge}
+                onChangeText={setServiceCharge}
+                placeholder="0"
+                placeholderTextColor={textMuted}
+                keyboardType="decimal-pad"
+                style={{
+                  width: 70,
+                  textAlign: 'right',
+                  color: textPrimary,
+                  fontWeight: '700',
+                  fontSize: 18,
+                  backgroundColor: surface2,
+                  paddingHorizontal: spacing.s12,
+                  paddingVertical: spacing.s8,
+                  borderRadius: radius.md
+                }}
+              />
+              <Text style={{ color: textMuted, fontSize: 18, fontWeight: '600' }}>%</Text>
+            </View>
+
+            {/* Divider */}
+            <View style={{ height: 1, backgroundColor: borderSubtle }} />
+
+            {/* VAT */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingLeft: spacing.s16,
+              paddingRight: spacing.s12,
+              paddingVertical: spacing.s10,
+              gap: spacing.s12,
+            }}>
+              <Text style={{ color: textPrimary, flex: 1, fontSize: 15, fontWeight: '600' }}>VAT</Text>
+              <TextInput
+                value={vat}
+                onChangeText={setVat}
+                placeholder="0"
+                placeholderTextColor={textMuted}
+                keyboardType="decimal-pad"
+                style={{
+                  width: 70,
+                  textAlign: 'right',
+                  color: textPrimary,
+                  fontWeight: '700',
+                  fontSize: 18,
+                  backgroundColor: surface2,
+                  paddingHorizontal: spacing.s12,
+                  paddingVertical: spacing.s8,
+                  borderRadius: radius.md
+                }}
+              />
+              <Text style={{ color: textMuted, fontSize: 18, fontWeight: '600' }}>%</Text>
+            </View>
+          </View>
+
+          {/* Total Calculation */}
+          {totalFees > 0 && (
+            <View style={{
+              marginTop: spacing.s8,
+              padding: spacing.s16,
+              backgroundColor: withAlpha(get('semantic.info') as string, isDark ? 0.15 : 0.1),
+              borderRadius: radius.lg,
+              borderLeftWidth: 3,
+              borderLeftColor: get('semantic.info') as string
+            }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ color: textMuted, fontSize: 15, fontWeight: '600' }}>
+                  Total fees
+                </Text>
+                <Text style={{ color: textPrimary, fontSize: 18, fontWeight: '700' }}>
+                  {formatCurrency(totalFees)}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.s8 }}>
+                <Text style={{ color: textMuted, fontSize: 15, fontWeight: '600' }}>
+                  Total with fees
+                </Text>
+                <Text style={{ color: textPrimary, fontSize: 18, fontWeight: '700' }}>
+                  {formatCurrency(finalTotal)}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Done Button */}
+          <Pressable
+            onPress={() => setTaxFeesSheet(false)}
+            style={({ pressed }) => ({
+              backgroundColor: accentPrimary,
+              borderRadius: radius.lg,
+              paddingVertical: spacing.s14,
+              alignItems: 'center',
+              marginTop: spacing.s12,
+              opacity: pressed ? 0.85 : 1,
+            })}
+          >
+            <Text style={{ color: textOnPrimary, fontSize: 16, fontWeight: '700' }}>
+              Done
+            </Text>
+          </Pressable>
+        </ScrollView>
+      </View>
+    </BottomSheet>
+
+    {/* Date & Time Picker Modal */}
+    <Modal
+      visible={showDateTimePicker}
+      transparent
+      animationType="fade"
+      onRequestClose={() => {
+        setShowDateTimePicker(false);
+        setShowTimeOverlay(false);
+      }}
+    >
+      <View style={{
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: spacing.s16,
+      }}>
+        <TouchableWithoutFeedback onPress={() => {
+          setShowDateTimePicker(false);
+          setShowTimeOverlay(false);
+        }}>
+          <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }} />
+        </TouchableWithoutFeedback>
+
+        <View style={{
+          width: '100%',
+          maxWidth: 400,
+          backgroundColor: get('background.default') as string,
+          borderRadius: 20,
+          paddingHorizontal: spacing.s8,
+          paddingTop: spacing.s8,
+          paddingBottom: spacing.s8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.4,
+          shadowRadius: 24,
+          elevation: 12,
+          position: 'relative',
+        }}>
+          {/* Date Picker */}
+          <View style={{ alignItems: 'center' }}>
+            <DateTimePicker
+              value={billDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              onChange={(event, selectedDate) => {
+                if (selectedDate) {
+                  setBillDate(selectedDate);
+                }
+              }}
+              themeVariant={isDark ? 'dark' : 'light'}
+            />
+          </View>
+
+          {/* Time Selector Button - Bottom Right */}
+          <View style={{
+            flexDirection: 'row',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            marginTop: spacing.s4,
+            gap: spacing.s12,
+            paddingHorizontal: spacing.s4,
           }}>
             <Pressable
-              onPress={() => setShowTaxFees(!showTaxFees)}
+              onPress={() => setShowTimeOverlay(!showTimeOverlay)}
               style={({ pressed }) => ({
                 flexDirection: 'row',
                 alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingVertical: spacing.s12,
+                gap: spacing.s8,
+                backgroundColor: get('surface.level1') as string,
                 paddingHorizontal: spacing.s16,
-                opacity: pressed ? 0.7 : 1
+                paddingVertical: spacing.s10,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: borderSubtle,
+                opacity: pressed ? 0.7 : 1,
               })}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s10 }}>
-                <Icon name={showTaxFees ? 'chevron-down' : 'chevron-right'} size={20} color={textMuted} />
-                <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
-                  Tax & Fees {totalFees > 0 ? `(${formatCurrency(totalFees)})` : ''}
-                </Text>
-              </View>
-              {totalFees > 0 && (
-                <View style={{
-                  backgroundColor: withAlpha(get('semantic.info') as string, 0.15),
-                  paddingHorizontal: spacing.s10,
-                  paddingVertical: spacing.s4,
-                  borderRadius: radius.sm
-                }}>
-                  <Text style={{ color: get('semantic.info') as string, fontSize: 12, fontWeight: '700' }}>
-                    {((totalFees / amountNum) * 100).toFixed(1)}%
-                  </Text>
-                </View>
-              )}
+              <Icon name="clock" size={18} color={accentPrimary} />
+              <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
+                {billDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </Text>
             </Pressable>
 
-            {showTaxFees && (
-              <View style={{
-                paddingHorizontal: spacing.s16,
-                paddingBottom: spacing.s16,
-                gap: spacing.s10,
-                borderTopWidth: 1,
-                borderTopColor: borderSubtle,
-                paddingTop: spacing.s12
-              }}>
-                {/* Tax */}
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: surface2,
-                  borderRadius: radius.md,
-                  paddingLeft: spacing.s14,
-                  paddingRight: spacing.s12,
-                  paddingVertical: spacing.s12,
-                  gap: spacing.s12
-                }}>
-                  <Text style={{ color: textPrimary, flex: 1, fontSize: 15 }}>Tax</Text>
-                  <TextInput
-                    value={tax}
-                    onChangeText={setTax}
-                    placeholder="0"
-                    placeholderTextColor={textMuted}
-                    keyboardType="decimal-pad"
-                    style={{
-                      width: 60,
-                      textAlign: 'right',
-                      color: textPrimary,
-                      fontWeight: '600',
-                      fontSize: 16
-                    }}
-                  />
-                  <Text style={{ color: textMuted, fontSize: 16 }}>%</Text>
-                </View>
-
-                {/* Service Charge */}
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: surface2,
-                  borderRadius: radius.md,
-                  paddingLeft: spacing.s14,
-                  paddingRight: spacing.s12,
-                  paddingVertical: spacing.s12,
-                  gap: spacing.s12
-                }}>
-                  <Text style={{ color: textPrimary, flex: 1, fontSize: 15 }}>Service Charge</Text>
-                  <TextInput
-                    value={serviceCharge}
-                    onChangeText={setServiceCharge}
-                    placeholder="0"
-                    placeholderTextColor={textMuted}
-                    keyboardType="decimal-pad"
-                    style={{
-                      width: 60,
-                      textAlign: 'right',
-                      color: textPrimary,
-                      fontWeight: '600',
-                      fontSize: 16
-                    }}
-                  />
-                  <Text style={{ color: textMuted, fontSize: 16 }}>%</Text>
-                </View>
-
-                {/* VAT */}
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: surface2,
-                  borderRadius: radius.md,
-                  paddingLeft: spacing.s14,
-                  paddingRight: spacing.s12,
-                  paddingVertical: spacing.s12,
-                  gap: spacing.s12
-                }}>
-                  <Text style={{ color: textPrimary, flex: 1, fontSize: 15 }}>VAT</Text>
-                  <TextInput
-                    value={vat}
-                    onChangeText={setVat}
-                    placeholder="0"
-                    placeholderTextColor={textMuted}
-                    keyboardType="decimal-pad"
-                    style={{
-                      width: 60,
-                      textAlign: 'right',
-                      color: textPrimary,
-                      fontWeight: '600',
-                      fontSize: 16
-                    }}
-                  />
-                  <Text style={{ color: textMuted, fontSize: 16 }}>%</Text>
-                </View>
-
-                {totalFees > 0 && (
-                  <View style={{
-                    marginTop: spacing.s8,
-                    padding: spacing.s12,
-                    backgroundColor: withAlpha(get('semantic.info') as string, isDark ? 0.1 : 0.08),
-                    borderRadius: radius.md,
-                    borderLeftWidth: 3,
-                    borderLeftColor: get('semantic.info') as string
-                  }}>
-                    <Text style={{ color: textMuted, fontSize: 13 }}>
-                      Total with fees: <Text style={{ fontWeight: '700', color: textPrimary }}>{formatCurrency(finalTotal)}</Text>
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
+            <Pressable
+              onPress={() => {
+                setShowDateTimePicker(false);
+                setShowTimeOverlay(false);
+              }}
+              style={({ pressed }) => ({
+                backgroundColor: accentPrimary,
+                borderRadius: radius.lg,
+                paddingHorizontal: spacing.s20,
+                paddingVertical: spacing.s10,
+                opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <Text style={{ color: textOnPrimary, fontSize: 15, fontWeight: '700' }}>
+                Done
+              </Text>
+            </Pressable>
           </View>
+
+          {/* Time Picker Overlay - Compact Modal */}
+          {showTimeOverlay && (
+            <View style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: [{ translateX: -140 }, { translateY: -125 }],
+              width: 280,
+              backgroundColor: get('background.default') as string,
+              borderRadius: 16,
+              padding: spacing.s16,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 12,
+              elevation: 10,
+            }}>
+              <TouchableWithoutFeedback>
+                <View style={{ alignItems: 'center' }}>
+                  <View style={{ height: 180, justifyContent: 'center', width: '100%' }}>
+                    <DateTimePicker
+                      value={billDate}
+                      mode="time"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={(event, selectedDate) => {
+                        if (selectedDate) {
+                          setBillDate(selectedDate);
+                        }
+                      }}
+                      themeVariant={isDark ? 'dark' : 'light'}
+                    />
+                  </View>
+
+                  {/* Buttons */}
+                  <View style={{
+                    flexDirection: 'row',
+                    gap: spacing.s10,
+                    marginTop: spacing.s12,
+                    width: '100%',
+                  }}>
+                    {/* Now button */}
+                    <Pressable
+                      onPress={() => {
+                        const now = new Date();
+                        setBillDate(now);
+                        setShowTimeOverlay(false);
+                      }}
+                      style={({ pressed }) => ({
+                        flex: 1,
+                        backgroundColor: get('surface.level1') as string,
+                        borderRadius: radius.lg,
+                        paddingVertical: spacing.s8,
+                        alignItems: 'center',
+                        borderWidth: 1,
+                        borderColor: borderSubtle,
+                        opacity: pressed ? 0.7 : 1,
+                      })}
+                    >
+                      <Text style={{ color: textPrimary, fontSize: 14, fontWeight: '600' }}>
+                        Now
+                      </Text>
+                    </Pressable>
+
+                    {/* Done button */}
+                    <Pressable
+                      onPress={() => setShowTimeOverlay(false)}
+                      style={({ pressed }) => ({
+                        flex: 1,
+                        backgroundColor: accentPrimary,
+                        borderRadius: radius.lg,
+                        paddingVertical: spacing.s8,
+                        alignItems: 'center',
+                        opacity: pressed ? 0.85 : 1,
+                      })}
+                    >
+                      <Text style={{ color: textOnPrimary, fontSize: 14, fontWeight: '700' }}>
+                        Done
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          )}
         </View>
       </View>
-    </ScreenScroll>
-
-    <DateTimeSheet
-      visible={dtOpen}
-      date={billDate}
-      onCancel={() => setDtOpen(false)}
-      onConfirm={(d) => {
-        setBillDate(d);
-        setDtOpen(false);
-      }}
-    />
+    </Modal>
     </>
   );
 }

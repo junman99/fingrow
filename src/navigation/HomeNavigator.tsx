@@ -23,6 +23,7 @@ import {
   EditGroup,
   AddReminder,
 } from '../features/groups';
+import ManageMembersCreate from '../features/groups/screens/ManageMembersCreate';
 
 export type HomeStackParamList = {
   HomeRoot: undefined;
@@ -44,6 +45,7 @@ export type HomeStackParamList = {
   SettleUp: { groupId: string };
   GroupReminders: { groupId: string };
   ManageMembers: { groupId: string };
+  ManageMembersCreate: { rows: any[]; includeMe: boolean; myName: string };
   EditGroup: { groupId: string };
   AddReminder: { groupId: string };
 };
@@ -121,6 +123,7 @@ export default function HomeNavigator() {
         component={GroupsRoot}
         options={{
           animation: 'slide_from_right',
+          freezeOnBlur: true,
         }}
       />
       <Stack.Screen
@@ -133,11 +136,25 @@ export default function HomeNavigator() {
       <Stack.Screen name="AddMember" component={AddMember} options={{ presentation: 'modal' }} />
       <Stack.Screen name="AddBill" component={AddBill} options={{ presentation: 'modal' }} />
       <Stack.Screen name="EditBill" component={EditBill} options={{ presentation: 'modal' }} />
-      <Stack.Screen name="CreateGroup" component={CreateGroup} options={{ presentation: 'modal' }} />
+      <Stack.Screen
+        name="CreateGroup"
+        component={CreateGroup}
+        options={{
+          animation: 'slide_from_right',
+          detachPreviousScreen: true,
+        }}
+      />
       <Stack.Screen name="BillDetails" component={BillDetails} options={{ presentation: 'modal' }} />
       <Stack.Screen name="SettleUp" component={SettleUp} options={{ presentation: 'modal' }} />
       <Stack.Screen name="GroupReminders" component={GroupReminders} options={{ presentation: 'modal' }} />
       <Stack.Screen name="ManageMembers" component={ManageMembers} options={{ presentation: 'modal' }} />
+      <Stack.Screen
+        name="ManageMembersCreate"
+        component={ManageMembersCreate}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
       <Stack.Screen name="EditGroup" component={EditGroup} options={{ presentation: 'modal' }} />
       <Stack.Screen name="AddReminder" component={AddReminder} options={{ presentation: 'modal' }} />
     </Stack.Navigator>

@@ -3,7 +3,7 @@ import { fetchDailyHistoryYahoo, fetchYahooFundamentals } from '../lib/yahoo';
 import { fetchDailyHistoryFMP, fetchFMPFundamentals, fetchFMPBatchQuotes } from '../lib/fmp';
 import { fetchFinnhubCandles, fetchFinnhubProfile } from '../lib/finnhub';
 import { isCryptoSymbol, fetchCrypto, baseCryptoSymbol, fetchCryptoOhlc } from '../lib/coingecko';
-import type { Quote } from '../store/invest';
+import type { Quote } from '../features/invest';
 
 type DataSource = 'yahoo' | 'fmp' | 'finnhub';
 

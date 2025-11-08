@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Group, Member, Bill, ID, Contribution, Settlement } from '../types/groups';
-import { round2, sum } from '../lib/format';
+import type { Group, Member, Bill, ID, Contribution, Settlement } from '../../../types/groups';
+import { round2, sum } from '../../../lib/format';
 
 type SplitMode = 'equal'|'shares'|'exact';
 type PayerMode = 'single'|'multi-even'|'multi-custom';
@@ -10,7 +10,7 @@ type State = {
   groups: Group[];
   ready: boolean;
   hydrate: () => Promise<void>;
-  createGroup: (input: { name: string; note?: string; members?: { name: string; contact?: string }[] }) => Promise<ID>;
+  createGroup: (input: { name: string; note?: string; currency?: string; members?: { name: string; contact?: string }[] }) => Promise<ID>;
   addMember: (groupId: ID, input: { name: string; contact?: string }) => Promise<ID>;
   updateMember: (groupId: ID, memberId: ID, patch: Partial<Member>) => Promise<void>;
   archiveMember: (groupId: ID, memberId: ID, archived?: boolean) => Promise<void>;
@@ -92,9 +92,9 @@ export const useGroupsStore = create<State>((set, get) => ({
     set({ groups: migrated, ready: true });
     await save(migrated);
   },
-  createGroup: async ({ name, note, members }) => {
+  createGroup: async ({ name, note, currency, members }) => {
     const arr = [...get().groups];
-    const g: Group = { id: uid(), name, note, members: [], bills: [], settlements: [], createdAt: Date.now() };
+    const g: Group = { id: uid(), name, note, currency, members: [], bills: [], settlements: [], createdAt: Date.now() };
     (members || []).forEach(m => {
       if (!m.name?.trim()) return;
       const mem: Member = { id: uid(), name: m.name.trim(), contact: m.contact?.trim() || undefined };

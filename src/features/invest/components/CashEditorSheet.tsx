@@ -1,14 +1,14 @@
 import React from 'react';
-import { View, Text, TextInput, Pressable, Keyboard, ScrollView } from 'react-native';
-import BottomSheet from '../BottomSheet';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
+import { View, Text, TextInput, Pressable, Keyboard, ScrollView, Modal, TouchableWithoutFeedback, Platform } from 'react-native';
+import BottomSheet from '../../../components/BottomSheet';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 import { useInvestStore } from '../store';
-import Icon from '../Icon';
+import Icon from '../../../components/Icon';
 import CurrencyPickerSheet from './CurrencyPickerSheet';
-import DateTimeSheet from '../DateTimeSheet';
-import { findCurrency, type CurrencyMeta } from '../../lib/currencies';
-import { convertCurrency } from '../../lib/fx';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { findCurrency, type CurrencyMeta } from '../../../lib/currencies';
+import { convertCurrency } from '../../../lib/fx';
 
 type Props = {
   visible: boolean;
@@ -31,7 +31,8 @@ export default function CashEditorSheet({ visible, onClose, portfolioId, portfol
   const [useCustomRate, setUseCustomRate] = React.useState(false);
   const [customRate, setCustomRate] = React.useState('');
   const [date, setDate] = React.useState<Date>(new Date());
-  const [showDatePicker, setShowDatePicker] = React.useState(false);
+  const [showDateTimePicker, setShowDateTimePicker] = React.useState(false);
+  const [showTimeOverlay, setShowTimeOverlay] = React.useState(false);
 
   React.useEffect(() => {
     if (!visible) {
@@ -86,7 +87,7 @@ export default function CashEditorSheet({ visible, onClose, portfolioId, portfol
 
   return (
     <>
-      <BottomSheet visible={visible && !showCurrencyPicker && !showDatePicker} onClose={onClose} height={600}>
+      <BottomSheet visible={visible && !showCurrencyPicker && !showDateTimePicker} onClose={onClose} height={600}>
         <ScrollView
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -225,7 +226,7 @@ export default function CashEditorSheet({ visible, onClose, portfolioId, portfol
           <View style={{ gap: spacing.s12 }}>
             <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>Date</Text>
             <Pressable
-              onPress={() => setShowDatePicker(true)}
+              onPress={() => setShowDateTimePicker(true)}
               style={({ pressed }) => ({
                 padding: spacing.s16,
                 borderRadius: radius.lg,
@@ -390,16 +391,196 @@ export default function CashEditorSheet({ visible, onClose, portfolioId, portfol
         />
       )}
 
-      {/* Date Picker */}
-      <DateTimeSheet
-        visible={showDatePicker}
-        date={date}
-        onCancel={() => setShowDatePicker(false)}
-        onConfirm={(d) => {
-          setDate(d);
-          setShowDatePicker(false);
+      {/* Date & Time Picker Modal */}
+      <Modal
+        visible={showDateTimePicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowDateTimePicker(false);
+          setShowTimeOverlay(false);
         }}
-      />
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: spacing.s16,
+        }}>
+          <TouchableWithoutFeedback onPress={() => {
+            setShowDateTimePicker(false);
+            setShowTimeOverlay(false);
+          }}>
+            <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }} />
+          </TouchableWithoutFeedback>
+
+          <View style={{
+            width: '100%',
+            maxWidth: 400,
+            backgroundColor: get('background.default') as string,
+            borderRadius: 20,
+            paddingHorizontal: spacing.s8,
+            paddingTop: spacing.s8,
+            paddingBottom: spacing.s8,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.4,
+            shadowRadius: 24,
+            elevation: 12,
+            position: 'relative',
+          }}>
+            {/* Date Picker */}
+            <View style={{ alignItems: 'center' }}>
+              <DateTimePicker
+                value={date}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                onChange={(event, selectedDate) => {
+                  if (selectedDate) {
+                    setDate(selectedDate);
+                  }
+                }}
+                themeVariant={isDark ? 'dark' : 'light'}
+              />
+            </View>
+
+            {/* Time Selector Button - Bottom Right */}
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              marginTop: spacing.s4,
+              gap: spacing.s12,
+              paddingHorizontal: spacing.s4,
+            }}>
+              <Pressable
+                onPress={() => setShowTimeOverlay(!showTimeOverlay)}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: spacing.s8,
+                  backgroundColor: get('surface.level1') as string,
+                  paddingHorizontal: spacing.s16,
+                  paddingVertical: spacing.s10,
+                  borderRadius: radius.lg,
+                  borderWidth: 1,
+                  borderColor: border,
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Icon name="clock" size={18} color={accentPrimary} />
+                <Text style={{ color: text, fontSize: 15, fontWeight: '600' }}>
+                  {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setShowDateTimePicker(false);
+                  setShowTimeOverlay(false);
+                }}
+                style={({ pressed }) => ({
+                  backgroundColor: accentPrimary,
+                  borderRadius: radius.lg,
+                  paddingHorizontal: spacing.s20,
+                  paddingVertical: spacing.s10,
+                  opacity: pressed ? 0.85 : 1,
+                })}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700' }}>
+                  Done
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* Time Picker Overlay - Compact Modal */}
+            {showTimeOverlay && (
+              <View style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: [{ translateX: -140 }, { translateY: -125 }],
+                width: 280,
+                backgroundColor: get('background.default') as string,
+                borderRadius: 16,
+                padding: spacing.s16,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 12,
+                elevation: 10,
+              }}>
+                <TouchableWithoutFeedback>
+                  <View style={{ alignItems: 'center' }}>
+                    <View style={{ height: 180, justifyContent: 'center', width: '100%' }}>
+                      <DateTimePicker
+                        value={date}
+                        mode="time"
+                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                        onChange={(event, selectedDate) => {
+                          if (selectedDate) {
+                            setDate(selectedDate);
+                          }
+                        }}
+                        themeVariant={isDark ? 'dark' : 'light'}
+                      />
+                    </View>
+
+                    {/* Buttons */}
+                    <View style={{
+                      flexDirection: 'row',
+                      gap: spacing.s10,
+                      marginTop: spacing.s12,
+                      width: '100%',
+                    }}>
+                      {/* Now button */}
+                      <Pressable
+                        onPress={() => {
+                          const now = new Date();
+                          setDate(now);
+                          setShowTimeOverlay(false);
+                        }}
+                        style={({ pressed }) => ({
+                          flex: 1,
+                          backgroundColor: get('surface.level1') as string,
+                          borderRadius: radius.lg,
+                          paddingVertical: spacing.s8,
+                          alignItems: 'center',
+                          borderWidth: 1,
+                          borderColor: border,
+                          opacity: pressed ? 0.7 : 1,
+                        })}
+                      >
+                        <Text style={{ color: text, fontSize: 14, fontWeight: '600' }}>
+                          Now
+                        </Text>
+                      </Pressable>
+
+                      {/* Done button */}
+                      <Pressable
+                        onPress={() => setShowTimeOverlay(false)}
+                        style={({ pressed }) => ({
+                          flex: 1,
+                          backgroundColor: accentPrimary,
+                          borderRadius: radius.lg,
+                          paddingVertical: spacing.s8,
+                          alignItems: 'center',
+                          opacity: pressed ? 0.85 : 1,
+                        })}
+                      >
+                        <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>
+                          Done
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </TouchableWithoutFeedback>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }

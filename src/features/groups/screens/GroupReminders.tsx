@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Switch, Alert, Pressable } from 'react-native';
-import { ScreenScroll } from '../../components/ScreenScroll';
-import Button from '../../components/Button';
-import Icon from '../../components/Icon';
-import { useThemeTokens } from '../../theme/ThemeProvider';
-import { spacing, radius } from '../../theme/tokens';
+import { ScreenScroll } from '../../../components/ScreenScroll';
+import Button from '../../../components/Button';
+import Icon from '../../../components/Icon';
+import { useThemeTokens } from '../../../theme/ThemeProvider';
+import { spacing, radius } from '../../../theme/tokens';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { listReminders, toggleEnabled, cancel, getSettings, setSettings, selfTestOnce } from '../../lib/notifications';
+import { listReminders, toggleEnabled, cancel, getSettings, setSettings, selfTestOnce } from '../../../lib/notifications';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../../navigation/HomeNavigator';
+import type { HomeStackParamList } from '../../../navigation/HomeNavigator';
 
 function withAlpha(hex: string, alpha: number) {
   if (!hex || typeof hex !== 'string') return hex;
@@ -117,8 +117,8 @@ export default function GroupReminders() {
           backgroundColor: surface1,
           borderRadius: radius.lg,
           padding: spacing.s16,
-          borderWidth: 1,
-          borderColor: borderSubtle,
+          
+          
           gap: spacing.s12,
         }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
@@ -192,8 +192,8 @@ export default function GroupReminders() {
               borderRadius: radius.lg,
               padding: spacing.s24,
               alignItems: 'center',
-              borderWidth: 1,
-              borderColor: borderSubtle,
+              
+              
             }}>
               <View style={{
                 width: 56,
@@ -220,8 +220,8 @@ export default function GroupReminders() {
                   borderRadius: radius.lg,
                   padding: spacing.s16,
                   marginBottom: spacing.s12,
-                  borderWidth: 1,
-                  borderColor: borderSubtle,
+                  
+                  
                 }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12, marginBottom: spacing.s12 }}>
@@ -270,7 +270,7 @@ export default function GroupReminders() {
                     opacity: pressed ? 0.7 : 1,
                     flexDirection: 'row',
                     gap: spacing.s6,
-                    borderWidth: 1,
+                    
                     borderColor: withAlpha(dangerColor, 0.3),
                   })}
                 >
