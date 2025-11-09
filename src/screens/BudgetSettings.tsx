@@ -437,65 +437,6 @@ export default function BudgetSettings() {
             onPress={() => exportPeriodCsv(startOfDay(period.start), endOfDay(period.end))}
           />
         </View>
-
-        {/* Invest Currency */}
-        <View style={{
-          backgroundColor: surface1,
-          borderRadius: radius.xl,
-          padding: spacing.s16,
-          gap: spacing.s16,
-          borderWidth: 1,
-          borderColor: withAlpha(borderSubtle, isDark ? 0.3 : 0.5)
-        }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s10 }}>
-            <View style={{
-              width: 36,
-              height: 36,
-              borderRadius: radius.md,
-              backgroundColor: withAlpha(accentPrimary, isDark ? 0.2 : 0.12),
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Icon name="trending-up" size={18} color={accentPrimary} />
-            </View>
-            <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 17 }}>Invest Currency</Text>
-          </View>
-          <View style={{ gap: spacing.s12 }}>
-            <Text style={{ color: textMuted, fontSize: 14 }}>All investments will be displayed in this currency</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s8 }}>
-              {['USD', 'SGD', 'EUR', 'GBP', 'JPY', 'CNY', 'AUD', 'CAD'].map(currency => {
-                const isActive = portfolioDisplayCurrency === currency;
-                return (
-                  <Pressable
-                    key={currency}
-                    accessibilityRole="button"
-                    onPress={() => savePortfolioCurrency(currency)}
-                    style={({ pressed }) => ({
-                      paddingVertical: spacing.s10,
-                      paddingHorizontal: spacing.s16,
-                      borderRadius: radius.lg,
-                      backgroundColor: isActive
-                        ? accentPrimary
-                        : withAlpha(borderSubtle, isDark ? 0.2 : 0.25),
-                      borderWidth: 1,
-                      borderColor: isActive
-                        ? accentPrimary
-                        : withAlpha(borderSubtle, isDark ? 0.3 : 0.4),
-                      opacity: pressed ? 0.85 : 1,
-                    })}
-                  >
-                    <Text style={{
-                      color: isActive ? textOnPrimary : textPrimary,
-                      fontWeight: '700',
-                      fontSize: 14
-                    }}>{currency}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-          <Text style={{ color: textMuted, fontSize: 13 }}>Exchange rates will refresh automatically when you change the currency.</Text>
-        </View>
       </Animated.View>
     </ScreenScroll>
   );

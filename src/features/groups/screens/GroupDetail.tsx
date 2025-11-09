@@ -1,17 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, Modal, Animated, Alert, PanResponder } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Modal, Animated, Alert, Share } from 'react-native';
+import { GestureDetector, Gesture, Swipeable } from 'react-native-gesture-handler';
+import AnimatedReanimated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS, useAnimatedScrollHandler, interpolate, Extrapolate, withDecay } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import AnimatedRN, {
-  useAnimatedStyle,
-  useSharedValue,
-  useAnimatedScrollHandler,
-  interpolate,
-  Extrapolate,
-} from 'react-native-reanimated';
-import { Swipeable } from 'react-native-gesture-handler';
 import { ScreenScroll } from '../../../components/ScreenScroll';
 import Button from '../../../components/Button';
 import Icon from '../../../components/Icon';
@@ -63,6 +58,7 @@ function withAlpha(hex: string, alpha: number) {
   }
   return hex;
 }
+
 
 // Animated Pressable component for cards
 const AnimatedPressable: React.FC<{
@@ -116,7 +112,13 @@ const SettlementTransferRow: React.FC<{
   completed: boolean;
 }> = ({ fromInitials, toInitials, amount, warningColor, successColor, accentPrimary, textPrimary, textMuted, surface2, isDark, formatCurrency, onComplete, completed }) => {
   const [isPaid, setIsPaid] = useState(completed);
-  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  // Reanimated values for smooth animation
+  const translateX = useSharedValue(0);
+  const scaleX = useSharedValue(1);
+  const scaleY = useSharedValue(1);
+  const opacity = useSharedValue(1);
+
   const flowAnim = useRef(new Animated.Value(0)).current;
   const dotAnim1 = useRef(new Animated.Value(0)).current;
   const dotAnim2 = useRef(new Animated.Value(0)).current;
@@ -179,66 +181,63 @@ const SettlementTransferRow: React.FC<{
 
   const dotAnims = [dotAnim1, dotAnim2, dotAnim3];
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => !isPaid,
-      onMoveShouldSetPanResponder: () => !isPaid,
-      onPanResponderMove: (_, gestureState) => {
-        if (isPaid) return;
-        const clampedDx = Math.max(0, Math.min(gestureState.dx, 150));
-        slideAnim.setValue(clampedDx);
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (isPaid) return;
-        if (gestureState.dx > 100) {
-          Animated.spring(slideAnim, {
-            toValue: 150,
-            useNativeDriver: true,
-          }).start(() => {
-            setIsPaid(true);
-            onComplete();
-          });
-        } else {
-          Animated.spring(slideAnim, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
-        }
-      },
+  // Gesture handler
+  const gesture = Gesture.Pan()
+    .enabled(!isPaid)
+    .onUpdate((event) => {
+      const dragX = Math.max(0, event.translationX);
+      translateX.value = dragX;
+
+      // Bubble stretch effect
+      scaleX.value = 1 + (dragX / 80);
+      scaleY.value = Math.max(0.8, 1 - (dragX / 200));
+      opacity.value = Math.max(0.5, 1 - (dragX / 150));
     })
-  ).current;
+    .onEnd((event) => {
+      if (event.translationX > 100) {
+        // Pop animation
+        translateX.value = withSpring(150, { damping: 8 });
+        scaleX.value = withSpring(3, { damping: 8 });
+        scaleY.value = withSpring(3, { damping: 8 });
+        opacity.value = withTiming(0, { duration: 200 }, () => {
+          runOnJS(setIsPaid)(true);
+          runOnJS(onComplete)();
+        });
+      } else {
+        // Snap back with elastic
+        translateX.value = withSpring(0, { damping: 15, stiffness: 150 });
+        scaleX.value = withSpring(1, { damping: 15, stiffness: 150 });
+        scaleY.value = withSpring(1, { damping: 15, stiffness: 150 });
+        opacity.value = withSpring(1);
+      }
+    });
+
+  // Animated style for icon
+  const animatedIconStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { scaleX: scaleX.value },
+      { scaleY: scaleY.value },
+    ],
+    opacity: opacity.value,
+  }));
 
   return (
     <View style={{
       borderRadius: radius.lg,
       marginBottom: spacing.s8,
-      overflow: 'hidden',
+      overflow: 'visible',
       position: 'relative'
     }}>
-      {/* Green checkmark background (shown when paid) */}
-      <View style={{
-        position: 'absolute',
-        right: 0,
-        top: 0,
-        bottom: 0,
-        width: 70,
-        backgroundColor: successColor,
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        <Text style={{ fontSize: 24 }}>✓</Text>
-      </View>
-
       {/* Main content */}
-      <Animated.View
-        {...panResponder.panHandlers}
+      <View
         style={{
           flexDirection: 'row',
           alignItems: 'center',
           paddingVertical: spacing.s10,
           paddingHorizontal: spacing.s12,
           backgroundColor: isPaid ? withAlpha(successColor, 0.2) : surface2,
-          transform: [{ translateX: slideAnim }],
+          borderRadius: radius.lg,
           opacity: isPaid ? 0.6 : 1
         }}
       >
@@ -250,6 +249,7 @@ const SettlementTransferRow: React.FC<{
             top: 0,
             bottom: 0,
             width: '100%',
+            borderRadius: radius.lg,
             opacity: flowAnim.interpolate({
               inputRange: [0, 0.5, 1],
               outputRange: [0, 0.3, 0]
@@ -270,22 +270,33 @@ const SettlementTransferRow: React.FC<{
           </Animated.View>
         )}
 
-        {/* From member */}
-        <View style={{
-          width: 36,
-          height: 36,
-          borderRadius: 18,
-          backgroundColor: isPaid ? withAlpha(successColor, 0.3) : withAlpha(warningColor, isDark ? 0.25 : 0.2),
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderWidth: 2,
-          borderColor: isPaid ? successColor : warningColor,
-          zIndex: 2
-        }}>
-          <Text style={{ color: isPaid ? successColor : warningColor, fontSize: 12, fontWeight: '800' }}>
-            {fromInitials}
-          </Text>
-        </View>
+        {/* From member - Animated */}
+        <GestureDetector gesture={gesture}>
+          <AnimatedReanimated.View
+            style={[
+              {
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: isPaid ? withAlpha(successColor, 0.3) : withAlpha(warningColor, isDark ? 0.25 : 0.2),
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 2,
+                borderColor: isPaid ? successColor : warningColor,
+                zIndex: 2,
+              },
+              animatedIconStyle
+            ]}
+          >
+            {isPaid ? (
+              <Text style={{ fontSize: 16 }}>✓</Text>
+            ) : (
+              <Text style={{ color: warningColor, fontSize: 12, fontWeight: '800' }}>
+                {fromInitials}
+              </Text>
+            )}
+          </AnimatedReanimated.View>
+        </GestureDetector>
 
         {/* Amount and flow line with animated dots */}
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', marginHorizontal: spacing.s12, zIndex: 1 }}>
@@ -339,7 +350,7 @@ const SettlementTransferRow: React.FC<{
             {toInitials}
           </Text>
         </View>
-      </Animated.View>
+      </View>
     </View>
   );
 };
@@ -349,16 +360,21 @@ export default function GroupDetail() {
   const route = useRoute<any>();
   const insets = useSafeAreaInsets();
   const { groupId } = (route?.params ?? {}) as { groupId: string };
-  const { groups, hydrate, balances, deleteGroup, deleteBill, addSettlement } = useGroupsStore();
+  const { groups, hydrate, balances, deleteGroup, deleteBill, addSettlement, markSplitPaid, findBill } = useGroupsStore();
   const { add: addTransaction } = useTxStore();
   const { get, isDark } = useThemeTokens();
   const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [selectedMemberVisible, setSelectedMemberVisible] = useState<any>(null);
   const [showMembersList, setShowMembersList] = useState(false);
   const [showManageMembers, setShowManageMembers] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showSettleUpCard, setShowSettleUpCard] = useState(false);
+  const [showSettleUpCardVisible, setShowSettleUpCardVisible] = useState(false);
   const [completedPayments, setCompletedPayments] = useState<Set<number>>(new Set());
+  const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const settleUpFadeAnim = useRef(new Animated.Value(0)).current;
+  const memberModalFadeAnim = useRef(new Animated.Value(0)).current;
 
   // Main Tab Title Animation
   const scrollY = useSharedValue(0);
@@ -423,6 +439,46 @@ export default function GroupDetail() {
       useNativeDriver: true,
     }).start();
   }, []);
+
+  // Animate settle up modal
+  useEffect(() => {
+    if (showSettleUpCard) {
+      setShowSettleUpCardVisible(true);
+      Animated.timing(settleUpFadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(settleUpFadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => {
+        setShowSettleUpCardVisible(false);
+      });
+    }
+  }, [showSettleUpCard]);
+
+  // Animate member modal
+  useEffect(() => {
+    if (selectedMember) {
+      setSelectedMemberVisible(selectedMember);
+      Animated.timing(memberModalFadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(memberModalFadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => {
+        setSelectedMemberVisible(null);
+      });
+    }
+  }, [selectedMember]);
 
   useFocusEffect(React.useCallback(() => { hydrate(); }, [hydrate]));
   const group = groups.find(g => g.id === groupId);
@@ -753,7 +809,7 @@ export default function GroupDetail() {
         overshootRight={false}
       >
         <Pressable
-          onPress={() => nav.navigate('BillDetails', { groupId: group.id, billId: item.id })}
+          onPress={() => setSelectedBillId(item.id)}
         >
           <View style={{
             flexDirection: 'row',
@@ -789,16 +845,18 @@ export default function GroupDetail() {
                 {item.title || 'Untitled bill'}
               </Text>
               <Text numberOfLines={1} style={{ color: textMuted, marginTop: 2, fontSize: 12 }}>
-                {time} • {item.payerName}
+                {time} • Paid by {item.payerName}
+              </Text>
+            </View>
+
+            <View style={{ alignItems: 'flex-end', marginLeft: spacing.s8 }}>
+              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>
+                {formatCurrency(billAmount)}
               </Text>
               <Text numberOfLines={1} style={{ color: amountColor, marginTop: 2, fontSize: 12, fontWeight: '600' }}>
                 {subtitle}
               </Text>
             </View>
-
-            <Text style={{ color: textPrimary, fontWeight: '700', marginLeft: spacing.s8, fontSize: 16 }}>
-              {formatCurrency(billAmount)}
-            </Text>
           </View>
         </Pressable>
       </Swipeable>
@@ -806,9 +864,9 @@ export default function GroupDetail() {
   };
 
   // Member detail modal
-  const memberBalance = selectedMember ? (groupBal[selectedMember.id] || 0) : 0;
-  const memberJoinedDate = selectedMember?.joinedAt
-    ? new Date(selectedMember.joinedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+  const memberBalance = selectedMemberVisible ? (groupBal[selectedMemberVisible.id] || 0) : 0;
+  const memberJoinedDate = selectedMemberVisible?.joinedAt
+    ? new Date(selectedMemberVisible.joinedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
     : group.createdAt
     ? new Date(group.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
     : 'Unknown';
@@ -816,7 +874,7 @@ export default function GroupDetail() {
   return (
     <>
       {/* Main Tab Title Animation - Floating Gradient Header (Fixed at top, outside scroll) */}
-      <AnimatedRN.View
+      <AnimatedReanimated.View
         style={[
           {
             position: 'absolute',
@@ -844,7 +902,7 @@ export default function GroupDetail() {
             paddingHorizontal: spacing.s16,
           }}
         >
-          <AnimatedRN.Text
+          <AnimatedReanimated.Text
             style={[
               {
                 color: textPrimary,
@@ -857,9 +915,9 @@ export default function GroupDetail() {
             ]}
           >
             {group.name}
-          </AnimatedRN.Text>
+          </AnimatedReanimated.Text>
         </LinearGradient>
-      </AnimatedRN.View>
+      </AnimatedReanimated.View>
 
       <ScreenScroll
         inTab
@@ -887,7 +945,7 @@ export default function GroupDetail() {
               <Icon name="chevron-left" size={28} color={textPrimary} />
             </Pressable>
             <View style={{ flex: 1 }}>
-              <AnimatedRN.Text
+              <AnimatedReanimated.Text
                 style={[
                   {
                     color: textPrimary,
@@ -900,7 +958,7 @@ export default function GroupDetail() {
                 ]}
               >
                 {group.name}
-              </AnimatedRN.Text>
+              </AnimatedReanimated.Text>
             </View>
             <Pressable
               onPress={() => setShowSettingsMenu(true)}
@@ -1080,8 +1138,9 @@ export default function GroupDetail() {
       </ScreenScroll>
 
       {/* Settle Up Modal - Centered & Beautiful */}
-      {showSettleUpCard && unsettledTotal > 0.009 && (
-        <View
+      {showSettleUpCardVisible && unsettledTotal > 0.009 && (
+        <Animated.View
+          pointerEvents={showSettleUpCard ? 'auto' : 'none'}
           style={{
             position: 'absolute',
             top: 0,
@@ -1092,14 +1151,15 @@ export default function GroupDetail() {
             justifyContent: 'center',
             alignItems: 'center',
             padding: spacing.s20,
-            zIndex: 100
+            zIndex: 100,
+            opacity: settleUpFadeAnim
           }}
         >
           <Pressable
             style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
             onPress={() => setShowSettleUpCard(false)}
           />
-          <View
+          <Animated.View
             style={{
               width: '100%',
               maxWidth: 400,
@@ -1111,7 +1171,16 @@ export default function GroupDetail() {
               shadowOffset: { width: 0, height: 20 },
               shadowOpacity: 0.4,
               shadowRadius: 32,
-              elevation: 20
+              elevation: 20,
+              opacity: settleUpFadeAnim,
+              transform: [
+                {
+                  scale: settleUpFadeAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.9, 1]
+                  })
+                }
+              ]
             }}
           >
             {/* Close button */}
@@ -1213,8 +1282,8 @@ export default function GroupDetail() {
                 </Text>
               </Pressable>
             </View>
-          </View>
-        </View>
+          </Animated.View>
+        </Animated.View>
       )}
 
       {/* Members List Bottom Sheet */}
@@ -1255,37 +1324,52 @@ export default function GroupDetail() {
       </BottomSheet>
 
       {/* Member Detail Modal */}
-      <Modal
-        visible={!!selectedMember}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSelectedMember(null)}
-      >
-        <Pressable
+      {selectedMemberVisible && (
+        <Animated.View
+          pointerEvents={selectedMember ? 'auto' : 'none'}
           style={{
-            flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.6)',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: isDark ? 'rgba(0, 0, 0, 0.5)' : 'rgba(0, 0, 0, 0.3)',
             justifyContent: 'center',
             alignItems: 'center',
-            padding: spacing.s16,
+            padding: spacing.s20,
+            zIndex: 100,
+            opacity: memberModalFadeAnim
           }}
-          onPress={() => setSelectedMember(null)}
         >
+          <Pressable
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            onPress={() => setSelectedMember(null)}
+          />
           <Animated.View
             style={{
               backgroundColor: surface1,
-              borderRadius: radius.xxl,
-              padding: spacing.s24,
+              borderRadius: 24,
+              padding: spacing.s16,
               width: '100%',
               maxWidth: 400,
               gap: spacing.s20,
-              borderWidth: 2,
-              borderColor: withAlpha(accentPrimary, 0.3),
-              transform: [{ scale: fadeAnim }]
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 20 },
+              shadowOpacity: 0.4,
+              shadowRadius: 32,
+              elevation: 20,
+              opacity: memberModalFadeAnim,
+              transform: [
+                {
+                  scale: memberModalFadeAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.9, 1]
+                  })
+                }
+              ]
             }}
-            onStartShouldSetResponder={() => true}
           >
-            {selectedMember && (
+            {selectedMemberVisible && (
               <>
                 <View style={{ alignItems: 'center', gap: spacing.s12 }}>
                   <View
@@ -1301,16 +1385,16 @@ export default function GroupDetail() {
                     }}
                   >
                     <Text style={{ color: textPrimary, fontWeight: '900', fontSize: 32 }}>
-                      {selectedMember.name.trim().split(/\s+/).slice(0, 2).map((part: string) => part[0]?.toUpperCase() || '').join('') || '–'}
+                      {selectedMemberVisible.name.trim().split(/\s+/).slice(0, 2).map((part: string) => part[0]?.toUpperCase() || '').join('') || '–'}
                     </Text>
                   </View>
                   <Text style={{ color: textPrimary, fontWeight: '800', fontSize: 24, letterSpacing: -0.5 }}>
-                    {selectedMember.name}
+                    {selectedMemberVisible.name}
                   </Text>
                 </View>
 
                 <View style={{ gap: spacing.s12 }}>
-                  {selectedMember.contact && (
+                  {selectedMemberVisible.contact && (
                     <View
                       style={{
                         backgroundColor: surface2,
@@ -1327,7 +1411,7 @@ export default function GroupDetail() {
                       <View style={{ flex: 1 }}>
                         <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600' }}>Contact</Text>
                         <Text style={{ color: textPrimary, fontSize: 15, marginTop: 2 }}>
-                          {selectedMember.contact}
+                          {selectedMemberVisible.contact}
                         </Text>
                       </View>
                     </View>
@@ -1400,8 +1484,8 @@ export default function GroupDetail() {
               </>
             )}
           </Animated.View>
-        </Pressable>
-      </Modal>
+        </Animated.View>
+      )}
 
       {/* Settings Menu Bottom Sheet */}
       <BottomSheet
@@ -1409,16 +1493,11 @@ export default function GroupDetail() {
         onClose={() => setShowSettingsMenu(false)}
       >
         <View style={{ gap: spacing.s16, paddingBottom: spacing.s16 }}>
-          <View>
-            <Text style={{ color: textPrimary, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 }}>
-              Group settings
-            </Text>
-            <Text style={{ color: textMuted, fontSize: 13, marginTop: spacing.s4 }}>
-              Manage {group.name}
-            </Text>
-          </View>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: textPrimary, textAlign: 'center', marginBottom: spacing.s8 }}>
+            Group settings
+          </Text>
 
-          <View style={{ gap: spacing.s8 }}>
+          <View style={{ backgroundColor: surface1, borderRadius: radius.lg, overflow: 'hidden' }}>
             {/* Manage Members */}
             <Pressable
               onPress={() => {
@@ -1426,9 +1505,8 @@ export default function GroupDetail() {
                 setTimeout(() => setShowManageMembers(true), 200);
               }}
               style={({ pressed }) => ({
-                backgroundColor: surface1,
-                borderRadius: radius.lg,
-                padding: spacing.s16,
+                paddingVertical: spacing.s12,
+                paddingHorizontal: spacing.s16,
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: spacing.s12,
@@ -1436,21 +1514,20 @@ export default function GroupDetail() {
               })}
             >
               <View style={{
-                width: 40,
-                height: 40,
+                width: 36,
+                height: 36,
                 borderRadius: radius.md,
                 backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-                <Icon name="users-2" size={20} colorToken="accent.primary" />
+                <Icon name="users-2" size={18} colorToken="accent.primary" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>Manage members</Text>
-                <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>Edit or remove members</Text>
-              </View>
+              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15, flex: 1 }}>Manage members</Text>
               <Icon name="chevron-right" size={20} colorToken="text.muted" />
             </Pressable>
+
+            <View style={{ height: 1, backgroundColor: borderSubtle, marginLeft: spacing.s16 + 36 + spacing.s12 }} />
 
             {/* View Reminders */}
             <Pressable
@@ -1459,9 +1536,8 @@ export default function GroupDetail() {
                 setTimeout(() => nav.navigate('GroupReminders', { groupId: group.id }), 200);
               }}
               style={({ pressed }) => ({
-                backgroundColor: surface1,
-                borderRadius: radius.lg,
-                padding: spacing.s16,
+                paddingVertical: spacing.s12,
+                paddingHorizontal: spacing.s16,
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: spacing.s12,
@@ -1469,21 +1545,20 @@ export default function GroupDetail() {
               })}
             >
               <View style={{
-                width: 40,
-                height: 40,
+                width: 36,
+                height: 36,
                 borderRadius: radius.md,
                 backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-                <Icon name="bell" size={20} colorToken="accent.primary" />
+                <Icon name="bell" size={18} colorToken="accent.primary" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>View reminders</Text>
-                <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>Manage payment reminders</Text>
-              </View>
+              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15, flex: 1 }}>View reminders</Text>
               <Icon name="chevron-right" size={20} colorToken="text.muted" />
             </Pressable>
+
+            <View style={{ height: 1, backgroundColor: borderSubtle, marginLeft: spacing.s16 + 36 + spacing.s12 }} />
 
             {/* Edit Group */}
             <Pressable
@@ -1492,9 +1567,8 @@ export default function GroupDetail() {
                 setTimeout(() => nav.navigate('EditGroup', { groupId: group.id }), 200);
               }}
               style={({ pressed }) => ({
-                backgroundColor: surface1,
-                borderRadius: radius.lg,
-                padding: spacing.s16,
+                paddingVertical: spacing.s12,
+                paddingHorizontal: spacing.s16,
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: spacing.s12,
@@ -1502,21 +1576,20 @@ export default function GroupDetail() {
               })}
             >
               <View style={{
-                width: 40,
-                height: 40,
+                width: 36,
+                height: 36,
                 borderRadius: radius.md,
                 backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-                <Icon name="edit" size={20} colorToken="accent.primary" />
+                <Icon name="edit" size={18} colorToken="accent.primary" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>Edit group</Text>
-                <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>Change name or description</Text>
-              </View>
+              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15, flex: 1 }}>Edit group</Text>
               <Icon name="chevron-right" size={20} colorToken="text.muted" />
             </Pressable>
+
+            <View style={{ height: 1, backgroundColor: borderSubtle, marginLeft: spacing.s16 + 36 + spacing.s12 }} />
 
             {/* Export History */}
             <Pressable
@@ -1561,9 +1634,8 @@ export default function GroupDetail() {
                 }, 200);
               }}
               style={({ pressed }) => ({
-                backgroundColor: surface1,
-                borderRadius: radius.lg,
-                padding: spacing.s16,
+                paddingVertical: spacing.s12,
+                paddingHorizontal: spacing.s16,
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: spacing.s12,
@@ -1571,21 +1643,20 @@ export default function GroupDetail() {
               })}
             >
               <View style={{
-                width: 40,
-                height: 40,
+                width: 36,
+                height: 36,
                 borderRadius: radius.md,
                 backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-                <Icon name="download" size={20} colorToken="accent.primary" />
+                <Icon name="download" size={18} colorToken="accent.primary" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>Export history</Text>
-                <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>Download bills and payments</Text>
-              </View>
+              <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15, flex: 1 }}>Export history</Text>
               <Icon name="chevron-right" size={20} colorToken="text.muted" />
             </Pressable>
+
+            <View style={{ height: 1, backgroundColor: borderSubtle, marginLeft: spacing.s16 + 36 + spacing.s12 }} />
 
             {/* Delete Group */}
             <Pressable
@@ -1616,31 +1687,25 @@ export default function GroupDetail() {
                 }, 200);
               }}
               style={({ pressed }) => ({
-                backgroundColor: withAlpha(dangerColor, isDark ? 0.15 : 0.1),
-                borderRadius: radius.lg,
-                padding: spacing.s16,
+                paddingVertical: spacing.s12,
+                paddingHorizontal: spacing.s16,
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: spacing.s12,
                 opacity: pressed ? 0.7 : 1,
-                
-                borderColor: withAlpha(dangerColor, 0.3),
               })}
             >
               <View style={{
-                width: 40,
-                height: 40,
+                width: 36,
+                height: 36,
                 borderRadius: radius.md,
                 backgroundColor: withAlpha(dangerColor, isDark ? 0.25 : 0.15),
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-                <Icon name="trash" size={20} color={dangerColor} />
+                <Icon name="trash" size={18} color={dangerColor} />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: dangerColor, fontWeight: '700', fontSize: 15 }}>Delete group</Text>
-                <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>Permanently remove this group</Text>
-              </View>
+              <Text style={{ color: dangerColor, fontWeight: '700', fontSize: 15, flex: 1 }}>Delete group</Text>
               <Icon name="chevron-right" size={20} color={dangerColor} />
             </Pressable>
           </View>
@@ -1653,6 +1718,266 @@ export default function GroupDetail() {
         onClose={() => setShowManageMembers(false)}
         groupId={groupId}
       />
+
+      {/* Bill Details Bottom Sheet */}
+      {selectedBillId && (() => {
+        const bill = findBill(groupId, selectedBillId);
+        if (!bill) return null;
+
+        const fmtTime = (d: Date) => {
+          const h = d.getHours();
+          const m = d.getMinutes();
+          const hh = ((h % 12) || 12).toString();
+          const mm = m.toString().padStart(2, '0');
+          const ampm = h < 12 ? 'AM' : 'PM';
+          return `${hh}:${mm} ${ampm}`;
+        };
+
+        const memberName = (id: string) => group.members.find(m => m.id === id)?.name || '—';
+        const billDate = new Date(bill.createdAt || Date.now());
+
+        const remainingUnsettled = bill.splits
+          .filter(s => {
+            const contribution = bill.contributions.find(c => c.memberId === s.memberId);
+            if (!contribution) return !s.settled;
+            if (contribution.amount >= s.share) return false;
+            return !s.settled;
+          })
+          .reduce((a,s)=>a+s.share,0);
+
+        const allSettled = bill.splits
+          .filter(s => {
+            const contribution = bill.contributions.find(c => c.memberId === s.memberId);
+            if (!contribution) return true;
+            return contribution.amount < s.share;
+          })
+          .every(s => s.settled);
+
+        const nonPayerSplits = bill.splits.filter(s => {
+          const contribution = bill.contributions.find(c => c.memberId === s.memberId);
+          if (!contribution) return true;
+          return contribution.amount < s.share;
+        });
+
+        return (
+          <BottomSheet visible={true} onClose={() => setSelectedBillId(null)}>
+            <View style={{ gap: spacing.s20 }}>
+              {/* Title and Amount */}
+              <View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.s8 }}>
+                  <Text style={{ color: textPrimary, fontSize: 24, fontWeight: '800', flex: 1 }}>
+                    {bill.title}
+                  </Text>
+                  <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '900', letterSpacing: -0.5, marginLeft: spacing.s12 }}>
+                    {formatCurrency(bill.finalAmount)}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ color: textMuted, fontSize: 13 }}>
+                    {billDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })} at {fmtTime(billDate)}
+                  </Text>
+                  {remainingUnsettled > 0.009 && (
+                    <Text style={{ color: dangerColor, fontSize: 13, fontWeight: '600' }}>
+                      {formatCurrency(remainingUnsettled)} outstanding
+                    </Text>
+                  )}
+                </View>
+              </View>
+
+              {/* Paid by */}
+              <View>
+                <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700', marginBottom: spacing.s12 }}>
+                  Paid by
+                </Text>
+                <View style={{ gap: spacing.s8 }}>
+                  {bill.contributions.map(c => {
+                    const member = group.members.find(m => m.id === c.memberId);
+                    if (!member) return null;
+                    const initials = member.name.trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase() || '').join('') || '?';
+
+                    return (
+                      <View
+                        key={c.memberId}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: surface1,
+                          borderRadius: radius.lg,
+                          padding: spacing.s12,
+                          gap: spacing.s12
+                        }}
+                      >
+                        <View style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 20,
+                          backgroundColor: withAlpha(accentPrimary, isDark ? 0.25 : 0.15),
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderWidth: 2,
+                          borderColor: accentPrimary,
+                        }}>
+                          <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 14 }}>
+                            {initials}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 15 }}>
+                            {member.name}
+                          </Text>
+                        </View>
+                        <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>
+                          {formatCurrency(c.amount)}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Who owes what - All in one card */}
+              <View>
+                <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700', marginBottom: spacing.s12 }}>
+                  Who owes what
+                </Text>
+                {nonPayerSplits.length === 0 ? (
+                  <View style={{
+                    backgroundColor: surface1,
+                    borderRadius: radius.lg,
+                    padding: spacing.s16,
+                    alignItems: 'center'
+                  }}>
+                    <Icon name="check-circle" size={48} color={successColor} />
+                    <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700', marginTop: spacing.s12 }}>
+                      All Clear!
+                    </Text>
+                    <Text style={{ color: textMuted, fontSize: 14, marginTop: spacing.s4, textAlign: 'center' }}>
+                      The person who paid has already covered this bill.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={{
+                    backgroundColor: surface1,
+                    borderRadius: radius.lg,
+                    overflow: 'hidden'
+                  }}>
+                    {nonPayerSplits.map((s, idx) => {
+                      const member = group.members.find(m => m.id === s.memberId);
+                      if (!member) return null;
+                      const initials = member.name.trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase() || '').join('') || '?';
+                      const isLast = idx === nonPayerSplits.length - 1;
+
+                      const renderRightActions = () => (
+                        <View style={{ flexDirection: 'row' }}>
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => Share.share({
+                              message: `Hey ${member.name}, please settle ${formatCurrency(s.share)} for "${bill.title}" in ${group.name}. Thanks!`
+                            })}
+                          >
+                            <View style={{
+                              width: 80,
+                              height: '100%',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              backgroundColor: accentPrimary
+                            }}>
+                              <Icon name="bell" size={20} colorToken="text.onPrimary" />
+                              <Text style={{
+                                color: textOnPrimary,
+                                fontWeight: '700',
+                                fontSize: 13,
+                                marginTop: spacing.s4
+                              }}>Nudge</Text>
+                            </View>
+                          </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={async () => {
+                              await markSplitPaid(groupId, selectedBillId, s.memberId);
+                              await hydrate();
+                            }}
+                          >
+                            <View style={{
+                              width: 80,
+                              height: '100%',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              backgroundColor: successColor
+                            }}>
+                              <Icon name="check" size={20} colorToken="text.onPrimary" />
+                              <Text style={{
+                                color: textOnPrimary,
+                                fontWeight: '700',
+                                fontSize: 13,
+                                marginTop: spacing.s4
+                              }}>Mark Paid</Text>
+                            </View>
+                          </Pressable>
+                        </View>
+                      );
+
+                      return (
+                        <Swipeable
+                          key={s.memberId}
+                          renderRightActions={renderRightActions}
+                          overshootRight={false}
+                        >
+                          <View style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            padding: spacing.s12,
+                            gap: spacing.s12,
+                            backgroundColor: surface1,
+                            borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
+                            borderBottomColor: borderSubtle
+                          }}>
+                            <View style={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 20,
+                              backgroundColor: s.settled
+                                ? withAlpha(successColor, isDark ? 0.25 : 0.15)
+                                : withAlpha(warningColor, isDark ? 0.25 : 0.15),
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderWidth: 2,
+                              borderColor: s.settled ? successColor : warningColor,
+                            }}>
+                              {s.settled ? (
+                                <Icon name="check" size={18} color={successColor} />
+                              ) : (
+                                <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 14 }}>
+                                  {initials}
+                                </Text>
+                              )}
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 15 }}>
+                                {member.name}
+                              </Text>
+                              <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>
+                                {s.settled ? 'Settled' : 'Owes'}
+                              </Text>
+                            </View>
+                            <Text style={{
+                              color: s.settled ? successColor : textPrimary,
+                              fontWeight: '700',
+                              fontSize: 16
+                            }}>
+                              {formatCurrency(s.share)}
+                            </Text>
+                          </View>
+                        </Swipeable>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            </View>
+          </BottomSheet>
+        );
+      })()}
     </>
   );
 }

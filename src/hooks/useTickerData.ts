@@ -2,7 +2,7 @@ import { useQuery, useQueries, UseQueryResult } from '@tanstack/react-query';
 import { fetchDailyHistoryYahoo, fetchYahooFundamentals } from '../lib/yahoo';
 import { fetchDailyHistoryFMP, fetchFMPFundamentals, fetchFMPBatchQuotes } from '../lib/fmp';
 import { fetchFinnhubCandles, fetchFinnhubProfile } from '../lib/finnhub';
-import { isCryptoSymbol, fetchCrypto, baseCryptoSymbol, fetchCryptoOhlc } from '../lib/coingecko';
+import { isCryptoSymbol, fetchYahooCrypto, baseCryptoSymbol, fetchYahooCryptoOhlc } from '../lib/yahoo-crypto';
 import type { Quote } from '../features/invest';
 
 type DataSource = 'yahoo' | 'fmp' | 'finnhub';
@@ -32,7 +32,7 @@ export function useTickerData({ symbol, dataSource = 'yahoo', enabled = true }: 
       // Crypto symbols always use CoinGecko
       if (isCrypto) {
         const base = baseCryptoSymbol(symbol);
-        const cg = await fetchCrypto(base || symbol, 365);
+        const cg = await fetchYahooCrypto(base || symbol, 365);
         const last = Number(cg?.line?.length ? cg.line[cg.line.length - 1].v : 0);
         const prev = Number(cg?.line?.length > 1 ? cg.line[cg.line.length - 2].v : last);
         const change = last - prev;
@@ -40,7 +40,7 @@ export function useTickerData({ symbol, dataSource = 'yahoo', enabled = true }: 
 
         let bars: any[] | undefined = undefined;
         try {
-          const ohlc = await fetchCryptoOhlc(base || symbol, 365);
+          const ohlc = await fetchYahooCryptoOhlc(base || symbol, 365);
           bars = (ohlc || []).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: 0 }));
         } catch {}
 
@@ -182,7 +182,7 @@ export function useMultipleTickerData(symbols: string[], dataSource: DataSource 
 
         if (isCrypto) {
           const base = baseCryptoSymbol(symbol);
-          const cg = await fetchCrypto(base || symbol, 365);
+          const cg = await fetchYahooCrypto(base || symbol, 365);
           const last = Number(cg?.line?.length ? cg.line[cg.line.length - 1].v : 0);
           const prev = Number(cg?.line?.length > 1 ? cg.line[cg.line.length - 2].v : last);
           const change = last - prev;
@@ -190,7 +190,7 @@ export function useMultipleTickerData(symbols: string[], dataSource: DataSource 
 
           let bars: any[] | undefined = undefined;
           try {
-            const ohlc = await fetchCryptoOhlc(base || symbol, 365);
+            const ohlc = await fetchYahooCryptoOhlc(base || symbol, 365);
             bars = (ohlc || []).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: 0 }));
           } catch {}
 
@@ -330,7 +330,7 @@ export function useHistoricalData(symbol: string, range: '1y' | '5y' = '5y', dat
       if (isCrypto) {
         const base = baseCryptoSymbol(symbol);
         const days = range === '5y' ? 365 * 5 : 365;
-        return await fetchCrypto(base || symbol, days);
+        return await fetchYahooCrypto(base || symbol, days);
       } else if (dataSource === 'fmp') {
         return await fetchDailyHistoryFMP(symbol, range);
       } else if (dataSource === 'finnhub') {

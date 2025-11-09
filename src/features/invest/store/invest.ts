@@ -2,9 +2,10 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchDailyHistoryYahoo, fetchYahooFundamentals } from '../../../lib/yahoo';
+import { fetchHistoricalWithCache, fetchPriceWithCache } from '../../../lib/yahoo-cache';
 import { fetchDailyHistoryFMP, fetchFMPFundamentals, fetchFMPBatchQuotes, setFMPApiKey } from '../../../lib/fmp';
 import { setFinnhubApiKey } from '../../../lib/finnhub';
-import { isCryptoSymbol, fetchCrypto, baseCryptoSymbol, fetchCryptoOhlc } from '../../../lib/coingecko';
+import { isCryptoSymbol, fetchYahooCrypto, baseCryptoSymbol, fetchYahooCryptoOhlc } from '../../../lib/yahoo-crypto';
 import { fetchFxUSD, type FxRates } from '../../../lib/fx';
 import { computePnL } from '../../../lib/positions';
 import { fixHoldingsCurrency } from '../../../lib/fixHoldingsCurrency';
@@ -716,19 +717,21 @@ addLot: async (symbol, lot, meta, opts) => {
       const cryptoSymbols = target.filter((s: string) => isCryptoSymbol(s));
       const equitySymbols = target.filter((s: string) => !isCryptoSymbol(s));
 
-      // Process crypto symbols (always use CoinGecko)
+      // Process crypto symbols (use Yahoo Finance)
       for (const sym of cryptoSymbols) {
         try {
+          console.log(`💰 [Yahoo Crypto] Fetching ${sym}...`);
           const base = baseCryptoSymbol(sym);
-          const cg = await fetchCrypto(base || sym, 365);
-          const last = Number(cg?.line?.length ? cg.line[cg.line.length - 1].v : 0);
-          const prev = Number(cg?.line?.length > 1 ? cg.line[cg.line.length - 2].v : last);
+          const yf = await fetchYahooCrypto(base || sym, '1y');
+          const last = Number(yf?.line?.length ? yf.line[yf.line.length - 1].v : 0);
+          const prev = Number(yf?.line?.length > 1 ? yf.line[yf.line.length - 2].v : last);
           const change = last - prev;
           const changePct = Number(prev ? ((change / prev) * 100).toFixed(2) : 0);
           let bars: any[] | undefined = undefined;
           try {
-            const ohlc = await fetchCryptoOhlc(base || sym, 365);
+            const ohlc = await fetchYahooCryptoOhlc(base || sym, '1y');
             bars = (ohlc || []).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: 0 }));
+            console.log(`💰 [Yahoo Crypto] Got ${bars.length} OHLC bars for ${sym}`);
           } catch {}
           quotes[sym] = {
             symbol: sym,
@@ -736,10 +739,12 @@ addLot: async (symbol, lot, meta, opts) => {
             change,
             changePct,
             ts: Date.now(),
-            line: Array.isArray(cg?.line) ? cg.line : [],
+            line: Array.isArray(yf?.line) ? yf.line : [],
             bars
           };
+          console.log(`💰 [Yahoo Crypto] ${sym}: $${last.toFixed(2)} (${changePct > 0 ? '+' : ''}${changePct}%)`);
         } catch (e) {
+          console.error(`💰 [Yahoo Crypto] Error fetching ${sym}:`, e);
           // keep existing quote if fetch fails
         }
         await new Promise(r => setTimeout(r, 120));
@@ -830,19 +835,22 @@ addLot: async (symbol, lot, meta, opts) => {
         }
       }
 
-      // Yahoo Finance (default or fallback)
+      // Yahoo Finance (default or fallback) - with caching
       if (dataSource === 'yahoo' && equitySymbols.length > 0) {
         for (const sym of equitySymbols) {
           try {
-            let rawBars: any[] = [];
-            try {
-              rawBars = await fetchDailyHistoryYahoo(sym as any, '5y' as any);
-            } catch (e) {
-              console.error('[Invest Store] Failed to fetch Yahoo data for:', sym, e);
+            // Use cached data (24h for historical, 5min for price)
+            const { bars: rawBars, fundamentals: cachedFundamentals, fromCache } = await fetchHistoricalWithCache(sym as any, '5y' as any);
+
+            if (fromCache) {
+              console.log(`📊 [Invest Store] Using cached data for ${sym}`);
+            } else {
+              console.log(`📊 [Invest Store] Fetched fresh data for ${sym}`);
             }
 
-            if (!rawBars || !rawBars.length) { /* keep existing quote */ }
-            else {
+            if (!rawBars || !rawBars.length) {
+              /* keep existing quote */
+            } else {
               const last = rawBars.length ? rawBars[rawBars.length-1].close : 0;
               const prevClose = rawBars.length > 1 ? (rawBars[rawBars.length-2].close || 0) : last;
               const change = last - prevClose;
@@ -850,20 +858,13 @@ addLot: async (symbol, lot, meta, opts) => {
               const line = rawBars.map(b => ({ t: b.date, v: Number((b.close ?? 0).toFixed ? (b.close as any).toFixed(2) : Number(b.close ?? 0).toFixed(2)) }));
               const cbars = rawBars.map(b => ({ t: b.date, o: b.open ?? b.close, h: b.high ?? b.close, l: b.low ?? b.close, c: b.close ?? 0, v: b.volume ?? 0 }));
 
-              // Fetch fundamentals for stocks/ETFs
-              let fundamentals = undefined;
-              try {
-                const fund = await fetchYahooFundamentals(sym);
-                if (fund) {
-                  fundamentals = fund;
-                }
-              } catch (e) {
-                // Silently fail - using placeholder data
-              }
+              // Use fundamentals from cache if available
+              let fundamentals = cachedFundamentals;
 
               quotes[sym] = { symbol: sym, last, change, changePct, ts: Date.now(), line, bars: cbars, fundamentals };
             }
           } catch (e) {
+            console.error('[Invest Store] Failed to fetch data for:', sym, e);
             // keep existing quote if fetch fails for this symbol
           }
           await new Promise(r => setTimeout(r, 120));

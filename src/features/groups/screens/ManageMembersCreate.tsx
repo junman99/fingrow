@@ -233,7 +233,7 @@ export default function ManageMembersCreate() {
           </Pressable>
         </View>
 
-        <View style={{ marginTop: spacing.s8 }}>
+        <View style={{ marginTop: spacing.s8, marginBottom: spacing.s32 }}>
           <Button title="Done" onPress={handleDone} />
         </View>
       </View>

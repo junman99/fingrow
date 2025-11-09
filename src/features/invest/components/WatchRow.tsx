@@ -8,6 +8,7 @@ import { useInvestStore } from '../store';
 import { useProfileStore } from '../../../store/profile';
 import { formatCurrency, formatPercent } from '../../../lib/format';
 import { convertCurrency } from '../../../lib/fx';
+import { TickerLogo } from '../../../components/TickerLogo';
 
 function getLogoColor(symbol: string): string {
   // Generate consistent color based on symbol
@@ -24,7 +25,6 @@ export default function WatchRow({ sym, onPress, portfolioCurrency }: { sym: str
   const { quotes, fxRates, holdings } = useInvestStore();
   const { profile } = useProfileStore();
   const nav = useNavigation<any>();
-  const [imageError, setImageError] = React.useState(false);
 
   const handlePress = React.useCallback(() => {
     if (typeof onPress === 'function') {
@@ -86,7 +86,6 @@ export default function WatchRow({ sym, onPress, portfolioCurrency }: { sym: str
   const changePct = q?.changePct ?? 0;
   const positive = changePct >= 0;
   const companyName = q?.fundamentals?.companyName || sym;
-  const logoUrl = q?.fundamentals?.logo;
 
   const text = get('text.primary') as string;
   const muted = get('text.muted') as string;
@@ -95,8 +94,6 @@ export default function WatchRow({ sym, onPress, portfolioCurrency }: { sym: str
   const cur = displayCurrency;
 
   const logoColor = getLogoColor(sym);
-  const logoLetter = sym.charAt(0).toUpperCase();
-  const shouldShowImage = logoUrl && !imageError;
 
   return (
     <Pressable
@@ -111,29 +108,7 @@ export default function WatchRow({ sym, onPress, portfolioCurrency }: { sym: str
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
         {/* Company Logo */}
-        <View style={{
-          width: 44,
-          height: 44,
-          borderRadius: 22,
-          backgroundColor: shouldShowImage ? 'transparent' : logoColor,
-          alignItems: 'center',
-          justifyContent: 'center',
-          overflow: 'hidden',
-          padding: shouldShowImage ? spacing.s8 : 0,
-        }}>
-          {shouldShowImage ? (
-            <Image
-              source={{ uri: logoUrl }}
-              style={{ width: '100%', height: '100%' }}
-              resizeMode="contain"
-              onError={() => setImageError(true)}
-            />
-          ) : (
-            <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '800' }}>
-              {logoLetter}
-            </Text>
-          )}
-        </View>
+        <TickerLogo ticker={sym} size={44} fallbackColor={logoColor} />
 
         {/* Left: Ticker and Company Name */}
         <View style={{ flex: 1, gap: spacing.s2 }}>

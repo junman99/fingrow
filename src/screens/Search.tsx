@@ -4,7 +4,7 @@ import { Screen } from '../components/Screen';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { useInvestStore } from '../features/invest';
-import { baseCryptoSymbol } from '../lib/coingecko';
+import { baseCryptoSymbol } from '../lib/yahoo-crypto';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
 type Item = { symbol: string; provider: string };

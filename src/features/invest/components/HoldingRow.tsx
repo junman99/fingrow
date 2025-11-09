@@ -9,6 +9,7 @@ import { useInvestStore } from '../store';
 import { useProfileStore } from '../../../store/profile';
 import { formatCurrency, formatPercent } from '../../../lib/format';
 import { convertCurrency } from '../../../lib/fx';
+import { TickerLogo } from '../../../components/TickerLogo';
 
 function getLogoColor(symbol: string): string {
   // Generate consistent color based on symbol
@@ -28,7 +29,6 @@ const HoldingRow = React.memo(({ sym, onPress, portfolioId, variant = 'card' }: 
   const fxRates = useInvestStore(s => s.fxRates);
   const { profile } = useProfileStore();
   const nav = useNavigation<any>();
-  const [imageError, setImageError] = React.useState(false);
 
   const handlePress = React.useCallback(() => {
     const isCashRow = sym === 'CASH';
@@ -125,7 +125,6 @@ const HoldingRow = React.memo(({ sym, onPress, portfolioId, variant = 'card' }: 
 
   const totalGainPositive = totalGainPct >= 0;
   const companyName = q?.fundamentals?.companyName || sym;
-  const logoUrl = q?.fundamentals?.logo;
 
   const bgBase = get('surface.level1') as string;
   const text = get('text.primary') as string;
@@ -140,8 +139,6 @@ const HoldingRow = React.memo(({ sym, onPress, portfolioId, variant = 'card' }: 
   const cardBorder = variant === 'card' ? withAlpha(tone, 0.28) : variant === 'list' ? 'transparent' : border;
 
   const logoColor = getLogoColor(sym);
-  const logoLetter = sym.charAt(0).toUpperCase();
-  const shouldShowImage = logoUrl && !imageError && !isCash;
 
   return (
     <Pressable
@@ -161,29 +158,20 @@ const HoldingRow = React.memo(({ sym, onPress, portfolioId, variant = 'card' }: 
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
         {/* Company Logo */}
-        <View style={{
-          width: 44,
-          height: 44,
-          borderRadius: 22,
-          backgroundColor: shouldShowImage ? 'transparent' : (isCash ? accent : logoColor),
-          alignItems: 'center',
-          justifyContent: 'center',
-          overflow: 'hidden',
-          padding: shouldShowImage ? spacing.s8 : 0,
-        }}>
-          {shouldShowImage ? (
-            <Image
-              source={{ uri: logoUrl }}
-              style={{ width: '100%', height: '100%' }}
-              resizeMode="contain"
-              onError={() => setImageError(true)}
-            />
-          ) : (
-            <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '800' }}>
-              {isCash ? '$' : logoLetter}
-            </Text>
-          )}
-        </View>
+        {isCash ? (
+          <View style={{
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: accent,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '800' }}>$</Text>
+          </View>
+        ) : (
+          <TickerLogo ticker={sym} size={44} fallbackColor={logoColor} />
+        )}
 
         {/* Left: Ticker and Company Name */}
         <View style={{ flex: 1, gap: spacing.s2 }}>

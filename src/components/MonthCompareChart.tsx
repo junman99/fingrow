@@ -76,6 +76,9 @@ export const MonthCompareChart: React.FC = () => {
 
   // month picker modal
   const [mpOpen, setMpOpen] = useState(false);
+  const [showLastMonth, setShowLastMonth] = useState(true);
+  const [renderLastMonth, setRenderLastMonth] = useState(true);
+  const lastMonthOpacity = useRef(new Animated.Value(1)).current;
   const ref = new Date(nowYear, nowMonth + offset, 1);
   const initialYear = Math.max(minYear, ref.getFullYear());
   const [mpYear, setMpYear] = useState(initialYear);
@@ -83,6 +86,30 @@ export const MonthCompareChart: React.FC = () => {
   const Y = ref.getFullYear(); const M = ref.getMonth();
   const prevRef = new Date(Y, M - 1, 1);
   const pY = prevRef.getFullYear(); const pM = prevRef.getMonth();
+
+  // Animate last month opacity
+  useEffect(() => {
+    if (showLastMonth) {
+      // Show: render immediately then fade in
+      setRenderLastMonth(true);
+      Animated.timing(lastMonthOpacity, {
+        toValue: 1,
+        duration: 250,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: false
+      }).start();
+    } else {
+      // Hide: fade out then stop rendering
+      Animated.timing(lastMonthOpacity, {
+        toValue: 0,
+        duration: 250,
+        easing: Easing.in(Easing.ease),
+        useNativeDriver: false
+      }).start(({ finished }) => {
+        if (finished) setRenderLastMonth(false);
+      });
+    }
+  }, [showLastMonth]);
 
   const sameMonth = (d: Date, y: number, m: number) => d.getFullYear() === y && d.getMonth() === m;
   const daysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
@@ -116,7 +143,9 @@ export const MonthCompareChart: React.FC = () => {
   const h = 180;
   const w = Math.max(1, chartW);
   const top = 18, bottom = 22;
-  const rawMax = Math.max(1, ...dailyThis.slice(0, daysPlotThis), ...dailyPrev.slice(0, daysPlotPrev));
+  const rawMax = renderLastMonth
+    ? Math.max(1, ...dailyThis.slice(0, daysPlotThis), ...dailyPrev.slice(0, daysPlotPrev))
+    : Math.max(1, ...dailyThis.slice(0, daysPlotThis));
   const maxVal = niceCeilTight(rawMax);
   const left = Math.max(32, Math.min(42, labelW + 4));
   const right = 16;
@@ -243,6 +272,7 @@ export const MonthCompareChart: React.FC = () => {
   const borderSubtle = get('border.subtle') as string;
   const textPrimary = get('text.primary') as string;
   const textMuted = get('text.muted') as string;
+  const textOnPrimary = get('text.onPrimary') as string;
   const cardBg = surface1;
 
   const paceColor = pace > 0 ? (get('semantic.danger') as string) : (pace < 0 ? (get('semantic.success') as string) : textMuted);
@@ -314,10 +344,10 @@ export const MonthCompareChart: React.FC = () => {
           <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: accentPrimary }} />
           <Text style={{ color: textMuted, fontSize: 11, fontWeight: '600' }}>This month</Text>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4 }}>
+        <Animated.View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s4, opacity: lastMonthOpacity }}>
           <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: withAlpha(textMuted, 0.5) }} />
           <Text style={{ color: textMuted, fontSize: 11, fontWeight: '600' }}>Last month</Text>
-        </View>
+        </Animated.View>
       </View>
 
       <Animated.View style={chartTransform ? { transform: chartTransform } : undefined}>
@@ -346,7 +376,7 @@ export const MonthCompareChart: React.FC = () => {
                 );
               })}
 
-              {Array.from({ length: daysPlotPrev }).map((_, i) => {
+              {renderLastMonth && Array.from({ length: daysPlotPrev }).map((_, i) => {
                 const v = dailyPrev[i] || 0;
                 const barH = (v / Math.max(1, maxVal)) * innerH;
                 const x = xForIndex(i) + (seg - bwPrev) / 2;
@@ -453,18 +483,18 @@ export const MonthCompareChart: React.FC = () => {
         <Text style={{ color: textMuted, fontSize: 11, fontWeight: '500', fontStyle: 'italic' }}>
           Swipe to explore previous months
         </Text>
-        <Pressable onPress={() => nav.navigate('InsightsModal')} hitSlop={12} style={({ pressed }) => ({
+        <Pressable onPress={() => setShowLastMonth(!showLastMonth)} hitSlop={12} style={({ pressed }) => ({
           paddingVertical: spacing.s6,
           paddingHorizontal: spacing.s10,
           borderRadius: radius.pill,
-          backgroundColor: surface2,
+          backgroundColor: showLastMonth ? accentPrimary : surface2,
           opacity: pressed ? 0.85 : 1,
           flexDirection: 'row',
           alignItems: 'center',
           gap: spacing.s4
         })}>
-          <Icon name="bar-chart-2" size={14} colorToken="accent.primary" />
-          <Text style={{ color: accentPrimary, fontWeight: '700' }}>See insights</Text>
+          <Icon name="calendar" size={14} color={showLastMonth ? textOnPrimary : accentPrimary} />
+          <Text style={{ color: showLastMonth ? textOnPrimary : accentPrimary, fontWeight: '700', fontSize: 12 }}>Last month</Text>
         </Pressable>
       </View>
 
@@ -582,6 +612,30 @@ export const MonthCompareChartClassic: React.FC = () => {
   const Y = ref.getFullYear(); const M = ref.getMonth();
   const prevRef = new Date(Y, M - 1, 1);
   const pY = prevRef.getFullYear(); const pM = prevRef.getMonth();
+
+  // Animate last month opacity
+  useEffect(() => {
+    if (showLastMonth) {
+      // Show: render immediately then fade in
+      setRenderLastMonth(true);
+      Animated.timing(lastMonthOpacity, {
+        toValue: 1,
+        duration: 250,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: false
+      }).start();
+    } else {
+      // Hide: fade out then stop rendering
+      Animated.timing(lastMonthOpacity, {
+        toValue: 0,
+        duration: 250,
+        easing: Easing.in(Easing.ease),
+        useNativeDriver: false
+      }).start(({ finished }) => {
+        if (finished) setRenderLastMonth(false);
+      });
+    }
+  }, [showLastMonth]);
 
   const sameMonth = (d: Date, y: number, m: number) => d.getFullYear() === y && d.getMonth() === m;
   const daysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();

@@ -12,7 +12,9 @@ import { useGroupsStore } from '../store';
 import { useProfileStore } from '../../../store/profile';
 import BottomSheet from '../../../components/BottomSheet';
 import { currencies, findCurrency } from '../../../lib/currencies';
+import { getExchangeRate } from '../../../lib/fx-yahoo';
 import { setMembersUpdateCallback } from './ManageMembersCreate';
+import { CurrencyFlag } from '../../../components/flags/CurrencyFlag';
 
 type Row = { name: string; contact?: string };
 
@@ -155,11 +157,18 @@ export default function CreateGroup() {
   const { profile } = useProfileStore();
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
-  const [currency, setCurrency] = useState(profile?.currency || 'USD');
+  // Default group currency to USD (or profile currency as fallback)
+  const [currency, setCurrency] = useState(() => {
+    const profileCurrency = profile?.currency || 'USD';
+    // If profile is already USD, default to SGD to show an exchange rate example
+    return profileCurrency === 'USD' ? 'SGD' : 'USD';
+  });
   const [rows, setRows] = useState<Row[]>([]);
   const [includeMe, setIncludeMe] = useState(true);
+  const [trackSpending, setTrackSpending] = useState(false);
   const [currencySheet, setCurrencySheet] = useState(false);
   const [currencyQuery, setCurrencyQuery] = useState('');
+  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
   const nameInputRef = useRef<TextInput>(null);
 
   const myName = profile?.name || 'Me';
@@ -218,6 +227,59 @@ export default function CreateGroup() {
     );
   }, [currencyQuery]);
 
+  // Fetch exchange rates on mount - Yahoo Finance with 1-hour cache
+  useEffect(() => {
+    const fetchRates = async () => {
+      try {
+        const baseCurrency = profile?.currency || 'USD';
+
+        console.log(`💱 [CreateGroup] Fetching rates for base: ${baseCurrency}...`);
+
+        const rates: Record<string, number> = {};
+
+        // Only fetch major currencies to avoid 404s (Yahoo doesn't support all pairs)
+        const majorCurrencies = ['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'NZD', 'SGD', 'HKD', 'CNY', 'INR', 'MYR', 'THB', 'PHP', 'IDR', 'KRW', 'TWD', 'ZAR', 'BRL', 'MXN', 'RUB', 'SEK', 'NOK', 'DKK', 'PLN', 'TRY', 'AED', 'SAR', 'ILS'];
+
+        // Fetch rates for major currencies only
+        for (const cur of currencies.slice(0, 50)) {
+          const targetCurrency = cur.code.toUpperCase();
+
+          if (baseCurrency === targetCurrency) {
+            rates[targetCurrency] = 1;
+            continue;
+          }
+
+          // Skip if not a major currency (Yahoo might not have the pair)
+          if (!majorCurrencies.includes(targetCurrency) && !majorCurrencies.includes(baseCurrency)) {
+            rates[targetCurrency] = 1; // Default to 1:1 for unsupported pairs
+            continue;
+          }
+
+          try {
+            // Fetch from Yahoo Finance (cached for 1 hour)
+            const rate = await getExchangeRate(baseCurrency, targetCurrency);
+            if (rate && rate > 0) {
+              rates[targetCurrency] = rate;
+            } else {
+              rates[targetCurrency] = 1;
+            }
+          } catch (error) {
+            // Silently fail for unsupported pairs
+            rates[targetCurrency] = 1;
+          }
+        }
+
+        console.log(`💱 [CreateGroup] ✅ Loaded ${Object.keys(rates).length} rates. Sample: USD=${rates['USD']?.toFixed(4)}, EUR=${rates['EUR']?.toFixed(4)}, GBP=${rates['GBP']?.toFixed(4)}`);
+
+        setExchangeRates(rates);
+      } catch (error) {
+        console.error('💱 [CreateGroup] Error fetching rates:', error);
+      }
+    };
+
+    fetchRates();
+  }, [profile?.currency]);
+
   const handleCurrencyChange = (code: string) => {
     setCurrency(code.toUpperCase());
     setCurrencySheet(false);
@@ -229,7 +291,7 @@ export default function CreateGroup() {
     const members = rows
       .map(r => ({ name: r.name.trim(), contact: r.contact?.trim() || undefined }))
       .filter(r => r.name.length > 0);
-    const id = await createGroup({ name: name.trim(), note: note.trim() || undefined, members, currency });
+    const id = await createGroup({ name: name.trim(), note: note.trim() || undefined, members, currency, trackSpending });
     nav.replace('GroupDetail', { groupId: id });
   };
 
@@ -338,6 +400,15 @@ export default function CreateGroup() {
           {/* Divider */}
           <View style={{ height: 1, backgroundColor: borderSubtle }} />
 
+          {/* Track in Spending Toggle Row */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 15 }}>Track in Spending</Text>
+            <Switch value={trackSpending} onValueChange={setTrackSpending} />
+          </View>
+
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: borderSubtle }} />
+
           {/* Currency Selection Row */}
           <Pressable
             onPress={() => {
@@ -357,7 +428,22 @@ export default function CreateGroup() {
                 {selectedCurrency?.code || 'USD'}
               </Text>
               <Text style={{ color: textMuted, fontSize: 13, marginTop: 2, textAlign: 'right' }}>
-                1 {profile?.currency || 'USD'} ≈ {selectedCurrency?.code === (profile?.currency || 'USD') ? '1.00' : '0.00'} {selectedCurrency?.code || 'USD'}
+                {(() => {
+                  const baseCurrency = profile?.currency || 'USD';
+                  const targetCurrency = selectedCurrency?.code || 'USD';
+
+                  if (baseCurrency === targetCurrency) {
+                    return `1 ${baseCurrency} = 1.00 ${targetCurrency}`;
+                  }
+                  const rate = exchangeRates[targetCurrency];
+                  if (rate && rate > 0 && rate !== 1) {
+                    return `1 ${baseCurrency} ≈ ${rate.toFixed(2)} ${targetCurrency}`;
+                  }
+                  if (rate === 1) {
+                    return `1 ${baseCurrency} = 1.00 ${targetCurrency}`;
+                  }
+                  return 'Loading...';
+                })()}
               </Text>
             </View>
             <Icon name="chevron-right" size={20} color={textMuted} />
@@ -442,8 +528,8 @@ export default function CreateGroup() {
           </View>
 
           <ScrollView
-            style={{ flex: 1, marginHorizontal: -spacing.s16, marginBottom: -spacing.s16 }}
-            contentContainerStyle={{ paddingHorizontal: spacing.s16, paddingBottom: spacing.s16 }}
+            style={{ flex: 1, marginHorizontal: -spacing.s16 }}
+            contentContainerStyle={{ paddingHorizontal: spacing.s16, paddingBottom: 60 }}
             showsVerticalScrollIndicator={false}
             alwaysBounceVertical={true}
             bounces={true}
@@ -451,7 +537,8 @@ export default function CreateGroup() {
             {filteredCurrencies.map((cur, idx) => {
               const active = currency?.toUpperCase() === cur.code;
               const primaryCurrency = profile?.currency || 'USD';
-              const exchangeRate = cur.code === primaryCurrency ? '1.00' : '0.00'; // TODO: Add real exchange rates
+              const rate = exchangeRates[cur.code];
+              const exchangeRate = cur.code === primaryCurrency ? '1.00' : (rate && rate > 0 ? rate.toFixed(2) : '...');
 
               return (
                 <View key={cur.code}>
@@ -467,7 +554,7 @@ export default function CreateGroup() {
                     })}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
-                      <Text style={{ fontSize: 28 }}>{cur.flag || '🏳️'}</Text>
+                      <CurrencyFlag currencyCode={cur.code} size={40} />
                       <View style={{ flex: 1 }}>
                         <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 15 }}>
                           {cur.name}

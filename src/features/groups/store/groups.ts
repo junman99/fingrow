@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Group, Member, Bill, ID, Contribution, Settlement } from '../../../types/groups';
 import { round2, sum } from '../../../lib/format';
+import { createBillPaymentTransaction, createSettlementTransaction, deleteBillTransaction } from '../utils/transactionIntegration';
 
 type SplitMode = 'equal'|'shares'|'exact';
 type PayerMode = 'single'|'multi-even'|'multi-custom';
@@ -32,10 +33,13 @@ type State = {
     paidBy?: ID;
     payersEven?: ID[];
     contributions?: Record<ID, number>;
+    category?: string;
+    paidFromAccountId?: string;
+    currentUserId?: ID;
   }) => Promise<ID>;
   balances: (groupId: ID) => Record<ID, number>;
-  addSettlement: (groupId: ID, fromId: ID, toId: ID, amount: number, billId?: ID, memo?: string) => Promise<ID>;
-  markSplitPaid: (groupId: ID, billId: ID, memberId: ID) => Promise<void>;
+  addSettlement: (groupId: ID, fromId: ID, toId: ID, amount: number, billId?: ID, memo?: string, toAccountId?: string, currentUserId?: ID) => Promise<ID>;
+  markSplitPaid: (groupId: ID, billId: ID, memberId: ID, toAccountId?: string, currentUserId?: ID) => Promise<void>;
   findBill: (groupId: ID, billId: ID) => Bill | undefined;
   deleteBill: (groupId: ID, billId: ID) => Promise<void>;
   updateBill: (input: {
@@ -229,8 +233,29 @@ export const useGroupsStore = create<State>((set, get) => ({
       finalAmount,
       contributions,
       splits: finalSplits,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      category: input.category,
+      paidFromAccountId: input.paidFromAccountId,
     };
+
+    // Create transaction if current user paid and account is specified
+    if (input.currentUserId && input.paidFromAccountId) {
+      const userIsPayer = contributions.some(c => c.memberId === input.currentUserId);
+      if (userIsPayer) {
+        try {
+          const transactionId = await createBillPaymentTransaction(
+            bill,
+            input.paidFromAccountId,
+            input.currentUserId
+          );
+          bill.transactionId = transactionId;
+        } catch (error) {
+          console.error('Failed to create transaction for bill:', error);
+          // Continue anyway - don't fail the whole operation
+        }
+      }
+    }
+
     arr[gi] = { ...group, bills: [bill, ...group.bills] };
     set({ groups: arr }); await save(arr);
     return bill.id;
@@ -250,17 +275,54 @@ export const useGroupsStore = create<State>((set, get) => ({
     });
     return res;
   },
-  addSettlement: async (groupId, fromId, toId, amount, billId, memo) => {
+  addSettlement: async (groupId, fromId, toId, amount, billId, memo, toAccountId, currentUserId) => {
     const arr = [...get().groups];
     const gi = arr.findIndex(g => g.id === groupId);
     if (gi < 0) throw new Error('Group not found');
     const group = arr[gi];
-    const s: Settlement = { id: uid(), fromId, toId, amount: round2(amount), createdAt: Date.now(), billId, memo };
+    const s: Settlement = {
+      id: uid(),
+      fromId,
+      toId,
+      amount: round2(amount),
+      createdAt: Date.now(),
+      billId,
+      memo,
+      toAccountId,
+    };
+
+    // Create transaction if current user is receiving payment and account is specified
+    if (currentUserId && toAccountId && toId === currentUserId) {
+      try {
+        // Find the member name who's paying
+        const fromMember = group.members.find(m => m.id === fromId);
+        const fromMemberName = fromMember?.name || 'Unknown';
+
+        // Find bill title if this settlement is for a specific bill
+        let billTitle: string | undefined;
+        if (billId) {
+          const bill = group.bills.find(b => b.id === billId);
+          billTitle = bill?.title;
+        }
+
+        const transactionId = await createSettlementTransaction(
+          s,
+          toAccountId,
+          fromMemberName,
+          billTitle
+        );
+        s.transactionId = transactionId;
+      } catch (error) {
+        console.error('Failed to create transaction for settlement:', error);
+        // Continue anyway - don't fail the whole operation
+      }
+    }
+
     arr[gi] = { ...group, settlements: [s, ...(group.settlements || [])] };
     set({ groups: arr }); await save(arr);
     return s.id;
   },
-  markSplitPaid: async (groupId, billId, memberId) => {
+  markSplitPaid: async (groupId, billId, memberId, toAccountId, currentUserId) => {
     const arr = [...get().groups];
     const gi = arr.findIndex(g => g.id === groupId);
     if (gi < 0) throw new Error('Group not found');
@@ -278,7 +340,38 @@ export const useGroupsStore = create<State>((set, get) => ({
       const amount = round2(split.share * (c.amount / totalContrib));
       if (c.memberId === memberId) return; // skip self
       if (amount < 0.01) return; // ignore dust
-      newSettlements.push({ id: uid(), fromId: memberId, toId: c.memberId, amount, createdAt: Date.now(), billId });
+
+      const settlement: Settlement = {
+        id: uid(),
+        fromId: memberId,
+        toId: c.memberId,
+        amount,
+        createdAt: Date.now(),
+        billId,
+        toAccountId: currentUserId === c.memberId ? toAccountId : undefined,
+      };
+
+      // Create transaction if current user is receiving payment
+      if (currentUserId === c.memberId && toAccountId) {
+        (async () => {
+          try {
+            const fromMember = group.members.find(m => m.id === memberId);
+            const fromMemberName = fromMember?.name || 'Unknown';
+
+            const transactionId = await createSettlementTransaction(
+              settlement,
+              toAccountId,
+              fromMemberName,
+              bill.title
+            );
+            settlement.transactionId = transactionId;
+          } catch (error) {
+            console.error('Failed to create transaction for split payment:', error);
+          }
+        })();
+      }
+
+      newSettlements.push(settlement);
     });
 
     const updatedBills = group.bills.map(b => {

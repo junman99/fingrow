@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { View, Text, ScrollView, Pressable, Platform, RefreshControl } from 'react-native';
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useThemeTokens } from '../../../theme/ThemeProvider';
 import { spacing, radius } from '../../../theme/tokens';
 import { Screen } from '../../../components/Screen';
@@ -84,8 +84,45 @@ export default function HoldingHistory() {
   const onEditLot = (lot: any) => { setEditLotState({ id: lot.id, lot }); setShowTxSheet(true); };
   const onDeleteLot = async (lot: any) => { try { await store.removeLot(symbol, lot.id, { portfolioId }); } catch {} };
 
+  // Level 2: Auto-refresh price while viewing this holding (every 60 seconds)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!symbol) return;
+
+      console.log(`📊 [HoldingHistory] Screen focused for ${symbol} - starting auto-refresh`);
+
+      // Refresh immediately
+      store.refreshQuotes([symbol]);
+
+      // Set up 60-second auto-refresh interval
+      const intervalId = setInterval(() => {
+        console.log(`📊 [HoldingHistory] Auto-refresh triggered for ${symbol}`);
+        store.refreshQuotes([symbol]);
+      }, 60000); // 60 seconds
+
+      // Cleanup: stop refresh when screen loses focus
+      return () => {
+        console.log(`📊 [HoldingHistory] Screen unfocused for ${symbol} - stopping auto-refresh`);
+        clearInterval(intervalId);
+      };
+    }, [symbol, store.refreshQuotes])
+  );
+
   const text = get('text.primary') as string;
   const muted = get('text.muted') as string;
+
+  // Pull-to-refresh support
+  const [refreshingManual, setRefreshingManual] = React.useState(false);
+  const onRefresh = React.useCallback(async () => {
+    if (!symbol) return;
+    setRefreshingManual(true);
+    try {
+      await store.refreshQuotes([symbol]);
+    } catch (error) {
+      console.error('Error refreshing:', error);
+    }
+    setRefreshingManual(false);
+  }, [symbol, store.refreshQuotes]);
 
   return (
     <Screen>
@@ -94,6 +131,13 @@ export default function HoldingHistory() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingBottom: spacing.s24 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshingManual}
+            onRefresh={onRefresh}
+            tintColor={muted}
+          />
+        }
       >
         {/* Header */}
         <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s12 }}>

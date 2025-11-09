@@ -5,7 +5,7 @@ import Button from '../../../components/Button';
 import Icon from '../../../components/Icon';
 import { useThemeTokens } from '../../../theme/ThemeProvider';
 import { spacing, radius } from '../../../theme/tokens';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { listReminders, toggleEnabled, cancel, getSettings, setSettings, selfTestOnce } from '../../../lib/notifications';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../../navigation/HomeNavigator';
@@ -47,9 +47,11 @@ export default function GroupReminders() {
     setHour(s.hour);
   };
 
-  useEffect(() => {
-    refresh();
-  }, [groupId]);
+  useFocusEffect(
+    React.useCallback(() => {
+      refresh();
+    }, [groupId])
+  );
 
   const onToggle = async (key: string, v: boolean) => {
     try {
@@ -90,26 +92,15 @@ export default function GroupReminders() {
 
   return (
     <ScreenScroll contentStyle={{ paddingBottom: spacing.s32 }}>
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s20 }}>
+      <View style={{ paddingHorizontal: spacing.s16, gap: spacing.s20 }}>
+        {/* Handler */}
+        <View style={{ alignSelf: 'center', width: 48, height: 4, borderRadius: 2, marginTop: spacing.s12, marginBottom: spacing.s12, backgroundColor: borderSubtle }} />
+
         {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
-          <Pressable
-            onPress={() => nav.goBack()}
-            style={({ pressed }) => ({
-              padding: spacing.s8,
-              marginLeft: -spacing.s8,
-              borderRadius: radius.md,
-              backgroundColor: pressed ? surface1 : 'transparent',
-            })}
-            hitSlop={8}
-          >
-            <Icon name="x" size={28} color={textPrimary} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
-              Reminders
-            </Text>
-          </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.s12 }}>
+          <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800' }}>
+            Reminders
+          </Text>
         </View>
 
         {/* Global Notification Settings */}

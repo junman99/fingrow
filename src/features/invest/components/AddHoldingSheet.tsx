@@ -7,7 +7,7 @@ import { useThemeTokens } from '../../../theme/ThemeProvider';
 import { spacing, radius } from '../../../theme/tokens';
 import Icon from '../../../components/Icon';
 import { toYahooSymbol } from '../../../lib/yahoo';
-import { baseCryptoSymbol, fetchCryptoOhlc } from '../../../lib/coingecko';
+import { baseCryptoSymbol, fetchYahooCryptoOhlc } from '../../../lib/yahoo-crypto';
 import { fetchDailyHistoryYahoo } from '../../../lib/yahoo';
 import { useInvestStore } from '../store';
 import { useProfileStore } from '../../../store/profile';
@@ -115,7 +115,7 @@ export default function AddHoldingSheet({ visible, onClose, portfolioId, mode='h
       for (const it of items) {
         try {
           if (it.provider === 'CoinGecko') {
-            const bars = await fetchCryptoOhlc(it.symbol, 1);
+            const bars = await fetchYahooCryptoOhlc(it.symbol, 1);
             out[it.key] = bars && bars.length ? (bars[bars.length - 1].c ?? null) : null;
           } else {
             // Yahoo Finance

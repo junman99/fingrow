@@ -77,9 +77,10 @@ export default function AddMemberSheet({ visible, onClose, groupId, memberId }: 
   return (
     <BottomSheet visible={visible} onClose={onClose}>
       <ScrollView
+        style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ flexGrow: 1 }}
+        contentContainerStyle={{ paddingBottom: spacing.s24 }}
         automaticallyAdjustKeyboardInsets
       >
         <View style={{ gap: spacing.s12 }}>
@@ -145,7 +146,6 @@ export default function AddMemberSheet({ visible, onClose, groupId, memberId }: 
                 placeholderTextColor={placeholder}
                 style={inputStyle}
                 autoCapitalize="words"
-                autoFocus={!member}
               />
               <TextInput
                 value={contact}

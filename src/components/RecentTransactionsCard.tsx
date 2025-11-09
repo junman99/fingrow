@@ -29,14 +29,16 @@ export const RecentTransactionsCard: React.FC = () => {
   const { transactions } = useTxStore();
   const nav = useNavigation<any>();
 
-  const items = transactions.slice(0, 8);
-
-  // Group items by calendar day (newest first)
-  const sorted = [...items].sort((a, b) => {
+  // Sort all transactions by date first (newest first), then take the first 8
+  const sortedAll = [...transactions].sort((a, b) => {
     const da = new Date(a.date).getTime();
     const db = new Date(b.date).getTime();
     return db - da;
   });
+  const items = sortedAll.slice(0, 8);
+
+  // Already sorted, no need to sort again
+  const sorted = items;
 
   const groups: { key: string; label: string; items: typeof items }[] = [];
   const byKey = new Map<string, { key: string; label: string; items: typeof items }>();

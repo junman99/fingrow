@@ -12,8 +12,22 @@ import { spacing, radius } from '../../../theme/tokens';
 import { useGroupsStore } from '../store';
 import { formatCurrency } from '../../../lib/format';
 import type { ID } from '../../../types/groups';
+import { getAvailableAccounts, getDefaultAccount } from '../utils/transactionIntegration';
+import { useAccountsStore } from '../../../store/accounts';
 
 const KEY_ADVANCED_OPEN = 'fingrow/ui/addbill/advancedOpen';
+
+// Common expense categories for group bills
+const EXPENSE_CATEGORIES = [
+  'Dining',
+  'Groceries',
+  'Transportation',
+  'Entertainment',
+  'Travel',
+  'Utilities',
+  'Shopping',
+  'Other',
+];
 
 function withAlpha(hex: string, alpha: number) {
   if (!hex || typeof hex !== 'string') return hex;
@@ -37,6 +51,16 @@ export default function AddBill() {
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [paidBy, setPaidBy] = useState<string | null>(null);
+
+  // Transaction integration
+  const { accounts } = useAccountsStore();
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(() => {
+    const defaultAcc = getDefaultAccount();
+    return defaultAcc?.id || null;
+  });
+  const [category, setCategory] = useState('Dining');
+  const [showAccountSheet, setShowAccountSheet] = useState(false);
+  const [showCategorySheet, setShowCategorySheet] = useState(false);
 
   const activeMembers = useMemo(() => group?.members.filter(m => !m.archived) ?? [], [group]);
   const [participants, setParticipants] = useState<Record<string, boolean>>(() =>
@@ -126,6 +150,10 @@ export default function AddBill() {
       }
     }
 
+    // Determine if current user is the payer (we'll use first member as currentUser for now)
+    // TODO: Get actual current user ID from auth/profile
+    const currentUserId = activeMembers[0]?.id;
+
     try {
       await addBill({
         groupId: group.id,
@@ -140,7 +168,13 @@ export default function AddBill() {
         exacts: exactsMap,
         proportionalTax: true,
         payerMode: 'single',
-        paidBy: paidBy as ID
+        paidBy: paidBy as ID,
+        // Only include transaction fields if trackSpending is enabled
+        ...(group.trackSpending && {
+          category: category,
+          paidFromAccountId: selectedAccount || undefined,
+          currentUserId: currentUserId,
+        }),
       });
       nav.goBack();
     } catch (e: any) {
@@ -508,6 +542,69 @@ export default function AddBill() {
             })}
           </ScrollView>
         </View>
+
+        {/* Category Selection - Only show if trackSpending is enabled */}
+        {group.trackSpending && (
+          <View style={{ marginBottom: spacing.s24 }}>
+            <Text style={{ color: textPrimary, fontSize: 17, fontWeight: '600', marginBottom: spacing.s16 }}>
+              Category
+            </Text>
+            <Pressable
+              onPress={() => setShowCategorySheet(true)}
+              style={{
+                backgroundColor: surface1,
+                borderRadius: radius.lg,
+                padding: spacing.s16,
+                borderWidth: 1,
+                borderColor: borderSubtle,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+                <Icon name="tag" size={20} colorToken="text.muted" />
+                <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '600' }}>
+                  {category}
+                </Text>
+              </View>
+              <Icon name="chevron-right" size={20} colorToken="text.muted" />
+            </Pressable>
+          </View>
+        )}
+
+        {/* Account Selection - Only show if trackSpending is enabled and user is the payer */}
+        {group.trackSpending && paidBy && accounts.length > 0 && (
+          <View style={{ marginBottom: spacing.s24 }}>
+            <Text style={{ color: textPrimary, fontSize: 17, fontWeight: '600', marginBottom: spacing.s16 }}>
+              Paid from
+            </Text>
+            <Pressable
+              onPress={() => setShowAccountSheet(true)}
+              style={{
+                backgroundColor: surface1,
+                borderRadius: radius.lg,
+                padding: spacing.s16,
+                borderWidth: 1,
+                borderColor: borderSubtle,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+                <Icon name="credit-card" size={20} colorToken="text.muted" />
+                <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '600' }}>
+                  {selectedAccount ? accounts.find(a => a.id === selectedAccount)?.name || 'Select account' : 'Select account'}
+                </Text>
+              </View>
+              <Icon name="chevron-right" size={20} colorToken="text.muted" />
+            </Pressable>
+            <Text style={{ color: textMuted, fontSize: 13, marginTop: spacing.s8, paddingLeft: spacing.s4 }}>
+              This expense will be recorded in your transaction history
+            </Text>
+          </View>
+        )}
 
         {/* Bill Details - Combined Card */}
         <Text style={{ color: textPrimary, fontSize: 17, fontWeight: '600', marginBottom: spacing.s14 }}>
@@ -1192,6 +1289,84 @@ export default function AddBill() {
         </View>
       </View>
     </Modal>
+
+    {/* Category Selection Sheet */}
+    <BottomSheet visible={showCategorySheet} onClose={() => setShowCategorySheet(false)}>
+      <View style={{ paddingVertical: spacing.s16 }}>
+        <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800', marginBottom: spacing.s20, paddingHorizontal: spacing.s16 }}>
+          Select Category
+        </Text>
+        {EXPENSE_CATEGORIES.map((cat) => (
+          <Pressable
+            key={cat}
+            onPress={() => {
+              setCategory(cat);
+              setShowCategorySheet(false);
+            }}
+            style={({ pressed }) => ({
+              paddingVertical: spacing.s14,
+              paddingHorizontal: spacing.s16,
+              backgroundColor: category === cat ? withAlpha(accentPrimary, 0.1) : 'transparent',
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: category === cat ? accentPrimary : textPrimary, fontSize: 16, fontWeight: category === cat ? '700' : '500' }}>
+                {cat}
+              </Text>
+              {category === cat && (
+                <Icon name="check" size={20} colorToken="accent.primary" />
+              )}
+            </View>
+          </Pressable>
+        ))}
+      </View>
+    </BottomSheet>
+
+    {/* Account Selection Sheet */}
+    <BottomSheet visible={showAccountSheet} onClose={() => setShowAccountSheet(false)}>
+      <View style={{ paddingVertical: spacing.s16 }}>
+        <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800', marginBottom: spacing.s20, paddingHorizontal: spacing.s16 }}>
+          Select Account
+        </Text>
+        {accounts.map((account) => (
+          <Pressable
+            key={account.id}
+            onPress={() => {
+              setSelectedAccount(account.id);
+              setShowAccountSheet(false);
+            }}
+            style={({ pressed }) => ({
+              paddingVertical: spacing.s14,
+              paddingHorizontal: spacing.s16,
+              backgroundColor: selectedAccount === account.id ? withAlpha(accentPrimary, 0.1) : 'transparent',
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View>
+                <Text style={{ color: selectedAccount === account.id ? accentPrimary : textPrimary, fontSize: 16, fontWeight: selectedAccount === account.id ? '700' : '500' }}>
+                  {account.name}
+                </Text>
+                {account.kind && (
+                  <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>
+                    {account.kind.charAt(0).toUpperCase() + account.kind.slice(1)}
+                  </Text>
+                )}
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ color: selectedAccount === account.id ? accentPrimary : textPrimary, fontSize: 15, fontWeight: '600' }}>
+                  {formatCurrency(account.balance)}
+                </Text>
+                {selectedAccount === account.id && (
+                  <Icon name="check" size={20} colorToken="accent.primary" />
+                )}
+              </View>
+            </View>
+          </Pressable>
+        ))}
+      </View>
+    </BottomSheet>
     </>
   );
 }

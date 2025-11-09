@@ -1,15 +1,10 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { FlatList, View, Text, Pressable, Animated, Alert, PanResponder, ScrollView } from 'react-native';
+import { FlatList, View, Text, Pressable, Animated, Alert, ScrollView } from 'react-native';
+import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
+import AnimatedReanimated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS, useAnimatedScrollHandler, interpolate, Extrapolate } from 'react-native-reanimated';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import AnimatedRN, {
-  useAnimatedStyle,
-  useSharedValue,
-  useAnimatedScrollHandler,
-  interpolate,
-  Extrapolate,
-} from 'react-native-reanimated';
 import { Screen } from '../../../components/Screen';
 import Button from '../../../components/Button';
 import Icon, { IconName } from '../../../components/Icon';
@@ -18,10 +13,13 @@ import { spacing, radius, elevation } from '../../../theme/tokens';
 import { useGroupsStore } from '../store';
 import { useProfileStore } from '../../../store/profile';
 import { useTxStore } from '../../../store/transactions';
+import { useAccountsStore } from '../../../store/accounts';
 import { formatCurrency, sum } from '../../../lib/format';
 import type { ID } from '../../../types/groups';
+import BottomSheet from '../../../components/BottomSheet';
+import { getDefaultAccount } from '../utils/transactionIntegration';
 
-// Settlement Transfer Row with Swipe to Complete
+// Settlement Transfer Row with Smooth Bubble Animation
 const SettlementTransferRow: React.FC<{
   fromInitials: string;
   toInitials: string;
@@ -38,7 +36,13 @@ const SettlementTransferRow: React.FC<{
   completed: boolean;
 }> = ({ fromInitials, toInitials, amount, warningColor, successColor, accentPrimary, textPrimary, textMuted, surface2, isDark, formatCurrency, onComplete, completed }) => {
   const [isPaid, setIsPaid] = useState(completed);
-  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  // Reanimated values for smooth animation
+  const translateX = useSharedValue(0);
+  const scaleX = useSharedValue(1);
+  const scaleY = useSharedValue(1);
+  const opacity = useSharedValue(1);
+
   const flowAnim = useRef(new Animated.Value(0)).current;
   const dotAnim1 = useRef(new Animated.Value(0)).current;
   const dotAnim2 = useRef(new Animated.Value(0)).current;
@@ -101,66 +105,63 @@ const SettlementTransferRow: React.FC<{
 
   const dotAnims = [dotAnim1, dotAnim2, dotAnim3];
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => !isPaid,
-      onMoveShouldSetPanResponder: () => !isPaid,
-      onPanResponderMove: (_, gestureState) => {
-        if (isPaid) return;
-        const clampedDx = Math.max(0, Math.min(gestureState.dx, 150));
-        slideAnim.setValue(clampedDx);
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (isPaid) return;
-        if (gestureState.dx > 100) {
-          Animated.spring(slideAnim, {
-            toValue: 150,
-            useNativeDriver: true,
-          }).start(() => {
-            setIsPaid(true);
-            onComplete();
-          });
-        } else {
-          Animated.spring(slideAnim, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
-        }
-      },
+  // Gesture handler
+  const gesture = Gesture.Pan()
+    .enabled(!isPaid)
+    .onUpdate((event) => {
+      const dragX = Math.max(0, event.translationX);
+      translateX.value = dragX;
+
+      // Bubble stretch effect
+      scaleX.value = 1 + (dragX / 80);
+      scaleY.value = Math.max(0.8, 1 - (dragX / 200));
+      opacity.value = Math.max(0.5, 1 - (dragX / 150));
     })
-  ).current;
+    .onEnd((event) => {
+      if (event.translationX > 100) {
+        // Pop animation
+        translateX.value = withSpring(150, { damping: 8 });
+        scaleX.value = withSpring(3, { damping: 8 });
+        scaleY.value = withSpring(3, { damping: 8 });
+        opacity.value = withTiming(0, { duration: 200 }, () => {
+          runOnJS(setIsPaid)(true);
+          runOnJS(onComplete)();
+        });
+      } else {
+        // Snap back with elastic
+        translateX.value = withSpring(0, { damping: 15, stiffness: 150 });
+        scaleX.value = withSpring(1, { damping: 15, stiffness: 150 });
+        scaleY.value = withSpring(1, { damping: 15, stiffness: 150 });
+        opacity.value = withSpring(1);
+      }
+    });
+
+  // Animated style for icon
+  const animatedIconStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { scaleX: scaleX.value },
+      { scaleY: scaleY.value },
+    ],
+    opacity: opacity.value,
+  }));
 
   return (
     <View style={{
       borderRadius: radius.lg,
       marginBottom: spacing.s8,
-      overflow: 'hidden',
+      overflow: 'visible',
       position: 'relative'
     }}>
-      {/* Green checkmark background (shown when paid) */}
-      <View style={{
-        position: 'absolute',
-        right: 0,
-        top: 0,
-        bottom: 0,
-        width: 70,
-        backgroundColor: successColor,
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        <Text style={{ fontSize: 24 }}>✓</Text>
-      </View>
-
       {/* Main content */}
-      <Animated.View
-        {...panResponder.panHandlers}
+      <View
         style={{
           flexDirection: 'row',
           alignItems: 'center',
           paddingVertical: spacing.s10,
           paddingHorizontal: spacing.s12,
           backgroundColor: isPaid ? withAlphaLocal(successColor, 0.2) : surface2,
-          transform: [{ translateX: slideAnim }],
+          borderRadius: radius.lg,
           opacity: isPaid ? 0.6 : 1
         }}
       >
@@ -172,6 +173,7 @@ const SettlementTransferRow: React.FC<{
             top: 0,
             bottom: 0,
             width: '100%',
+            borderRadius: radius.lg,
             opacity: flowAnim.interpolate({
               inputRange: [0, 0.5, 1],
               outputRange: [0, 0.3, 0]
@@ -192,22 +194,33 @@ const SettlementTransferRow: React.FC<{
           </Animated.View>
         )}
 
-        {/* From member */}
-        <View style={{
-          width: 36,
-          height: 36,
-          borderRadius: 18,
-          backgroundColor: isPaid ? withAlphaLocal(successColor, 0.3) : withAlphaLocal(warningColor, isDark ? 0.25 : 0.2),
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderWidth: 2,
-          borderColor: isPaid ? successColor : warningColor,
-          zIndex: 2
-        }}>
-          <Text style={{ color: isPaid ? successColor : warningColor, fontSize: 12, fontWeight: '800' }}>
-            {fromInitials}
-          </Text>
-        </View>
+        {/* From member - Animated with Gesture */}
+        <GestureDetector gesture={gesture}>
+          <AnimatedReanimated.View
+            style={[
+              {
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: isPaid ? withAlphaLocal(successColor, 0.3) : withAlphaLocal(warningColor, isDark ? 0.25 : 0.2),
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 2,
+                borderColor: isPaid ? successColor : warningColor,
+                zIndex: 2,
+              },
+              animatedIconStyle
+            ]}
+          >
+            {isPaid ? (
+              <Text style={{ fontSize: 16 }}>✓</Text>
+            ) : (
+              <Text style={{ color: warningColor, fontSize: 12, fontWeight: '800' }}>
+                {fromInitials}
+              </Text>
+            )}
+          </AnimatedReanimated.View>
+        </GestureDetector>
 
         {/* Amount and flow line with animated dots */}
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', marginHorizontal: spacing.s12, zIndex: 1 }}>
@@ -261,7 +274,7 @@ const SettlementTransferRow: React.FC<{
             {toInitials}
           </Text>
         </View>
-      </Animated.View>
+      </View>
     </View>
   );
 };
@@ -272,8 +285,20 @@ export default function GroupsRoot() {
   const insets = useSafeAreaInsets();
   const { groups, hydrate, balances, addSettlement } = useGroupsStore();
   const { add: addTransaction } = useTxStore();
+  const { accounts } = useAccountsStore();
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const settleUpFadeAnim = useRef(new Animated.Value(0)).current;
   const [settleUpGroupId, setSettleUpGroupId] = useState<string | null>(null);
+  const [settleUpGroupIdVisible, setSettleUpGroupIdVisible] = useState<string | null>(null);
+  const [completedPayments, setCompletedPayments] = useState<Set<number>>(new Set());
+
+  // Account selection for settlements
+  const [showAccountSheet, setShowAccountSheet] = useState(false);
+  const [pendingSettlement, setPendingSettlement] = useState<{ idx: number; edge: any } | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(() => {
+    const defaultAcc = getDefaultAccount();
+    return defaultAcc?.id || null;
+  });
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -282,6 +307,26 @@ export default function GroupsRoot() {
       useNativeDriver: true,
     }).start();
   }, []);
+
+  // Animate settle up modal
+  useEffect(() => {
+    if (settleUpGroupId) {
+      setSettleUpGroupIdVisible(settleUpGroupId);
+      Animated.timing(settleUpFadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(settleUpFadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => {
+        setSettleUpGroupIdVisible(null);
+      });
+    }
+  }, [settleUpGroupId]);
 
   useFocusEffect(useCallback(() => { hydrate(); }, [hydrate]));
 
@@ -673,7 +718,7 @@ export default function GroupsRoot() {
   return (
     <>
       {/* Main Tab Title Animation - Floating Gradient Header (Fixed at top, outside scroll) */}
-      <AnimatedRN.View
+      <AnimatedReanimated.View
         style={[
           {
             position: 'absolute',
@@ -701,7 +746,7 @@ export default function GroupsRoot() {
             paddingHorizontal: spacing.s16,
           }}
         >
-          <AnimatedRN.Text
+          <AnimatedReanimated.Text
             style={[
               {
                 color: textPrimary,
@@ -714,13 +759,13 @@ export default function GroupsRoot() {
             ]}
           >
             Shared bills
-          </AnimatedRN.Text>
+          </AnimatedReanimated.Text>
         </LinearGradient>
-      </AnimatedRN.View>
+      </AnimatedReanimated.View>
 
       <Screen inTab>
         <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-          <AnimatedRN.FlatList
+          <AnimatedReanimated.FlatList
             data={filteredData}
             keyExtractor={(item: any) => item.id}
             renderItem={({ item }) => <Row item={item} />}
@@ -750,7 +795,7 @@ export default function GroupsRoot() {
                     <Icon name="chevron-left" size={28} color={textPrimary} />
                   </Pressable>
                   <View style={{ flex: 1 }}>
-                    <AnimatedRN.Text
+                    <AnimatedReanimated.Text
                       style={[
                         {
                           color: textPrimary,
@@ -763,7 +808,7 @@ export default function GroupsRoot() {
                       ]}
                     >
                       Shared bills
-                    </AnimatedRN.Text>
+                    </AnimatedReanimated.Text>
                   </View>
                 </View>
 
@@ -883,12 +928,14 @@ export default function GroupsRoot() {
       </Screen>
 
       {/* Settle Up Modal */}
-      {settleUpGroupId && (() => {
-        const group = groups.find(g => g.id === settleUpGroupId);
+      {(() => {
+        if (!settleUpGroupIdVisible) return null;
+
+        const group = groups.find(g => g.id === settleUpGroupIdVisible);
         if (!group) return null;
 
-        const settlementPlan = calculateSettlementPlan(settleUpGroupId);
-        const groupBal = balances(settleUpGroupId) || {};
+        const settlementPlan = calculateSettlementPlan(settleUpGroupIdVisible);
+        const groupBal = balances(settleUpGroupIdVisible) || {};
         const posVals = Object.values(groupBal).filter(v => (v as number) > 0);
         const unsettledTotal = posVals.reduce((a: number, b: any) => a + Math.abs(b as number), 0);
 
@@ -896,36 +943,48 @@ export default function GroupsRoot() {
         const warningColor = get('semantic.warning') as string;
 
         return (
-          <View
+          <Animated.View
+            pointerEvents={settleUpGroupId ? 'auto' : 'none'}
             style={{
               position: 'absolute',
               top: 0,
               left: 0,
               right: 0,
               bottom: 0,
-              backgroundColor: isDark ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.6)',
+              backgroundColor: isDark ? 'rgba(0, 0, 0, 0.5)' : 'rgba(0, 0, 0, 0.3)',
               justifyContent: 'center',
               alignItems: 'center',
               padding: spacing.s20,
-              zIndex: 100
+              zIndex: 100,
+              opacity: settleUpFadeAnim
             }}
           >
             <Pressable
               style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
               onPress={() => setSettleUpGroupId(null)}
             />
-            <View
+            <Animated.View
               style={{
                 width: '100%',
                 maxWidth: 400,
-                backgroundColor: surface1,
+                maxHeight: '80%',
+                backgroundColor: get('background.default') as string,
                 borderRadius: 24,
-                padding: spacing.s24,
+                padding: spacing.s16,
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: 20 },
                 shadowOpacity: 0.4,
                 shadowRadius: 32,
-                elevation: 20
+                elevation: 20,
+                opacity: settleUpFadeAnim,
+                transform: [
+                  {
+                    scale: settleUpFadeAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.9, 1]
+                    })
+                  }
+                ]
               }}
             >
               {/* Close button */}
@@ -933,41 +992,44 @@ export default function GroupsRoot() {
                 onPress={() => setSettleUpGroupId(null)}
                 style={({ pressed }) => ({
                   position: 'absolute',
-                  top: spacing.s16,
-                  right: spacing.s16,
-                  padding: spacing.s8,
+                  top: spacing.s12,
+                  right: spacing.s12,
+                  padding: spacing.s6,
                   borderRadius: radius.pill,
                   backgroundColor: surface2,
                   opacity: pressed ? 0.6 : 1,
                   zIndex: 10
                 })}
               >
-                <Icon name="x" size={20} color={textMuted} />
+                <Icon name="x" size={18} color={textMuted} />
               </Pressable>
 
               {/* Icon & Title */}
-              <View style={{ alignItems: 'center', marginBottom: spacing.s20, marginTop: spacing.s8 }}>
+              <View style={{ alignItems: 'center', marginBottom: spacing.s12 }}>
                 <View style={{
-                  width: 72,
-                  height: 72,
-                  borderRadius: 36,
+                  width: 56,
+                  height: 56,
+                  borderRadius: 28,
                   backgroundColor: withAlpha(successColor, 0.15),
                   alignItems: 'center',
                   justifyContent: 'center',
-                  marginBottom: spacing.s16
+                  marginBottom: spacing.s10
                 }}>
-                  <Text style={{ fontSize: 36 }}>🎉</Text>
+                  <Text style={{ fontSize: 28 }}>🎉</Text>
                 </View>
-                <Text style={{ color: textPrimary, fontSize: 26, fontWeight: '900', marginBottom: spacing.s6, textAlign: 'center' }}>
+                <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800', marginBottom: spacing.s4, textAlign: 'center' }}>
                   Settle Up
                 </Text>
-                <Text style={{ color: textMuted, fontSize: 14, textAlign: 'center' }}>
-                  Outstanding balance: {formatCurrency(unsettledTotal)}
+                <Text style={{ color: textMuted, fontSize: 13, textAlign: 'center' }}>
+                  Outstanding: {formatCurrency(unsettledTotal)}
                 </Text>
               </View>
 
               {/* Settlement plan - who pays who */}
-              <View style={{ marginBottom: spacing.s24 }}>
+              <ScrollView
+                style={{ maxHeight: 350, marginBottom: 70 }}
+                showsVerticalScrollIndicator={false}
+              >
                 {settlementPlan.map((edge, idx) => {
                   const fromMember = group.members.find((m: any) => m.id === edge.fromId);
                   const toMember = group.members.find((m: any) => m.id === edge.toId);
@@ -988,35 +1050,132 @@ export default function GroupsRoot() {
                       surface2={surface2}
                       isDark={isDark}
                       formatCurrency={formatCurrency}
+                      completed={completedPayments.has(idx)}
+                      onComplete={() => {
+                        // If trackSpending is enabled and accounts exist, show account selection sheet
+                        if (group.trackSpending && accounts.length > 0) {
+                          setPendingSettlement({ idx, edge });
+                          setShowAccountSheet(true);
+                        } else {
+                          // trackSpending is off or no accounts, just mark as completed
+                          setCompletedPayments(prev => new Set(prev).add(idx));
+                        }
+                      }}
                     />
                   );
                 })}
-              </View>
+              </ScrollView>
 
-              {/* Action button */}
-              <Pressable
-                onPress={() => recordTransfers(settleUpGroupId)}
-                style={({ pressed }) => ({
-                  backgroundColor: accentPrimary,
-                  paddingVertical: spacing.s16,
-                  borderRadius: radius.xl,
-                  alignItems: 'center',
-                  shadowColor: accentPrimary,
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 8,
-                  elevation: 4,
-                  opacity: pressed ? 0.85 : 1
-                })}
-              >
-                <Text style={{ color: textOnPrimary, fontSize: 17, fontWeight: '800' }}>
-                  Record Transfer
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+              {/* Floating Action button */}
+              <View style={{
+                position: 'absolute',
+                bottom: spacing.s16,
+                left: spacing.s16,
+                right: spacing.s16
+              }}>
+                <Pressable
+                  onPress={() => settleUpGroupIdVisible && recordTransfers(settleUpGroupIdVisible)}
+                  style={({ pressed }) => ({
+                    backgroundColor: accentPrimary,
+                    paddingVertical: spacing.s14,
+                    borderRadius: radius.lg,
+                    alignItems: 'center',
+                    shadowColor: accentPrimary,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 8,
+                    elevation: 4,
+                    opacity: pressed ? 0.85 : 1
+                  })}
+                >
+                  <Text style={{ color: textOnPrimary, fontSize: 16, fontWeight: '700' }}>
+                    Record All Transfers
+                  </Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+          </Animated.View>
         );
       })()}
+
+      {/* Account Selection Sheet for Settlements */}
+      <BottomSheet visible={showAccountSheet} onClose={() => {
+        setShowAccountSheet(false);
+        setPendingSettlement(null);
+      }}>
+        <View style={{ paddingVertical: spacing.s16 }}>
+          <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800', marginBottom: spacing.s8, paddingHorizontal: spacing.s16 }}>
+            Select Account
+          </Text>
+          <Text style={{ color: textMuted, fontSize: 14, marginBottom: spacing.s20, paddingHorizontal: spacing.s16 }}>
+            Where did you receive this payment?
+          </Text>
+          {accounts.map((account) => (
+            <Pressable
+              key={account.id}
+              onPress={async () => {
+                if (!pendingSettlement) return;
+
+                setSelectedAccount(account.id);
+                setShowAccountSheet(false);
+
+                // Mark as completed
+                setCompletedPayments(prev => new Set(prev).add(pendingSettlement.idx));
+
+                // Record the settlement with transaction integration
+                const group = groups.find(g => g.id === settleUpGroupId);
+                // TODO: Get actual current user ID
+                const currentUserId = group?.members[0]?.id;
+                if (group && currentUserId) {
+                  try {
+                    await addSettlement(
+                      group.id,
+                      pendingSettlement.edge.fromId,
+                      pendingSettlement.edge.toId,
+                      pendingSettlement.edge.amount,
+                      undefined,
+                      undefined,
+                      account.id,
+                      currentUserId
+                    );
+                  } catch (error) {
+                    console.error('Failed to record settlement:', error);
+                  }
+                }
+
+                setPendingSettlement(null);
+              }}
+              style={({ pressed }) => ({
+                paddingVertical: spacing.s14,
+                paddingHorizontal: spacing.s16,
+                backgroundColor: selectedAccount === account.id ? withAlpha(accentPrimary, 0.1) : 'transparent',
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View>
+                  <Text style={{ color: selectedAccount === account.id ? accentPrimary : textPrimary, fontSize: 16, fontWeight: selectedAccount === account.id ? '700' : '500' }}>
+                    {account.name}
+                  </Text>
+                  {account.kind && (
+                    <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>
+                      {account.kind.charAt(0).toUpperCase() + account.kind.slice(1)}
+                    </Text>
+                  )}
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={{ color: selectedAccount === account.id ? accentPrimary : textPrimary, fontSize: 15, fontWeight: '600' }}>
+                    {formatCurrency(account.balance)}
+                  </Text>
+                  {selectedAccount === account.id && (
+                    <Icon name="check" size={20} colorToken="accent.primary" />
+                  )}
+                </View>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      </BottomSheet>
     </>
   );
 }

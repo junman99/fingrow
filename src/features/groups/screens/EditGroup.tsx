@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Alert, Pressable } from 'react-native';
+import { View, Text, TextInput, Alert, Pressable, Switch } from 'react-native';
 import { ScreenScroll } from '../../../components/ScreenScroll';
 import Button from '../../../components/Button';
 import Icon from '../../../components/Icon';
@@ -29,6 +29,7 @@ export default function EditGroup() {
 
   const [name, setName] = useState(group?.name || '');
   const [note, setNote] = useState(group?.note || '');
+  const [trackSpending, setTrackSpending] = useState(group?.trackSpending ?? false);
   const [saving, setSaving] = useState(false);
 
   const textPrimary = get('text.primary') as string;
@@ -60,7 +61,8 @@ export default function EditGroup() {
       setSaving(true);
       await updateGroup(group.id, {
         name: name.trim(),
-        note: note.trim() || undefined
+        note: note.trim() || undefined,
+        trackSpending
       });
       Alert.alert('Success', 'Group updated successfully', [
         { text: 'OK', onPress: () => nav.goBack() }
@@ -85,64 +87,81 @@ export default function EditGroup() {
 
   return (
     <ScreenScroll contentStyle={{ paddingBottom: spacing.s32 }}>
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s20 }}>
+      <View style={{ paddingHorizontal: spacing.s16, gap: spacing.s16 }}>
+        {/* Handler */}
+        <View style={{ alignSelf: 'center', width: 48, height: 4, borderRadius: 2, marginTop: spacing.s12, marginBottom: spacing.s12, backgroundColor: borderSubtle }} />
+
         {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
-          <Pressable
-            onPress={() => nav.goBack()}
-            style={({ pressed }) => ({
-              padding: spacing.s8,
-              marginLeft: -spacing.s8,
-              borderRadius: radius.md,
-              backgroundColor: pressed ? surface1 : 'transparent',
-            })}
-            hitSlop={8}
-          >
-            <Icon name="x" size={28} color={textPrimary} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
-              Edit Group
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.s12 }}>
+          <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800' }}>
+            Edit Group
+          </Text>
+        </View>
+
+        {/* Group Details Card */}
+        <View
+          style={{
+            backgroundColor: surface1,
+            borderRadius: radius.lg,
+            padding: spacing.s16,
+            gap: spacing.s16,
+          }}
+        >
+          {/* Group Name Row */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
+              Group name
             </Text>
-            <Text style={{ color: textMuted, fontSize: 13, marginTop: spacing.s4 }}>
-              Update group details
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Enter group name"
+              placeholderTextColor={placeholder}
+              style={{ flex: 1, color: textPrimary, fontSize: 15, textAlign: 'right', marginLeft: spacing.s12 }}
+            />
+          </View>
+
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: borderSubtle }} />
+
+          {/* Note Row */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
+              Note
             </Text>
+            <TextInput
+              value={note}
+              onChangeText={setNote}
+              placeholder="Add a description or purpose"
+              placeholderTextColor={placeholder}
+              style={{ flex: 1, color: textPrimary, fontSize: 15, textAlign: 'right', marginLeft: spacing.s12 }}
+              multiline={false}
+            />
+          </View>
+
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: borderSubtle }} />
+
+          {/* Track in Spending Toggle Row */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ color: textPrimary, fontWeight: '600', fontSize: 15 }}>Track in Spending</Text>
+            <Switch
+              value={trackSpending}
+              onValueChange={setTrackSpending}
+              trackColor={{ false: withAlpha(textMuted, 0.3), true: accentPrimary }}
+              thumbColor={isDark ? '#fff' : '#fff'}
+            />
           </View>
         </View>
 
-        {/* Group Name */}
-        <View style={{ gap: spacing.s10 }}>
-          <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>Group name</Text>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="Enter group name"
-            placeholderTextColor={placeholder}
-            style={inputStyle}
-          />
-        </View>
-
-        {/* Note (Optional) */}
-        <View style={{ gap: spacing.s10 }}>
-          <Text style={{ color: textPrimary, fontSize: 15, fontWeight: '600' }}>
-            Description <Text style={{ color: textMuted, fontWeight: '400' }}>(optional)</Text>
-          </Text>
-          <TextInput
-            value={note}
-            onChangeText={setNote}
-            placeholder="Add a description or purpose for this group"
-            placeholderTextColor={placeholder}
-            style={[inputStyle, { minHeight: 100, textAlignVertical: 'top' }]}
-            multiline
-          />
-        </View>
-
         {/* Save Button */}
-        <Button
-          title={saving ? "Saving..." : "Save changes"}
-          onPress={handleSave}
-          disabled={saving}
-        />
+        <View style={{ marginTop: spacing.s8 }}>
+          <Button
+            title={saving ? "Saving..." : "Save changes"}
+            onPress={handleSave}
+            disabled={saving}
+          />
+        </View>
       </View>
     </ScreenScroll>
   );

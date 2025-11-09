@@ -130,138 +130,112 @@ export default function BillDetails() {
   return (
     <ScreenScroll inTab contentStyle={{ paddingBottom: spacing.s32 }}>
       <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s20 }}>
-        {/* Header with back button */}
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12 }}>
+        {/* Header with close and edit buttons */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <View style={{
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              backgroundColor: allSettled
+                ? withAlpha(successColor, isDark ? 0.25 : 0.15)
+                : withAlpha(warningColor, isDark ? 0.25 : 0.15),
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: spacing.s10
+            }}>
+              <Text style={{ fontSize: 28 }}>
+                {allSettled ? '✅' : '📄'}
+              </Text>
+            </View>
+            <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800', textAlign: 'center', marginBottom: spacing.s4 }}>
+              {bill.title}
+            </Text>
+            <Text style={{ color: textMuted, fontSize: 13, textAlign: 'center' }}>
+              {formatCurrency(bill.finalAmount)} • {billDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} at {fmtTime(billDate)}
+            </Text>
+          </View>
           <Pressable
             onPress={() => nav.goBack()}
             style={({ pressed }) => ({
-              padding: spacing.s8,
-              marginLeft: -spacing.s8,
-              marginTop: -spacing.s4,
-              borderRadius: radius.md,
-              backgroundColor: pressed ? surface1 : 'transparent',
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              padding: spacing.s6,
+              borderRadius: radius.pill,
+              backgroundColor: surface2,
+              opacity: pressed ? 0.6 : 1,
             })}
             hitSlop={8}
           >
-            <Icon name="chevron-left" size={28} color={textPrimary} />
+            <Icon name="x" size={18} color={textMuted} />
           </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.8, marginTop: spacing.s2 }}>
-              {bill.title}
-            </Text>
-          </View>
           <Pressable
             onPress={() => nav.navigate('EditBill', { groupId, billId })}
             style={({ pressed }) => ({
-              padding: spacing.s8,
-              marginRight: -spacing.s8,
-              marginTop: -spacing.s4,
-              borderRadius: radius.md,
-              backgroundColor: pressed ? surface1 : 'transparent',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              padding: spacing.s6,
+              borderRadius: radius.pill,
+              backgroundColor: surface2,
+              opacity: pressed ? 0.6 : 1,
             })}
             hitSlop={8}
           >
-            <Icon name="edit-3" size={24} color={accentPrimary} />
+            <Icon name="edit-3" size={18} color={accentPrimary} />
           </Pressable>
         </View>
 
-        {/* Bill Summary Card */}
+        {/* Status Pills */}
         <View style={{
-          backgroundColor: allSettled
-            ? withAlpha(successColor, isDark ? 0.15 : 0.1)
-            : withAlpha(warningColor, isDark ? 0.15 : 0.1),
-          borderRadius: radius.xl,
-          padding: spacing.s20,
-          borderWidth: 2,
-          borderColor: allSettled
-            ? withAlpha(successColor, 0.3)
-            : withAlpha(warningColor, 0.3),
-          gap: spacing.s16
+          flexDirection: 'row',
+          gap: spacing.s12,
+          justifyContent: 'center'
         }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: textMuted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Total Amount
-              </Text>
-              <Text style={{ color: textPrimary, fontSize: 48, fontWeight: '900', letterSpacing: -1.5, marginTop: spacing.s4 }}>
-                {formatCurrency(bill.finalAmount)}
-              </Text>
-            </View>
-            <View style={{
-              width: 64,
-              height: 64,
-              borderRadius: 32,
-              backgroundColor: allSettled
-                ? withAlpha(successColor, isDark ? 0.25 : 0.2)
-                : withAlpha(warningColor, isDark ? 0.25 : 0.2),
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderWidth: 2,
-              borderColor: allSettled ? successColor : warningColor,
-            }}>
-              <Icon
-                name={allSettled ? "check-circle" : "clock"}
-                size={32}
-                color={allSettled ? successColor : warningColor}
-              />
-            </View>
-          </View>
-
           <View style={{
-            flexDirection: 'row',
-            gap: spacing.s12
-          }}>
-            <View style={{
-              flex: 1,
-              backgroundColor: surface1,
-              borderRadius: radius.lg,
-              padding: spacing.s12,
-              
-              borderColor: withAlpha(borderSubtle, 0.3)
-            }}>
-              <Text style={{ color: textMuted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Status</Text>
-              <Text style={{
-                color: allSettled ? successColor : warningColor,
-                fontSize: 16,
-                fontWeight: '800',
-                marginTop: spacing.s4
-              }}>
-                {allSettled ? 'Settled' : 'Pending'}
-              </Text>
-            </View>
-            <View style={{
-              flex: 1,
-              backgroundColor: surface1,
-              borderRadius: radius.lg,
-              padding: spacing.s12,
-              
-              borderColor: withAlpha(borderSubtle, 0.3)
-            }}>
-              <Text style={{ color: textMuted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Outstanding</Text>
-              <Text style={{
-                color: remainingUnsettled > 0.009 ? dangerColor : successColor,
-                fontSize: 16,
-                fontWeight: '800',
-                marginTop: spacing.s4
-              }}>
-                {formatCurrency(remainingUnsettled)}
-              </Text>
-            </View>
-          </View>
-
-          <View style={{
+            backgroundColor: surface1,
+            borderRadius: radius.pill,
+            paddingVertical: spacing.s8,
+            paddingHorizontal: spacing.s14,
             flexDirection: 'row',
             alignItems: 'center',
-            gap: spacing.s8,
-            paddingTop: spacing.s8,
-            borderTopWidth: 1,
-            borderTopColor: withAlpha(borderSubtle, 0.2)
+            gap: spacing.s6
           }}>
-            <Icon name="calendar" size={16} color={textMuted} />
-            <Text style={{ color: textMuted, fontSize: 13 }}>
-              {billDate.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })} at {fmtTime(billDate)}
+            <View style={{
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: allSettled ? successColor : warningColor
+            }} />
+            <Text style={{
+              color: textPrimary,
+              fontSize: 13,
+              fontWeight: '600'
+            }}>
+              {allSettled ? 'Settled' : 'Pending'}
             </Text>
           </View>
+          {remainingUnsettled > 0.009 && (
+            <View style={{
+              backgroundColor: surface1,
+              borderRadius: radius.pill,
+              paddingVertical: spacing.s8,
+              paddingHorizontal: spacing.s14,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.s6
+            }}>
+              <Icon name="alert-circle" size={14} color={dangerColor} />
+              <Text style={{
+                color: textPrimary,
+                fontSize: 13,
+                fontWeight: '600'
+              }}>
+                {formatCurrency(remainingUnsettled)} outstanding
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Who Paid */}

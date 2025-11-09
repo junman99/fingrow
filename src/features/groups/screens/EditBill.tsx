@@ -250,7 +250,6 @@ export default function EditBill() {
           marginBottom: spacing.s24,
           gap: spacing.s16
         }}>
-          {/* Top row: Calendar button + Amount */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s16 }}>
             {/* Calendar button on left */}
             <Pressable
@@ -282,59 +281,58 @@ export default function EditBill() {
               </View>
             </Pressable>
 
-            {/* Amount input on right */}
-            <View style={{ flex: 1, alignItems: 'flex-end' }}>
-              <TextInput
-                value={amount}
-                onChangeText={setAmount}
-                placeholder="$0"
-                keyboardType="decimal-pad"
-                placeholderTextColor={withAlpha(textMuted, 0.3)}
-                autoFocus
-                style={{
-                  color: textPrimary,
-                  fontSize: 56,
-                  fontWeight: '800',
-                  letterSpacing: -2,
-                  textAlign: 'right',
-                  width: '100%'
-                }}
-              />
-              {participantIds.length > 0 && finalTotal > 0 && (
-                <View style={{ marginTop: spacing.s4, alignItems: 'flex-end' }}>
-                  <Text style={{ color: textMuted, fontSize: 13, fontWeight: '500' }}>
-                    {formatCurrency(finalTotal / participantIds.length)} per person
-                  </Text>
-                  {totalFees > 0 && (
-                    <Text style={{ color: textMuted, fontSize: 11, marginTop: spacing.s2 }}>
-                      (includes {formatCurrency(totalFees)} in fees)
-                    </Text>
-                  )}
+            {/* Right side: Amount + Description */}
+            <View style={{ flex: 1 }}>
+              {/* Amount input */}
+              <View style={{ alignItems: 'flex-end' }}>
+                <TextInput
+                  value={amount}
+                  onChangeText={setAmount}
+                  placeholder="$0"
+                  keyboardType="decimal-pad"
+                  placeholderTextColor={withAlpha(textMuted, 0.3)}
+                  autoFocus
+                  style={{
+                    color: textPrimary,
+                    fontSize: 30,
+                    fontWeight: '800',
+                    letterSpacing: -1,
+                    textAlign: 'right',
+                    width: '100%'
+                  }}
+                />
+              </View>
+
+              {/* Bill description - single line below amount */}
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                marginTop: spacing.s12,
+                paddingTop: spacing.s12,
+                borderTopWidth: 1,
+                borderTopColor: borderSubtle,
+                gap: spacing.s12
+              }}>
+                <Text style={{ color: textMuted, fontSize: 15, fontWeight: '600' }}>
+                  Add notes
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <TextInput
+                    value={title}
+                    onChangeText={setTitle}
+                    placeholder="Dinner, groceries, rent..."
+                    placeholderTextColor={textMuted}
+                    style={{
+                      color: textPrimary,
+                      fontSize: 15,
+                      fontWeight: '500',
+                      padding: 0,
+                      textAlign: 'right'
+                    }}
+                  />
                 </View>
-              )}
+              </View>
             </View>
-          </View>
-
-          {/* Divider */}
-          <View style={{ height: 1, backgroundColor: borderSubtle }} />
-
-          {/* Bill description at bottom */}
-          <View>
-            <Text style={{ color: textMuted, fontSize: 12, fontWeight: '600', marginBottom: spacing.s8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              For what?
-            </Text>
-            <TextInput
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Dinner, groceries, rent..."
-              placeholderTextColor={textMuted}
-              style={{
-                color: textPrimary,
-                fontSize: 16,
-                fontWeight: '500',
-                padding: 0
-              }}
-            />
           </View>
         </View>
 
@@ -346,7 +344,7 @@ export default function EditBill() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ flexDirection: 'row-reverse', gap: spacing.s12, paddingLeft: spacing.s16, justifyContent: 'flex-end', flexGrow: 1 }}
+            contentContainerStyle={{ flexDirection: 'row', gap: spacing.s12, paddingRight: spacing.s16, justifyContent: 'flex-end', flexGrow: 1 }}
           >
             {activeMembers.map((member, index) => {
               const active = !!participants[member.id];
@@ -365,11 +363,11 @@ export default function EditBill() {
                   })}
                 >
                   <View style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: 32,
+                    width: 45,
+                    height: 45,
+                    borderRadius: 22.5,
                     backgroundColor: colors.bg,
-                    borderWidth: 3,
+                    borderWidth: 2,
                     borderColor: colors.border,
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -382,23 +380,23 @@ export default function EditBill() {
                     {active && (
                       <View style={{
                         position: 'absolute',
-                        top: -4,
-                        right: -4,
-                        width: 24,
-                        height: 24,
-                        borderRadius: 12,
+                        top: -3,
+                        right: -3,
+                        width: 18,
+                        height: 18,
+                        borderRadius: 9,
                         backgroundColor: successColor,
                         alignItems: 'center',
                         justifyContent: 'center',
                         borderWidth: 2,
                         borderColor: get('background.default') as string
                       }}>
-                        <Icon name="check" size={12} color="#FFFFFF" />
+                        <Icon name="check" size={10} color="#FFFFFF" />
                       </View>
                     )}
                     <Text style={{
                       color: colors.text,
-                      fontSize: 20,
+                      fontSize: 14,
                       fontWeight: '700'
                     }}>
                       {initials}
@@ -430,7 +428,7 @@ export default function EditBill() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ flexDirection: 'row-reverse', gap: spacing.s12, paddingLeft: spacing.s16, justifyContent: 'flex-end', flexGrow: 1 }}
+            contentContainerStyle={{ flexDirection: 'row', gap: spacing.s12, paddingRight: spacing.s16, justifyContent: 'flex-end', flexGrow: 1 }}
           >
             {activeMembers.map((member, index) => {
               const active = paidBy === member.id;
@@ -449,11 +447,11 @@ export default function EditBill() {
                   })}
                 >
                   <View style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: 32,
+                    width: 45,
+                    height: 45,
+                    borderRadius: 22.5,
                     backgroundColor: colors.bg,
-                    borderWidth: 3,
+                    borderWidth: 2,
                     borderColor: colors.border,
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -466,23 +464,23 @@ export default function EditBill() {
                     {active && (
                       <View style={{
                         position: 'absolute',
-                        top: -4,
-                        right: -4,
-                        width: 24,
-                        height: 24,
-                        borderRadius: 12,
+                        top: -3,
+                        right: -3,
+                        width: 18,
+                        height: 18,
+                        borderRadius: 9,
                         backgroundColor: successColor,
                         alignItems: 'center',
                         justifyContent: 'center',
                         borderWidth: 2,
                         borderColor: get('background.default') as string
                       }}>
-                        <Icon name="check" size={12} color="#FFFFFF" />
+                        <Icon name="check" size={10} color="#FFFFFF" />
                       </View>
                     )}
                     <Text style={{
                       color: colors.text,
-                      fontSize: 20,
+                      fontSize: 14,
                       fontWeight: '700'
                     }}>
                       {initials}

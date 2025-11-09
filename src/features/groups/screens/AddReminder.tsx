@@ -88,26 +88,15 @@ export default function AddReminder() {
 
   return (
     <ScreenScroll contentStyle={{ paddingBottom: spacing.s24 }}>
-      <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, gap: spacing.s20 }}>
+      <View style={{ paddingHorizontal: spacing.s16, gap: spacing.s20 }}>
+        {/* Handler */}
+        <View style={{ alignSelf: 'center', width: 48, height: 4, borderRadius: 2, marginTop: spacing.s12, marginBottom: spacing.s12, backgroundColor: borderSubtle }} />
+
         {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
-          <Pressable
-            onPress={() => nav.goBack()}
-            style={({ pressed }) => ({
-              padding: spacing.s8,
-              marginLeft: -spacing.s8,
-              borderRadius: radius.md,
-              backgroundColor: pressed ? surface1 : 'transparent',
-            })}
-            hitSlop={8}
-          >
-            <Icon name="x" size={28} color={textPrimary} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
-              Add Reminder
-            </Text>
-          </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.s12 }}>
+          <Text style={{ color: textPrimary, fontSize: 20, fontWeight: '800' }}>
+            Add Reminder
+          </Text>
         </View>
 
         {/* No unpaid bills message */}
@@ -140,79 +129,27 @@ export default function AddReminder() {
 
         {/* Select Bill */}
         {unpaidBills.length > 0 && (
-          <View style={{ gap: spacing.s16 }}>
+          <View style={{ gap: spacing.s12 }}>
             <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>
               Select Bill
             </Text>
-            {unpaidBills.map(({ bill, unpaidMembers }) => (
-              <Pressable
-                key={bill.id}
-                onPress={() => {
-                  setSelectedBillId(bill.id);
-                  setSelectedMemberId(null);
-                }}
-                style={({ pressed }) => ({
-                  backgroundColor: selectedBillId === bill.id ? withAlpha(accentPrimary, isDark ? 0.2 : 0.1) : surface1,
-                  borderRadius: radius.lg,
-                  padding: spacing.s16,
-                  borderWidth: 2,
-                  borderColor: selectedBillId === bill.id ? accentPrimary : borderSubtle,
-                  opacity: pressed ? 0.7 : 1,
-                })}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
-                  <View style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: radius.md,
-                    backgroundColor: selectedBillId === bill.id
-                      ? withAlpha(accentPrimary, isDark ? 0.25 : 0.15)
-                      : withAlpha(textMuted, isDark ? 0.15 : 0.1),
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                    <Icon name="receipt" size={18} color={selectedBillId === bill.id ? accentPrimary : textMuted} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>
-                      {bill.title}
-                    </Text>
-                    <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>
-                      ${bill.finalAmount.toFixed(2)} • {unpaidMembers.length} unpaid {unpaidMembers.length === 1 ? 'member' : 'members'}
-                    </Text>
-                  </View>
-                  {selectedBillId === bill.id && (
-                    <Icon name="check-circle" size={20} color={accentPrimary} />
-                  )}
-                </View>
-              </Pressable>
-            ))}
-          </View>
-        )}
-
-        {/* Select Member */}
-        {selectedBill && (
-          <View style={{ gap: spacing.s16 }}>
-            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>
-              Select Member to Remind
-            </Text>
-            {selectedBill.unpaidMembers.map(memberId => {
-              const member = group.members.find(m => m.id === memberId);
-              const split = selectedBill.bill.splits.find(s => s.memberId === memberId);
-              if (!member || !split) return null;
-
-              const initials = member.name.trim().split(/\s+/).slice(0, 2).map((part: string) => part[0]?.toUpperCase() || '').join('') || '?';
-
-              return (
+            <View style={{
+              backgroundColor: surface1,
+              borderRadius: radius.lg,
+              overflow: 'hidden'
+            }}>
+              {unpaidBills.map(({ bill, unpaidMembers }, index) => (
                 <Pressable
-                  key={memberId}
-                  onPress={() => setSelectedMemberId(memberId)}
+                  key={bill.id}
+                  onPress={() => {
+                    setSelectedBillId(bill.id);
+                    setSelectedMemberId(null);
+                  }}
                   style={({ pressed }) => ({
-                    backgroundColor: selectedMemberId === memberId ? withAlpha(accentPrimary, isDark ? 0.2 : 0.1) : surface1,
-                    borderRadius: radius.lg,
+                    backgroundColor: selectedBillId === bill.id ? withAlpha(accentPrimary, isDark ? 0.15 : 0.08) : surface1,
                     padding: spacing.s16,
-                    borderWidth: 2,
-                    borderColor: selectedMemberId === memberId ? accentPrimary : borderSubtle,
+                    borderBottomWidth: index < unpaidBills.length - 1 ? 1 : 0,
+                    borderBottomColor: borderSubtle,
                     opacity: pressed ? 0.7 : 1,
                   })}
                 >
@@ -220,38 +157,100 @@ export default function AddReminder() {
                     <View style={{
                       width: 40,
                       height: 40,
-                      borderRadius: 20,
-                      backgroundColor: selectedMemberId === memberId
+                      borderRadius: radius.md,
+                      backgroundColor: selectedBillId === bill.id
                         ? withAlpha(accentPrimary, isDark ? 0.25 : 0.15)
                         : withAlpha(textMuted, isDark ? 0.15 : 0.1),
                       alignItems: 'center',
                       justifyContent: 'center',
-                      borderWidth: 2,
-                      borderColor: selectedMemberId === memberId ? withAlpha(accentPrimary, 0.3) : borderSubtle,
                     }}>
-                      <Text style={{
-                        color: selectedMemberId === memberId ? accentPrimary : textMuted,
-                        fontWeight: '800',
-                        fontSize: 14
-                      }}>
-                        {initials}
-                      </Text>
+                      <Icon name="receipt" size={18} color={selectedBillId === bill.id ? accentPrimary : textMuted} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>
-                        {member.name}
+                        {bill.title}
                       </Text>
                       <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>
-                        Owes ${split.share.toFixed(2)}
+                        ${bill.finalAmount.toFixed(2)} • {unpaidMembers.length} unpaid {unpaidMembers.length === 1 ? 'member' : 'members'}
                       </Text>
                     </View>
-                    {selectedMemberId === memberId && (
+                    {selectedBillId === bill.id && (
                       <Icon name="check-circle" size={20} color={accentPrimary} />
                     )}
                   </View>
                 </Pressable>
-              );
-            })}
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Select Member */}
+        {selectedBill && (
+          <View style={{ gap: spacing.s12 }}>
+            <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 16 }}>
+              Select Member to Remind
+            </Text>
+            <View style={{
+              backgroundColor: surface1,
+              borderRadius: radius.lg,
+              overflow: 'hidden'
+            }}>
+              {selectedBill.unpaidMembers.map((memberId, index) => {
+                const member = group.members.find(m => m.id === memberId);
+                const split = selectedBill.bill.splits.find(s => s.memberId === memberId);
+                if (!member || !split) return null;
+
+                const initials = member.name.trim().split(/\s+/).slice(0, 2).map((part: string) => part[0]?.toUpperCase() || '').join('') || '?';
+
+                return (
+                  <Pressable
+                    key={memberId}
+                    onPress={() => setSelectedMemberId(memberId)}
+                    style={({ pressed }) => ({
+                      backgroundColor: selectedMemberId === memberId ? withAlpha(accentPrimary, isDark ? 0.15 : 0.08) : surface1,
+                      padding: spacing.s16,
+                      borderBottomWidth: index < selectedBill.unpaidMembers.length - 1 ? 1 : 0,
+                      borderBottomColor: borderSubtle,
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+                      <View style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        backgroundColor: selectedMemberId === memberId
+                          ? withAlpha(accentPrimary, isDark ? 0.25 : 0.15)
+                          : withAlpha(textMuted, isDark ? 0.15 : 0.1),
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderWidth: 2,
+                        borderColor: selectedMemberId === memberId ? withAlpha(accentPrimary, 0.3) : borderSubtle,
+                      }}>
+                        <Text style={{
+                          color: selectedMemberId === memberId ? accentPrimary : textMuted,
+                          fontWeight: '800',
+                          fontSize: 14
+                        }}>
+                          {initials}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: textPrimary, fontWeight: '700', fontSize: 15 }}>
+                          {member.name}
+                        </Text>
+                        <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>
+                          Owes ${split.share.toFixed(2)}
+                        </Text>
+                      </View>
+                      {selectedMemberId === memberId && (
+                        <Icon name="check-circle" size={20} color={accentPrimary} />
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         )}
 

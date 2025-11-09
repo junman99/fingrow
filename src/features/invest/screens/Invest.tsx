@@ -1,7 +1,8 @@
 import React from 'react';
-import { Pressable, ScrollView, Text, View, Animated as RNAnimated, Dimensions } from 'react-native';
+import { Pressable, ScrollView, Text, View, Animated as RNAnimated, Dimensions, AppState } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, useAnimatedScrollHandler, interpolate, Extrapolate } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenScroll } from '../../../components/ScreenScroll';
 import { spacing, radius } from '../../../theme/tokens';
@@ -129,7 +130,59 @@ export const Invest = React.memo(() => {
   // Get invest currency from profile (fallback to primary currency)
   const investCurrency = (profile.investCurrency || profile.currency || 'USD').toUpperCase();
 
-  React.useEffect(() => { hydrate(); refreshFx(); const syms = allSymbols(); refreshQuotes(syms && syms.length ? syms : undefined); }, []);
+  // Initial hydrate on mount
+  React.useEffect(() => {
+    hydrate();
+    refreshFx();
+    const syms = allSymbols();
+    refreshQuotes(syms && syms.length ? syms : undefined);
+  }, []);
+
+  // Level 2: Auto-refresh every 60 seconds while screen is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('📊 [Invest] Screen focused - starting auto-refresh');
+
+      // Refresh immediately when coming back to screen
+      const syms = allSymbols();
+      if (syms && syms.length) {
+        refreshQuotes(syms);
+      }
+
+      // Set up 60-second auto-refresh interval
+      const intervalId = setInterval(() => {
+        console.log('📊 [Invest] Auto-refresh triggered (60s interval)');
+        const syms = allSymbols();
+        if (syms && syms.length) {
+          refreshQuotes(syms);
+        }
+      }, 60000); // 60 seconds
+
+      // Cleanup: stop refresh when screen loses focus
+      return () => {
+        console.log('📊 [Invest] Screen unfocused - stopping auto-refresh');
+        clearInterval(intervalId);
+      };
+    }, [allSymbols, refreshQuotes])
+  );
+
+  // Level 2: App foreground/background detection
+  React.useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        console.log('📊 [Invest] App returned to foreground - refreshing data');
+        const syms = allSymbols();
+        if (syms && syms.length) {
+          refreshQuotes(syms);
+        }
+        refreshFx();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [allSymbols, refreshQuotes, refreshFx]);
 
   const effectiveHoldings: Record<string, any> = React.useMemo(() => {
     const out: Record<string, any> = {};

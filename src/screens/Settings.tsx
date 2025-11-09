@@ -24,6 +24,7 @@ import { Card } from '../components/Card';
 import BottomSheet from '../components/BottomSheet';
 import Icon from '../components/Icon';
 import { currencies, findCurrency } from '../lib/currencies';
+import { getFxLastUpdated } from '../lib/fx-yahoo';
 import { seedFiveMonths, clearAllData } from '../lib/demo';
 import { seedInvestSixMonths, clearInvestDemo } from '../lib/demo_invest';
 import { exportPortfolioCsv } from '../lib/export';
@@ -189,6 +190,15 @@ export const Settings: React.FC = () => {
   const [investCurrencySheet, setInvestCurrencySheet] = useState(false);
   const [investCurrencyQuery, setInvestCurrencyQuery] = useState('');
   const [countrySheet, setCountrySheet] = useState(false);
+  const [fxLastUpdated, setFxLastUpdated] = useState<string | null>(null);
+
+  // Fetch FX last updated timestamp (using user's currency to USD as reference)
+  React.useEffect(() => {
+    const userCurrency = profile?.currency || 'USD';
+    if (userCurrency !== 'USD') {
+      getFxLastUpdated(userCurrency, 'USD').then(setFxLastUpdated);
+    }
+  }, [profile?.currency]);
 
   const selectedCurrency = useMemo(
     () => findCurrency(profile.currency || 'USD'),
@@ -825,6 +835,14 @@ export const Settings: React.FC = () => {
             onPress={() => setInvestCurrencySheet(true)}
             icon="trending-up"
           />
+
+          {fxLastUpdated && (
+            <SettingRow
+              title="Exchange rates"
+              subtitle={`Last updated: ${new Date(fxLastUpdated).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`}
+              icon="refresh-cw"
+            />
+          )}
 
           <View
             style={{
