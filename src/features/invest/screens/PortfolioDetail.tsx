@@ -597,14 +597,14 @@ export default function PortfolioDetail() {
       <View style={{ paddingHorizontal: spacing.s16, marginBottom: spacing.s8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
           <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.8 }}>
-            {summary.totalValue.toFixed(2)}
+            {summary.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </Text>
           <Text style={{ color: textMuted, fontSize: 14, marginLeft: spacing.s6, fontWeight: '600' }}>
             {summary.base}
           </Text>
         </View>
         <Text style={{ color: textMuted, fontSize: 12, marginTop: spacing.s4 }}>
-          Holdings: {summary.holdingsValue.toFixed(2)} {summary.base} · Cash: {summary.cashValue.toFixed(2)} {summary.base}
+          Holdings: {summary.holdingsValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {summary.base} · Cash: {summary.cashValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {summary.base}
         </Text>
       </View>
 

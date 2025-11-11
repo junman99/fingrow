@@ -13,6 +13,7 @@ import { useAccountsStore } from '../store/accounts';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AnimatedReanimated, { useAnimatedStyle, useSharedValue, useAnimatedScrollHandler, interpolate, Extrapolate } from 'react-native-reanimated';
 
 type Tx = ReturnType<typeof useTxStore.getState>['transactions'][number];
 
@@ -265,6 +266,53 @@ export const Transactions: React.FC = () => {
     }).start();
   }, []);
 
+  // Main Tab Title Animation
+  const scrollY = useSharedValue(0);
+
+  // Main Tab Title Animation - Animated Styles
+  const originalTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+    return {
+      opacity: 1 - progress,
+    };
+  });
+
+  const floatingTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+    const fontSize = interpolate(progress, [0, 1], [28, 20]);
+    const fontWeight = interpolate(progress, [0, 1], [800, 700]);
+    return {
+      fontSize,
+      fontWeight: fontWeight.toString() as any,
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
   // Animation for search bar
   const searchHeightAnim = useRef(new Animated.Value(0)).current;
 
@@ -449,7 +497,8 @@ export const Transactions: React.FC = () => {
   const danger = get('semantic.danger') as string;
   const surface1 = get('surface.level1') as string;
   const borderSubtle = get('border.subtle') as string;
-  const backgroundHex = ((get('background.default') as string) || '').toLowerCase();
+  const bgDefault = get('background.default') as string;
+  const backgroundHex = (bgDefault || '').toLowerCase();
   const isLightTheme = backgroundHex.includes('#f7') || backgroundHex.includes('#f8') || backgroundHex.includes('fff');
   const heroForeground = isLightTheme ? onPrimary : textPrimary;
   const heroIconToken = isLightTheme ? 'text.onPrimary' : 'text.primary';
@@ -501,51 +550,68 @@ export const Transactions: React.FC = () => {
   };
 
   return (
-    <Screen inTab style={{ paddingBottom: 0 }}>
-      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-        {/* Header with back button */}
-        <View style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingHorizontal: spacing.s16,
-          paddingTop: spacing.s12,
-          paddingBottom: spacing.s8,
-          marginBottom: spacing.s8,
-        }}>
-          <Pressable
-            onPress={() => nav.goBack()}
-            style={({ pressed }) => ({
-              width: 40,
-              height: 40,
-              borderRadius: radius.md,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: pressed ? withOpacity(surface1, 0.5) : 'transparent',
-              marginRight: spacing.s8,
-            })}
+    <>
+      {/* Main Tab Title Animation - Floating Gradient Header (Fixed at top, outside scroll) */}
+      <AnimatedReanimated.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            pointerEvents: 'none',
+          },
+          gradientAnimatedStyle,
+        ]}
+      >
+        <LinearGradient
+          colors={[
+            bgDefault,
+            bgDefault,
+            withOpacity(bgDefault, 0.95),
+            withOpacity(bgDefault, 0.8),
+            withOpacity(bgDefault, 0.5),
+            withOpacity(bgDefault, 0)
+          ]}
+          style={{
+            paddingTop: insets.top + spacing.s16,
+            paddingBottom: spacing.s32 + spacing.s20,
+            paddingHorizontal: spacing.s16,
+          }}
+        >
+          <AnimatedReanimated.Text
+            style={[
+              {
+                color: textPrimary,
+                fontSize: 20,
+                fontWeight: '700',
+                letterSpacing: -0.5,
+                textAlign: 'center',
+              },
+              floatingTitleAnimatedStyle,
+            ]}
           >
-            <Icon name="chevron-left" size={24} colorToken="text.primary" />
-          </Pressable>
-          <Text style={{
-            fontSize: 28,
-            fontWeight: '800',
-            color: textPrimary,
-            letterSpacing: -0.5,
-          }}>
             History
-          </Text>
-        </View>
+          </AnimatedReanimated.Text>
+        </LinearGradient>
+      </AnimatedReanimated.View>
 
-        <View style={{ flex: 1 }}>
+      <Screen inTab style={{ paddingBottom: 0 }}>
+        <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
           <FlatList
           data={sectionsRaw}
           keyExtractor={(s) => s.key}
           bounces={false}
-          contentContainerStyle={{ paddingBottom: listPaddingBottom }}
+          onScroll={(event) => {
+            scrollY.value = event.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={16}
+          contentContainerStyle={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s16, paddingBottom: listPaddingBottom }}
+          ListHeaderComponentStyle={{ marginBottom: spacing.s8 }}
           ListEmptyComponent={
             sectionsRaw.length === 0 ? (
               <View style={{
-                marginHorizontal: spacing.s16,
                 marginTop: spacing.s24,
                 padding: spacing.s24,
                 borderRadius: radius.xl,
@@ -589,9 +655,42 @@ export const Transactions: React.FC = () => {
             ) : null
           }
           ListHeaderComponent={
-            <View style={styles.headerContainer}>
+            <View style={{ paddingTop: spacing.s12, gap: spacing.s16 }}>
+              {/* Header with back button */}
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'flex-start',
+                gap: spacing.s8,
+                marginBottom: spacing.s8,
+              }}>
+                <Pressable
+                  onPress={() => nav.goBack()}
+                  style={({ pressed }) => ({
+                    padding: spacing.s8,
+                    marginLeft: -spacing.s8,
+                    marginTop: -spacing.s4,
+                    borderRadius: radius.md,
+                    backgroundColor: pressed ? surface1 : 'transparent',
+                  })}
+                  hitSlop={8}
+                >
+                  <Icon name="chevron-left" size={28} color={textPrimary} />
+                </Pressable>
+                <View style={{ flex: 1 }}>
+                  <AnimatedReanimated.Text style={[{
+                    fontSize: 28,
+                    fontWeight: '800',
+                    color: textPrimary,
+                    letterSpacing: -0.5,
+                    marginTop: spacing.s2,
+                  }, originalTitleAnimatedStyle]}>
+                    History
+                  </AnimatedReanimated.Text>
+                </View>
+              </View>
+
               {/* Page Header with Stats */}
-              <View style={{ marginBottom: spacing.s16 }}>
+              <View>
                 {/* Overview Stats - Direct on Background */}
                 <View style={{ gap: spacing.s12 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.s12 }}>
@@ -747,7 +846,6 @@ export const Transactions: React.FC = () => {
 
             return (
               <View style={{
-                marginHorizontal: spacing.s16,
                 marginBottom: spacing.s12,
                 borderRadius: radius.xl,
                 backgroundColor: get('surface.level1') as string,
@@ -841,8 +939,8 @@ export const Transactions: React.FC = () => {
             );
           }}
         />
-        </View>
-      </Animated.View>
+        </Animated.View>
+      </Screen>
 
       <PopoverMenu
         visible={typeMenuVisible}
@@ -882,7 +980,7 @@ export const Transactions: React.FC = () => {
           onPress: () => setAccountFilter(opt.value),
         }))}
       />
-    </Screen>
+    </>
   );
 };
 

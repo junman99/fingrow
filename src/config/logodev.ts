@@ -6,14 +6,14 @@
 
 export const LOGODEV_CONFIG = {
   // Add your Logo.dev API token here
-  apiToken: '', // TODO: Add your token from logo.dev
+  apiToken: 'pk_V8HXY7DcSSe7jYGeRKW-tA', // TODO: Add your token from logo.dev
 
   // Cache duration for ticker logos (30 days in milliseconds)
   cacheDuration: 30 * 24 * 60 * 60 * 1000,
 
   // Base URLs
   tickerLogoUrl: (ticker: string, token: string) =>
-    `https://img.logo.dev/ticker/${ticker}?token=${token}&format=png&size=128`,
+    `https://img.logo.dev/ticker/${ticker.toUpperCase()}?token=${token}&size=128`,
 };
 
 export const isLogoDevEnabled = () => {

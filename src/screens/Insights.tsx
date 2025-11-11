@@ -8,6 +8,8 @@ import { spacing, radius } from '../theme/tokens';
 import { useTxStore } from '../store/transactions';
 import { useBudgetsStore } from '../store/budgets';
 import Icon from '../components/Icon';
+import AnimatedReanimated, { useAnimatedStyle, useSharedValue, useAnimatedScrollHandler, interpolate, Extrapolate } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 
 type Tx = ReturnType<typeof useTxStore.getState>['transactions'][number];
 
@@ -94,6 +96,59 @@ export const Insights: React.FC = () => {
       useNativeDriver: true,
     }).start();
   }, []);
+
+  // Main Tab Title Animation
+  const scrollY = useSharedValue(0);
+
+  // Main Tab Title Animation - Animated Styles
+  const originalTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+    return {
+      opacity: 1 - progress,
+    };
+  });
+
+  const floatingTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+    const fontSize = interpolate(progress, [0, 1], [28, 20]);
+    const fontWeight = interpolate(progress, [0, 1], [800, 700]);
+    return {
+      fontSize,
+      fontWeight: fontWeight.toString() as any,
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
+  const combinedScrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
 
   useEffect(() => { hydrate(); }, []);
 
@@ -225,39 +280,91 @@ export const Insights: React.FC = () => {
   const warningColor = get('semantic.warning') as string;
   const dangerColor = get('semantic.danger') as string;
   const successColor = get('semantic.success') as string;
+  const bgDefault = get('background.default') as string;
 
   const monthLabel = new Date(Y, M, 1).toLocaleString(undefined, { month: 'long', year: 'numeric' });
 
   return (
-    <ScreenScroll inTab>
-      <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
-        <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, paddingBottom: spacing.s24, gap: spacing.s16 }}>
-          {/* Header with back button */}
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s12, marginBottom: spacing.s8 }}>
-            <Pressable
-              onPress={() => nav.goBack()}
-              style={({ pressed }) => ({
-                padding: spacing.s8,
-                marginLeft: -spacing.s8,
-                marginTop: -spacing.s4,
-                borderRadius: radius.md,
-                backgroundColor: pressed ? surface1 : 'transparent',
-              })}
-              hitSlop={8}
-            >
-              <Icon name="chevron-left" size={28} color={textPrimary} />
-            </Pressable>
-            <View style={{ flex: 1 }}>
-              <Text style={{
+    <>
+      {/* Main Tab Title Animation - Floating Gradient Header (Fixed at top, outside scroll) */}
+      <AnimatedReanimated.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            pointerEvents: 'none',
+          },
+          gradientAnimatedStyle,
+        ]}
+      >
+        <LinearGradient
+          colors={[
+            bgDefault,
+            bgDefault,
+            withAlpha(bgDefault, 0.95),
+            withAlpha(bgDefault, 0.8),
+            withAlpha(bgDefault, 0.5),
+            withAlpha(bgDefault, 0)
+          ]}
+          style={{
+            paddingTop: insets.top + spacing.s16,
+            paddingBottom: spacing.s32 + spacing.s20,
+            paddingHorizontal: spacing.s16,
+          }}
+        >
+          <AnimatedReanimated.Text
+            style={[
+              {
                 color: textPrimary,
-                fontSize: 28,
-                fontWeight: '800',
+                fontSize: 20,
+                fontWeight: '700',
                 letterSpacing: -0.5,
-                marginTop: spacing.s2
-              }}>
-                Insights
-              </Text>
-            </View>
+                textAlign: 'center',
+              },
+              floatingTitleAnimatedStyle,
+            ]}
+          >
+            Insights
+          </AnimatedReanimated.Text>
+        </LinearGradient>
+      </AnimatedReanimated.View>
+
+      <ScreenScroll
+        inTab
+        onScroll={combinedScrollHandler}
+        scrollEventThrottle={16}
+      >
+        <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
+          <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, paddingBottom: spacing.s24, gap: spacing.s16 }}>
+            {/* Header with back button */}
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8, marginBottom: spacing.s8 }}>
+              <Pressable
+                onPress={() => nav.goBack()}
+                style={({ pressed }) => ({
+                  padding: spacing.s8,
+                  marginLeft: -spacing.s8,
+                  marginTop: -spacing.s4,
+                  borderRadius: radius.md,
+                  backgroundColor: pressed ? surface1 : 'transparent',
+                })}
+                hitSlop={8}
+              >
+                <Icon name="chevron-left" size={28} color={textPrimary} />
+              </Pressable>
+              <View style={{ flex: 1 }}>
+                <AnimatedReanimated.Text style={[{
+                  color: textPrimary,
+                  fontSize: 28,
+                  fontWeight: '800',
+                  letterSpacing: -0.5,
+                  marginTop: spacing.s2
+                }, originalTitleAnimatedStyle]}>
+                  Insights
+                </AnimatedReanimated.Text>
+              </View>
 
             <Pressable
               onPress={handleEmailCSV}
@@ -687,8 +794,9 @@ export const Insights: React.FC = () => {
             ))}
           </View>
         )}
-        </View>
-      </Animated.View>
+          </View>
+        </Animated.View>
+      </ScreenScroll>
 
       {/* Month Picker Modal */}
       <Modal visible={monthPickerOpen} transparent animationType="fade" onRequestClose={() => setMonthPickerOpen(false)}>
@@ -774,7 +882,7 @@ export const Insights: React.FC = () => {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-    </ScreenScroll>
+    </>
   );
 };
 

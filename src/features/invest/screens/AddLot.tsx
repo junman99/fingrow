@@ -16,6 +16,7 @@ import { formatCurrency, formatPercent, formatMarketCap } from '../../../lib/for
 import { computePnL } from '../../../lib/positions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { convertCurrency } from '../../../lib/fx';
+import { TickerLogo } from '../../../components/TickerLogo';
 
 export const AddLot = React.memo(() => {
   const [showTxSheet, setShowTxSheet] = React.useState(false);
@@ -79,10 +80,7 @@ export const AddLot = React.memo(() => {
   const change = q?.change ?? 0;
   const changePct = q?.changePct ?? 0;
   const fundamentals = q?.fundamentals;
-  const logoUrl = fundamentals?.logo;
   const companyName = fundamentals?.companyName || symbol;
-
-  const [imageError, setImageError] = React.useState(false);
 
   function getLogoColor(sym: string): string {
     const colors = [
@@ -94,8 +92,6 @@ export const AddLot = React.memo(() => {
   }
 
   const logoColor = getLogoColor(symbol);
-  const logoLetter = symbol.charAt(0).toUpperCase();
-  const shouldShowImage = logoUrl && !imageError;
 
   // Timeframe selection
   const [tf, setTf] = React.useState<'1D'|'5D'|'1M'|'6M'|'YTD'|'1Y'|'5Y'|'ALL'>('6M');
@@ -239,31 +235,7 @@ export const AddLot = React.memo(() => {
           {/* Header with Logo */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8 }}>
             {/* Left column: Logo */}
-            <View
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 22,
-                backgroundColor: shouldShowImage ? 'transparent' : logoColor,
-                alignItems: 'center',
-                justifyContent: 'center',
-                overflow: 'hidden',
-                padding: shouldShowImage ? spacing.s8 : 0,
-              }}
-            >
-              {shouldShowImage ? (
-                <Image
-                  source={{ uri: logoUrl }}
-                  style={{ width: '100%', height: '100%' }}
-                  resizeMode="contain"
-                  onError={() => setImageError(true)}
-                />
-              ) : (
-                <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '800' }}>
-                  {logoLetter}
-                </Text>
-              )}
-            </View>
+            <TickerLogo ticker={symbol} size={44} fallbackColor={logoColor} />
 
             {/* Right column: Company Info */}
             <View style={{ flex: 1 }}>

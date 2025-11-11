@@ -366,7 +366,7 @@ export default function PortfolioDetailSheet({
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
                     <Text style={{ color: textPrimary, fontSize: 32, fontWeight: '800', letterSpacing: -0.8 }}>
-                      {formatCurrency(summary?.totalValue || 0, summary?.base || 'USD').replace(/[^\d,.-]/g, '')}
+                      {(summary?.totalValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Text>
                     <Text style={{ color: textMuted, fontSize: 14, marginLeft: spacing.s6, fontWeight: '600' }}>
                       {summary?.base || 'USD'}

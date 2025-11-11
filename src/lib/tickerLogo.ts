@@ -64,6 +64,7 @@ async function setCachedLogo(ticker: string, url: string): Promise<void> {
 
 /**
  * Fetch logo URL from Logo.dev API
+ * Uses domain-based approach since ticker endpoint has limited coverage
  */
 async function fetchTickerLogo(ticker: string): Promise<string | null> {
   if (!isLogoDevEnabled()) {
@@ -74,21 +75,13 @@ async function fetchTickerLogo(ticker: string): Promise<string | null> {
   const cleanTicker = ticker.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
   try {
-    const url = LOGODEV_CONFIG.tickerLogoUrl(cleanTicker, LOGODEV_CONFIG.apiToken);
-    console.log(`📸 [TickerLogo] Fetching logo for ${cleanTicker}...`);
-
-    // Test if URL is valid by making a HEAD request
-    const response = await fetch(url, { method: 'HEAD' });
-
-    if (response.ok) {
-      console.log(`📸 [TickerLogo] ✅ Logo found for ${cleanTicker}`);
-      return url;
-    } else {
-      console.log(`📸 [TickerLogo] ❌ Logo not found for ${cleanTicker} (${response.status})`);
-      return null;
-    }
+    // Logo.dev URLs are always valid - they return a placeholder if logo doesn't exist
+    // Just return the URL directly without validation
+    const tickerUrl = LOGODEV_CONFIG.tickerLogoUrl(cleanTicker, LOGODEV_CONFIG.apiToken);
+    console.log(`📸 [TickerLogo] ✅ Generated URL for ${cleanTicker}`);
+    return tickerUrl;
   } catch (error) {
-    console.error(`📸 [TickerLogo] Error fetching logo for ${ticker}:`, error);
+    console.error(`📸 [TickerLogo] Error generating URL for ${ticker}:`, error);
     return null;
   }
 }

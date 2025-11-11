@@ -14,6 +14,7 @@ export type BankAccount = {
   apr?: number; // Annual Percentage Rate for credit cards/loans
   creditLimit?: number; // Credit limit for credit cards
   minPaymentPercent?: number; // Minimum payment percentage (e.g., 2.5%)
+  createdAt?: string; // ISO date string when account was created
 };
 
 type AccountsState = {
@@ -39,7 +40,8 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
   },
   addAccount: async (a) => {
     const id = Math.random().toString(36).slice(2);
-    const next = [...get().accounts, { id, ...a }];
+    const createdAt = a.createdAt || new Date().toISOString();
+    const next = [...get().accounts, { id, createdAt, ...a }];
     set({ accounts: next });
     try { await AsyncStorage.setItem(KEY, JSON.stringify(next)); } catch {}
   },

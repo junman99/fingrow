@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Image, Text, StyleSheet } from 'react-native';
+import { View, Image, Text } from 'react-native';
 import { getTickerLogoUrl } from '../lib/tickerLogo';
 import { useThemeTokens } from '../theme/ThemeProvider';
 
@@ -32,23 +32,24 @@ export const TickerLogo: React.FC<Props> = ({ ticker, size = 40, fallbackColor }
   const [error, setError] = useState(false);
 
   const accentPrimary = (fallbackColor || get('accent.primary')) as string;
-  const textPrimary = get('text.primary') as string;
 
   useEffect(() => {
     let mounted = true;
 
+    console.log(`🖼️ [TickerLogo] Fetching logo for ${ticker}...`);
     setLoading(true);
     setError(false);
 
     getTickerLogoUrl(ticker)
       .then(url => {
         if (mounted) {
+          console.log(`🖼️ [TickerLogo] Got URL for ${ticker}:`, url);
           setLogoUrl(url);
           setLoading(false);
         }
       })
       .catch(err => {
-        console.error(`TickerLogo error for ${ticker}:`, err);
+        console.error(`🖼️ [TickerLogo] Error for ${ticker}:`, err);
         if (mounted) {
           setError(true);
           setLoading(false);
@@ -91,18 +92,31 @@ export const TickerLogo: React.FC<Props> = ({ ticker, size = 40, fallbackColor }
 
   // Show logo if available
   if (!loading && logoUrl && !error) {
+    // Use a subtle gray background that works with both light and dark logos
+    const logoBg = isDark ? '#2A2A2A' : '#F5F5F5';
+
     return (
-      <Image
-        source={{ uri: logoUrl }}
+      <View
         style={{
           width: size,
           height: size,
-          borderRadius: size / 8, // Slightly rounded corners for logos
-          backgroundColor: '#FFFFFF', // White background for logo
+          borderRadius: size / 2, // Fully circular
+          overflow: 'hidden',
+          backgroundColor: logoBg, // Subtle gray background
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
-        onError={() => setError(true)}
-        resizeMode="contain"
-      />
+      >
+        <Image
+          source={{ uri: logoUrl }}
+          style={{
+            width: size * 0.7, // 70% of container for more padding
+            height: size * 0.7,
+          }}
+          onError={() => setError(true)}
+          resizeMode="contain"
+        />
+      </View>
     );
   }
 

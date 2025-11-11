@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, Pressable, Dimensions, TextInput } from 'react-native';
+import { View, Text, Pressable, Dimensions, TextInput, ScrollView, Platform, Modal, TouchableWithoutFeedback } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -7,11 +7,12 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
+  runOnJS,
   FadeIn,
   FadeOut,
-  runOnJS,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { ScreenScroll } from '../components/ScreenScroll';
 import { Card } from '../components/Card';
 import Button from '../components/Button';
@@ -80,25 +81,51 @@ const ChartBar: React.FC<{
 }> = ({ height, maxHeight, color, isSelected, onPress, delay }) => {
   const scale = useSharedValue(1);
   const animatedHeight = useSharedValue(0);
+  const opacity = useSharedValue(0);
+  const isMounted = React.useRef(true);
 
   React.useEffect(() => {
-    animatedHeight.value = withTiming(height, { duration: 600 }, () => {});
+    isMounted.current = true;
+    // Animate in with delay
+    opacity.value = withTiming(1, { duration: 200 }, () => {});
+    return () => {
+      isMounted.current = false;
+      // Cancel any ongoing animations immediately
+      scale.value = 1;
+      animatedHeight.value = 0;
+      opacity.value = 0;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (isMounted.current) {
+      animatedHeight.value = withTiming(height, { duration: 300 });
+    }
   }, [height]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     height: animatedHeight.value,
+    opacity: opacity.value,
     transform: [{ scale: scale.value }],
   }));
+
+  const handlePressIn = React.useCallback(() => {
+    if (isMounted.current) {
+      scale.value = withSpring(1.05, { damping: 12, stiffness: 200 });
+    }
+  }, []);
+
+  const handlePressOut = React.useCallback(() => {
+    if (isMounted.current) {
+      scale.value = withSpring(1, { damping: 12, stiffness: 200 });
+    }
+  }, []);
 
   return (
     <Pressable
       onPress={onPress}
-      onPressIn={() => {
-        scale.value = withSpring(1.05, { damping: 12, stiffness: 200 });
-      }}
-      onPressOut={() => {
-        scale.value = withSpring(1, { damping: 12, stiffness: 200 });
-      }}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
       style={{
         flex: 1,
         height: maxHeight,
@@ -108,7 +135,6 @@ const ChartBar: React.FC<{
       }}
     >
       <Animated.View
-        entering={FadeIn.delay(delay)}
         style={[
           {
             width: '100%',
@@ -151,7 +177,23 @@ export default function AccountDetail() {
 
   const { accounts, updateAccountBalance } = useAccountsStore();
   const { transactions, add: addTx } = useTxStore();
-  const acc = useMemo(() => (accounts || []).find(a => a.id === (route.params as RouteParams)?.id), [accounts, route.params]);
+
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = React.useRef(true);
+  React.useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Safely get account with proper null checking
+  const acc = useMemo(() => {
+    if (!accounts || !Array.isArray(accounts)) return null;
+    const accountId = (route.params as RouteParams)?.id;
+    if (!accountId) return null;
+    return accounts.find(a => a.id === accountId) || null;
+  }, [accounts, route.params]);
 
   // Transaction form state
   const [showTransactionSheet, setShowTransactionSheet] = useState(false);
@@ -159,92 +201,162 @@ export default function AccountDetail() {
   const [amount, setAmount] = useState('');
   const [transactionDate, setTransactionDate] = useState(new Date());
   const [note, setNote] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimeOverlay, setShowTimeOverlay] = useState(false);
 
-  const [chartPeriod, setChartPeriod] = useState<'week' | 'month'>('week');
+  const [chartPeriod, setChartPeriod] = useState<'day' | 'week'>('day');
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
-  const [chartOffset, setChartOffset] = useState(0); // 0 = current period, 1 = previous period, etc.
 
-  // Calculate balance history - 7 bars for week, 7 bars for month
+  // Controlled tooltip animation
+  const tooltipOpacity = useSharedValue(0);
+
+  // Animate tooltip in/out when selection changes
+  React.useEffect(() => {
+    if (selectedBarIndex !== null) {
+      tooltipOpacity.value = withTiming(1, { duration: 200 });
+    } else {
+      tooltipOpacity.value = withTiming(0, { duration: 150 });
+    }
+  }, [selectedBarIndex]);
+
+  // Cleanup tooltip animation on unmount
+  React.useEffect(() => {
+    return () => {
+      tooltipOpacity.value = 0;
+    };
+  }, []);
+
+  // Animated style for tooltip
+  const tooltipAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: tooltipOpacity.value,
+  }));
+
+  // Calculate balance history - 45 days or 26 weeks
   const balanceHistory = useMemo(() => {
     if (!acc) return [];
 
-    const accountTransactions = transactions.filter(tx => tx.account === acc.name);
-    const now = new Date();
-    const points: Array<{ date: Date; balance: number; label: string }> = [];
-
-    if (chartPeriod === 'week') {
-      // Show 7 weeks (each bar = 1 week ending on Sunday)
+    try {
+      const accountTransactions = (transactions || []).filter(tx => tx.account === acc.name);
+      const now = new Date();
+      const points: Array<{ date: Date; balance: number; label: string }> = [];
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-      for (let i = 6; i >= 0; i--) {
-        const weeksBack = i + (chartOffset * 7);
-        const weekEnd = new Date(now);
+      // Determine the earliest date we should show data for
+      let accountStartDate: Date;
+      if (acc.createdAt) {
+        accountStartDate = new Date(acc.createdAt);
+      } else if (accountTransactions.length > 0) {
+        accountStartDate = new Date(Math.min(...accountTransactions.map(tx => new Date(tx.date).getTime())));
+      } else {
+        accountStartDate = now;
+      }
 
-        // Find the most recent Sunday
-        const dayOfWeek = weekEnd.getDay();
-        weekEnd.setDate(weekEnd.getDate() - dayOfWeek);
+      if (chartPeriod === 'day') {
+        // Show up to 45 days (each bar = 1 day)
+        for (let i = 44; i >= 0; i--) {
+          const dayDate = new Date(now);
+          dayDate.setDate(dayDate.getDate() - i);
+          dayDate.setHours(23, 59, 59, 999); // End of day
 
-        // Go back the required number of weeks
-        weekEnd.setDate(weekEnd.getDate() - (weeksBack * 7));
-
-        // Calculate balance at end of this week
-        let weekBalance = acc.balance;
-        accountTransactions.forEach(tx => {
-          const txDate = new Date(tx.date);
-          if (txDate > weekEnd) {
-            if (tx.type === 'income') {
-              weekBalance -= tx.amount;
-            } else {
-              weekBalance += tx.amount;
-            }
+          // Skip periods before account was created
+          if (dayDate < accountStartDate) {
+            continue;
           }
-        });
 
-        // Format as "25 May"
-        const day = weekEnd.getDate();
-        const month = monthNames[weekEnd.getMonth()];
+          // Calculate balance at end of this day by working backwards from current balance
+          let dayBalance = acc.balance || 0;
+          accountTransactions.forEach(tx => {
+            const txDate = new Date(tx.date);
+            if (txDate > dayDate) {
+              // This transaction happened after this day, so subtract it to go back in time
+              if (tx.type === 'income') {
+                dayBalance -= tx.amount;
+              } else {
+                dayBalance += tx.amount;
+              }
+            }
+          });
 
+          // Format as "25" (just day number)
+          const day = dayDate.getDate();
+          const month = monthNames[dayDate.getMonth()].slice(0, 3);
+
+          points.push({
+            date: dayDate,
+            balance: dayBalance,
+            label: `${day}`,
+          });
+        }
+      } else {
+        // Show up to 26 weeks (6 months = ~26 weeks, each bar = 1 week)
+        for (let i = 25; i >= 0; i--) {
+          const weekEnd = new Date(now);
+
+          // Find the most recent Sunday
+          const dayOfWeek = weekEnd.getDay();
+          weekEnd.setDate(weekEnd.getDate() - dayOfWeek);
+
+          // Go back the required number of weeks
+          weekEnd.setDate(weekEnd.getDate() - (i * 7));
+          weekEnd.setHours(23, 59, 59, 999);
+
+          // Skip periods before account was created
+          if (weekEnd < accountStartDate) {
+            continue;
+          }
+
+          // Calculate balance at end of this week by working backwards from current balance
+          let weekBalance = acc.balance || 0;
+          accountTransactions.forEach(tx => {
+            const txDate = new Date(tx.date);
+            if (txDate > weekEnd) {
+              // This transaction happened after this period, so subtract it to go back in time
+              if (tx.type === 'income') {
+                weekBalance -= tx.amount;
+              } else {
+                weekBalance += tx.amount;
+              }
+            }
+          });
+
+          // Format as "25 May"
+          const day = weekEnd.getDate();
+          const month = monthNames[weekEnd.getMonth()].slice(0, 3);
+
+          points.push({
+            date: weekEnd,
+            balance: weekBalance,
+            label: `${day} ${month}`,
+          });
+        }
+      }
+
+      // Always ensure we have at least the current period showing
+      if (points.length === 0) {
+        const day = now.getDate();
+        const month = monthNames[now.getMonth()].slice(0, 3);
         points.push({
-          date: weekEnd,
-          balance: weekBalance,
-          label: `${day} ${month}`,
+          date: now,
+          balance: acc.balance || 0,
+          label: chartPeriod === 'day' ? `${day}` : `${day} ${month}`,
         });
       }
-    } else {
-      // Show 7 months (each bar = 1 month)
+
+      return points;
+    } catch (error) {
+      console.error('Error calculating balance history:', error);
+      // Return at least one point with current balance to prevent disappearing chart
+      const now = new Date();
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-      for (let i = 6; i >= 0; i--) {
-        const monthsBack = i + (chartOffset * 7);
-        const monthEnd = new Date(now.getFullYear(), now.getMonth() - monthsBack + 1, 0);
-
-        // Calculate balance at end of this month
-        let monthBalance = acc.balance;
-        accountTransactions.forEach(tx => {
-          const txDate = new Date(tx.date);
-          if (txDate > monthEnd) {
-            if (tx.type === 'income') {
-              monthBalance -= tx.amount;
-            } else {
-              monthBalance += tx.amount;
-            }
-          }
-        });
-
-        // Format as "Jan 25"
-        const month = monthNames[monthEnd.getMonth()];
-        const year = String(monthEnd.getFullYear()).slice(-2);
-
-        points.push({
-          date: monthEnd,
-          balance: monthBalance,
-          label: `${month} ${year}`,
-        });
-      }
+      const day = now.getDate();
+      const month = monthNames[now.getMonth()].slice(0, 3);
+      return [{
+        date: now,
+        balance: acc.balance || 0,
+        label: chartPeriod === 'day' ? `${day}` : `${day} ${month}`,
+      }];
     }
-
-    return points;
-  }, [acc, transactions, chartPeriod, chartOffset]);
+  }, [acc, transactions, chartPeriod]);
 
   // Calculate stats including last month comparison
   const stats = useMemo(() => {
@@ -258,8 +370,9 @@ export default function AccountDetail() {
       monthlyChangePercent: 0,
     };
 
-    const accountTransactions = transactions.filter(tx => tx.account === acc.name);
-    const now = new Date();
+    try {
+      const accountTransactions = (transactions || []).filter(tx => tx.account === acc.name);
+      const now = new Date();
 
     // Last month's end date
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
@@ -292,28 +405,41 @@ export default function AccountDetail() {
       return txDate >= startDate;
     });
 
-    const totalIn = periodTxs.filter(tx => tx.type === 'income').reduce((sum, tx) => sum + tx.amount, 0);
-    const totalOut = periodTxs.filter(tx => tx.type === 'expense').reduce((sum, tx) => sum + tx.amount, 0);
-    const netChange = totalIn - totalOut;
+      const totalIn = periodTxs.filter(tx => tx.type === 'income').reduce((sum, tx) => sum + tx.amount, 0);
+      const totalOut = periodTxs.filter(tx => tx.type === 'expense').reduce((sum, tx) => sum + tx.amount, 0);
+      const netChange = totalIn - totalOut;
 
-    return {
-      totalIn,
-      totalOut,
-      netChange,
-      transactionCount: periodTxs.length,
-      lastMonthBalance,
-      monthlyChange,
-      monthlyChangePercent,
-    };
+      return {
+        totalIn,
+        totalOut,
+        netChange,
+        transactionCount: periodTxs.length,
+        lastMonthBalance,
+        monthlyChange,
+        monthlyChangePercent,
+      };
+    } catch (error) {
+      console.error('Error calculating stats:', error);
+      return {
+        totalIn: 0,
+        totalOut: 0,
+        netChange: 0,
+        transactionCount: 0,
+        lastMonthBalance: 0,
+        monthlyChange: 0,
+        monthlyChangePercent: 0,
+      };
+    }
   }, [acc, transactions, chartPeriod]);
 
   // Get recent transactions for this account
   const recentAccountTransactions = useMemo(() => {
+    if (!acc || !transactions) return [];
     return transactions
-      .filter(tx => tx.account === acc?.name)
+      .filter(tx => tx.account === acc.name)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 5);
-  }, [transactions, acc?.name]);
+  }, [transactions, acc]);
 
   // Handle opening transaction sheet
   const openTransactionSheet = (type: 'deposit' | 'withdraw') => {
@@ -331,25 +457,34 @@ export default function AccountDetail() {
     const amountNum = parseFloat(amount);
     const isDeposit = transactionType === 'deposit';
 
-    // Create transaction
-    await addTx({
-      type: isDeposit ? 'income' : 'expense',
-      amount: amountNum,
-      category: isDeposit ? 'Deposit' : 'Withdrawal',
-      account: acc.name,
-      date: transactionDate.toISOString(),
-      note: note || undefined,
-    });
+    try {
+      // Create transaction
+      await addTx({
+        type: isDeposit ? 'income' : 'expense',
+        amount: amountNum,
+        category: isDeposit ? 'Deposit' : 'Withdrawal',
+        account: acc.name,
+        date: transactionDate.toISOString(),
+        note: note || undefined,
+      });
 
-    // Update account balance
-    // For deposits (income), isExpense = false; for withdrawals (expense), isExpense = true
-    await updateAccountBalance(acc.name, amountNum, !isDeposit);
+      // Update account balance
+      // For deposits (income), isExpense = false; for withdrawals (expense), isExpense = true
+      await updateAccountBalance(acc.name, amountNum, !isDeposit);
 
-    // Close sheet and reset
-    setShowTransactionSheet(false);
-    setAmount('');
-    setNote('');
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setShowTransactionSheet(false);
+        setAmount('');
+        setNote('');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error) {
+      console.error('Error submitting transaction:', error);
+      if (isMountedRef.current) {
+        // Could show an error message here
+      }
+    }
   };
 
   if (!acc) {
@@ -366,8 +501,9 @@ export default function AccountDetail() {
   // Chart rendering
   const chartWidth = Dimensions.get('window').width - spacing.s16 * 4;
   const chartHeight = 180;
-  const maxBalance = Math.max(...balanceHistory.map(p => p.balance), 0);
-  const minBalance = Math.min(...balanceHistory.map(p => p.balance), 0);
+  const balances = balanceHistory.length > 0 ? balanceHistory.map(p => p.balance) : [0];
+  const maxBalance = Math.max(...balances, 0);
+  const minBalance = Math.min(...balances, 0);
   const range = maxBalance - minBalance;
   const padding = range * 0.1 || 1;
 
@@ -566,14 +702,15 @@ export default function AccountDetail() {
               Balance Over Time
             </Text>
             <View style={{ flexDirection: 'row', backgroundColor: cardBg2, borderRadius: radius.md, padding: 2, gap: 2 }}>
-              {(['week', 'month'] as const).map((period) => (
+              {(['day', 'week'] as const).map((period) => (
                 <Pressable
                   key={period}
                   onPress={() => {
-                    setChartPeriod(period);
-                    setChartOffset(0);
-                    setSelectedBarIndex(null);
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    if (isMountedRef.current) {
+                      setChartPeriod(period);
+                      setSelectedBarIndex(null);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }
                   }}
                   style={({ pressed }) => ({
                     paddingVertical: spacing.s4,
@@ -590,69 +727,27 @@ export default function AccountDetail() {
                       fontSize: 12,
                     }}
                   >
-                    {period === 'week' ? 'W' : 'M'}
+                    {period === 'day' ? 'D' : 'W'}
                   </Text>
                 </Pressable>
               ))}
             </View>
           </View>
 
-          {/* Navigation hint */}
-          {chartOffset > 0 && (
-            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.s8 }}>
-              <Pressable
-                onPress={() => {
-                  if (chartOffset > 0) {
-                    setChartOffset(chartOffset - 1);
-                    setSelectedBarIndex(null);
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }
-                }}
-                style={({ pressed }) => ({
-                  paddingHorizontal: spacing.s8,
-                  paddingVertical: spacing.s4,
-                  borderRadius: radius.sm,
-                  backgroundColor: withAlpha(accent, 0.1),
-                  opacity: pressed ? 0.6 : 1,
-                })}
-              >
-                <Text style={{ color: accent, fontSize: 11, fontWeight: '600' }}>← Newer</Text>
-              </Pressable>
-              <Text style={{ color: muted, fontSize: 11 }}>
-                {chartOffset === 1 ? '1 period back' : `${chartOffset} periods back`}
-              </Text>
-              <Pressable
-                onPress={() => {
-                  setChartOffset(chartOffset + 1);
-                  setSelectedBarIndex(null);
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }}
-                style={({ pressed }) => ({
-                  paddingHorizontal: spacing.s8,
-                  paddingVertical: spacing.s4,
-                  borderRadius: radius.sm,
-                  backgroundColor: withAlpha(accent, 0.1),
-                  opacity: pressed ? 0.6 : 1,
-                })}
-              >
-                <Text style={{ color: accent, fontSize: 11, fontWeight: '600' }}>Older →</Text>
-              </Pressable>
-            </View>
-          )}
-
           {/* Tooltip */}
-          {selectedBarIndex !== null && (
+          {selectedBarIndex !== null && selectedBarIndex < balanceHistory.length && balanceHistory[selectedBarIndex] && (
             <Animated.View
-              entering={FadeIn.duration(200)}
-              exiting={FadeOut.duration(150)}
-              style={{
-                position: 'absolute',
-                top: 60,
-                left: 0,
-                right: 0,
-                zIndex: 10,
-                alignItems: 'center',
-              }}
+              style={[
+                {
+                  position: 'absolute',
+                  top: 60,
+                  left: 0,
+                  right: 0,
+                  zIndex: 10,
+                  alignItems: 'center',
+                },
+                tooltipAnimatedStyle
+              ]}
             >
               <View
                 style={{
@@ -677,75 +772,84 @@ export default function AccountDetail() {
             </Animated.View>
           )}
 
-          <GestureDetector
-            gesture={Gesture.Pan()
-              .activeOffsetX([-10, 10])
-              .failOffsetY([-10, 10])
-              .onEnd((e) => {
-                'worklet';
-                if (e.velocityX > 500) {
-                  // Swipe right - go to newer data
-                  const goNewer = () => {
-                    setChartOffset(prev => Math.max(0, prev - 1));
-                    setSelectedBarIndex(null);
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  };
-                  runOnJS(goNewer)();
-                } else if (e.velocityX < -500) {
-                  // Swipe left - go to older data
-                  const goOlder = () => {
-                    setChartOffset(prev => prev + 1);
-                    setSelectedBarIndex(null);
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  };
-                  runOnJS(goOlder)();
-                }
-              })}
+          {/* Scrollable Bar Chart */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingVertical: spacing.s8, flexGrow: balanceHistory.length <= 15 ? 1 : 0 }}
           >
-            <View style={{ height: chartHeight }}>
+            <View style={{ height: chartHeight, flex: balanceHistory.length <= 15 ? 1 : 0 }}>
               {/* Bar chart */}
-              <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: chartHeight }}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: chartHeight, gap: 4, flex: balanceHistory.length <= 15 ? 1 : 0 }}>
                 {balanceHistory.map((point, index) => {
                   const normalizedBalance = range === 0 ? 0.5 : ((point.balance - minBalance + padding) / (range + padding * 2));
                   const barHeight = Math.max(normalizedBalance * chartHeight, 4);
                   const isPositive = point.balance >= 0;
                   const barColor = isPositive ? successColor : errorColor;
 
+                  // Auto-size bar width: if <= 15 bars, fill screen; if > 15, use fixed width for scrolling
+                  const barsToShow = Math.min(balanceHistory.length, 15);
+                  const barWidth = balanceHistory.length <= 15
+                    ? undefined // Use flex: 1 instead
+                    : (chartWidth / 15) - 4;
+
                   return (
-                    <ChartBar
-                      key={`${chartPeriod}-${chartOffset}-${index}`}
-                      height={barHeight}
-                      maxHeight={chartHeight}
-                      color={barColor}
-                      isSelected={selectedBarIndex === index}
-                      delay={index * 50}
-                      onPress={() => {
-                        if (selectedBarIndex === index) {
-                          setSelectedBarIndex(null);
-                        } else {
-                          setSelectedBarIndex(index);
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        }
-                      }}
-                    />
+                    <View
+                      key={`${chartPeriod}-${index}`}
+                      style={balanceHistory.length <= 15 ? { flex: 1 } : { width: barWidth }}
+                    >
+                      <ChartBar
+                        height={barHeight}
+                        maxHeight={chartHeight}
+                        color={barColor}
+                        isSelected={selectedBarIndex === index}
+                        delay={0}
+                        onPress={() => {
+                          if (isMountedRef.current) {
+                            if (selectedBarIndex === index) {
+                              setSelectedBarIndex(null);
+                            } else {
+                              setSelectedBarIndex(index);
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            }
+                          }
+                        }}
+                      />
+                    </View>
                   );
                 })}
               </View>
             </View>
-          </GestureDetector>
+          </ScrollView>
+
           {/* Labels */}
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            {balanceHistory.map((point, index) => {
-              // Show all labels for better UX
-              return (
-                <View key={index} style={{ flex: 1, alignItems: 'center' }}>
-                  <Text style={{ color: selectedBarIndex === index ? text : muted, fontSize: 9, fontWeight: selectedBarIndex === index ? '700' : '600' }}>
-                    {point.label}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            scrollEnabled={false}
+            contentContainerStyle={{ flexGrow: balanceHistory.length <= 15 ? 1 : 0 }}
+          >
+            <View style={{ flexDirection: 'row', gap: 4, flex: balanceHistory.length <= 15 ? 1 : 0 }}>
+              {balanceHistory.map((point, index) => {
+                const barWidth = balanceHistory.length <= 15
+                  ? undefined
+                  : (chartWidth / 15) - 4;
+                return (
+                  <View
+                    key={index}
+                    style={balanceHistory.length <= 15
+                      ? { flex: 1, alignItems: 'center' }
+                      : { width: barWidth, alignItems: 'center' }
+                    }
+                  >
+                    <Text style={{ color: selectedBarIndex === index ? text : muted, fontSize: 9, fontWeight: selectedBarIndex === index ? '700' : '600' }}>
+                      {point.label}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </ScrollView>
         </View>
       )}
 
@@ -879,12 +983,22 @@ export default function AccountDetail() {
         </View>
       )}
 
+
       {/* Transaction Bottom Sheet */}
       <BottomSheet
         visible={showTransactionSheet}
-        onClose={() => setShowTransactionSheet(false)}
+        onClose={() => {
+          setShowTransactionSheet(false);
+          setShowDatePicker(false);
+          setShowTimeOverlay(false);
+        }}
+        fullHeight
       >
-        <View style={{ gap: spacing.s20, paddingBottom: spacing.s16 }}>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ flexGrow: 1 }}
+        >
+          <View style={{ gap: spacing.s20, paddingBottom: spacing.s16 }}>
           {/* Header */}
           <View>
             <Text style={{ color: text, fontSize: 24, fontWeight: '700' }}>
@@ -918,7 +1032,6 @@ export default function AccountDetail() {
                 placeholder="0.00"
                 placeholderTextColor={muted}
                 keyboardType="decimal-pad"
-                autoFocus
                 style={{
                   flex: 1,
                   color: text,
@@ -933,13 +1046,14 @@ export default function AccountDetail() {
 
           {/* Date Picker */}
           <View style={{ gap: spacing.s8 }}>
-            <Text style={{ color: text, fontSize: 14, fontWeight: '600' }}>Date</Text>
+            <Text style={{ color: text, fontSize: 14, fontWeight: '600' }}>Date & Time</Text>
             <Pressable
               onPress={() => {
-                // For now, we'll use a simple date display
-                // You can add a proper date picker later
+                console.log('Calendar pressed, setting showDatePicker to true');
+                setShowDatePicker(true);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }}
-              style={{
+              style={({ pressed }) => ({
                 backgroundColor: cardBg,
                 borderRadius: radius.lg,
                 borderWidth: 1,
@@ -948,7 +1062,8 @@ export default function AccountDetail() {
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: spacing.s12,
-              }}
+                opacity: pressed ? 0.7 : 1,
+              })}
             >
               <Icon name="calendar" size={20} color={accent} />
               <Text style={{ color: text, fontSize: 16, fontWeight: '600' }}>
@@ -957,6 +1072,9 @@ export default function AccountDetail() {
                   day: 'numeric',
                   year: 'numeric'
                 })}
+              </Text>
+              <Text style={{ color: muted, fontSize: 14 }}>
+                {transactionDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </Text>
             </Pressable>
           </View>
@@ -1003,6 +1121,197 @@ export default function AccountDetail() {
             />
           </View>
         </View>
+        </ScrollView>
+
+        {/* Date & Time Picker Overlay - Outside ScrollView, Inside BottomSheet */}
+        {showDatePicker && (
+          <Animated.View
+            pointerEvents="auto"
+            entering={FadeIn.duration(200)}
+            exiting={FadeOut.duration(150)}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: spacing.s16,
+              zIndex: 1000,
+            }}>
+            {/* Transparent backdrop to catch outside taps */}
+            <Pressable
+              onPress={() => {
+                setShowDatePicker(false);
+                setShowTimeOverlay(false);
+              }}
+              style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
+            />
+
+            <View
+              pointerEvents="auto"
+              style={{
+                width: '100%',
+                maxWidth: 400,
+                backgroundColor: bgDefault,
+                borderRadius: 20,
+                paddingHorizontal: spacing.s8,
+                paddingTop: spacing.s8,
+                paddingBottom: spacing.s8,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.4,
+                shadowRadius: 24,
+                elevation: 12,
+              }}>
+              {/* Date Picker */}
+              <View style={{ alignItems: 'center' }}>
+                <DateTimePicker
+                  value={transactionDate}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  onChange={(event, selectedDate) => {
+                    if (selectedDate) {
+                      setTransactionDate(selectedDate);
+                    }
+                  }}
+                  themeVariant={isDark ? 'dark' : 'light'}
+                />
+              </View>
+
+              {/* Time Selector Button */}
+              <View style={{
+                flexDirection: 'row',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                marginTop: spacing.s4,
+                gap: spacing.s12,
+                paddingHorizontal: spacing.s4,
+              }}>
+                <Pressable
+                  onPress={() => setShowTimeOverlay(!showTimeOverlay)}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: spacing.s8,
+                    backgroundColor: cardBg,
+                    paddingHorizontal: spacing.s16,
+                    paddingVertical: spacing.s10,
+                    borderRadius: radius.lg,
+                    borderWidth: 1,
+                    borderColor: outline,
+                    opacity: pressed ? 0.7 : 1,
+                  })}
+                >
+                  <Icon name="clock" size={18} color={accent} />
+                  <Text style={{ color: text, fontSize: 15, fontWeight: '600' }}>
+                    {transactionDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    setShowDatePicker(false);
+                    setShowTimeOverlay(false);
+                  }}
+                  style={({ pressed }) => ({
+                    backgroundColor: accent,
+                    borderRadius: radius.lg,
+                    paddingHorizontal: spacing.s20,
+                    paddingVertical: spacing.s10,
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Text style={{ color: isDark ? text : 'white', fontSize: 15, fontWeight: '700' }}>
+                    Done
+                  </Text>
+                </Pressable>
+              </View>
+
+              {/* Time Picker Overlay */}
+              {showTimeOverlay && (
+                <View style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: [{ translateX: -140 }, { translateY: -125 }],
+                  width: 280,
+                  backgroundColor: bgDefault,
+                  borderRadius: 16,
+                  padding: spacing.s16,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 12,
+                  elevation: 10,
+                }}>
+                  <TouchableWithoutFeedback>
+                    <View style={{ alignItems: 'center' }}>
+                      <View style={{ height: 180, justifyContent: 'center', width: '100%' }}>
+                        <DateTimePicker
+                          value={transactionDate}
+                          mode="time"
+                          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                          onChange={(event, selectedDate) => {
+                            if (selectedDate) {
+                              setTransactionDate(selectedDate);
+                            }
+                          }}
+                          themeVariant={isDark ? 'dark' : 'light'}
+                        />
+                      </View>
+
+                      <View style={{
+                        flexDirection: 'row',
+                        gap: spacing.s10,
+                        marginTop: spacing.s12,
+                        width: '100%',
+                      }}>
+                        <Pressable
+                          onPress={() => {
+                            const now = new Date();
+                            setTransactionDate(now);
+                          }}
+                          style={({ pressed }) => ({
+                            flex: 1,
+                            backgroundColor: cardBg,
+                            paddingVertical: spacing.s10,
+                            borderRadius: radius.md,
+                            alignItems: 'center',
+                            borderWidth: 1,
+                            borderColor: outline,
+                            opacity: pressed ? 0.7 : 1,
+                          })}
+                        >
+                          <Text style={{ color: accent, fontSize: 14, fontWeight: '600' }}>
+                            Now
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          onPress={() => setShowTimeOverlay(false)}
+                          style={({ pressed }) => ({
+                            flex: 1,
+                            backgroundColor: accent,
+                            paddingVertical: spacing.s10,
+                            borderRadius: radius.md,
+                            alignItems: 'center',
+                            opacity: pressed ? 0.85 : 1,
+                          })}
+                        >
+                          <Text style={{ color: isDark ? text : 'white', fontSize: 14, fontWeight: '700' }}>
+                            Done
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </TouchableWithoutFeedback>
+                </View>
+              )}
+            </View>
+          </Animated.View>
+        )}
       </BottomSheet>
     </ScreenScroll>
   );
