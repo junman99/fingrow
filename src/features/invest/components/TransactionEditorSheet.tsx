@@ -10,6 +10,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../../../components/Icon';
 import { convertCurrency } from '../../../lib/fx';
+import { formatPrice } from '../../../lib/formatPrice';
 
 type Props = {
   mode?: 'add'|'edit';
@@ -27,8 +28,14 @@ const TransactionEditorSheet = React.memo(({ visible, onClose, symbol, portfolio
   const { profile } = useProfileStore();
   const insets = useSafeAreaInsets();
 
-  // Compact height to fit content
-  const sheetHeight = 420;
+  // Helper function to get dynamic precision for price input
+  const getPriceDecimals = (price: number) => {
+    const absPrice = Math.abs(price);
+    if (absPrice >= 1) return 2;
+    if (absPrice >= 0.01) return 4;
+    if (absPrice >= 0.0001) return 6;
+    return 8;
+  };
 
   // Get quote data and portfolio info
   const quotes = useInvestStore(s => s.quotes);
@@ -58,7 +65,11 @@ const TransactionEditorSheet = React.memo(({ visible, onClose, symbol, portfolio
 
   const [side, setSide] = React.useState<'buy'|'sell'>(initial?.side || 'buy');
   const [qtyInput, setQtyInput] = React.useState(initial?.qty != null ? String(initial.qty) : '');
-  const [priceInput, setPriceInput] = React.useState(initial?.price != null ? String(initial.price.toFixed(2)) : (currentPrice ? String(currentPrice.toFixed(2)) : ''));
+  const [priceInput, setPriceInput] = React.useState(
+    initial?.price != null
+      ? String(Number(initial.price).toFixed(getPriceDecimals(initial.price)))
+      : (currentPrice ? String(Number(currentPrice).toFixed(getPriceDecimals(currentPrice))) : '')
+  );
   const [feesInput, setFeesInput] = React.useState(initial?.fees != null ? String(initial.fees) : '');
   const [date, setDate] = React.useState<Date>(initial?.date ? new Date(initial.date) : new Date());
   const [showDateTimePicker, setShowDateTimePicker] = React.useState(false);
@@ -70,8 +81,8 @@ const TransactionEditorSheet = React.memo(({ visible, onClose, symbol, portfolio
     if (!visible) {
       // Reset on close
       setSide('buy'); setQtyInput(''); setFeesInput(''); setDate(new Date()); setShowDateTimePicker(false); setShowTimeOverlay(false);
-      // Reset price to current price (2 decimals)
-      setPriceInput(currentPrice ? String(currentPrice.toFixed(2)) : '');
+      // Reset price to current price with dynamic precision
+      setPriceInput(currentPrice ? String(Number(currentPrice).toFixed(getPriceDecimals(currentPrice))) : '');
     }
   }, [visible, currentPrice]);
 
@@ -171,7 +182,7 @@ const TransactionEditorSheet = React.memo(({ visible, onClose, symbol, portfolio
   }, [saving, qtyInput, priceInput, feesInput, symbol, portfolioId, store, side, date, mode, lotId, affectCash, profile, onClose]);
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} height={sheetHeight}>
+    <BottomSheet visible={visible} onClose={onClose} fullHeight>
       <View style={{ flex: 1 }}>
         {/* Minimal Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.s12 }}>
@@ -205,7 +216,7 @@ const TransactionEditorSheet = React.memo(({ visible, onClose, symbol, portfolio
                 {symbol}
               </Text>
               <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
-                ${currentPrice.toFixed(2)}
+                {formatPrice(currentPrice, 'USD')}
               </Text>
             </View>
           </View>

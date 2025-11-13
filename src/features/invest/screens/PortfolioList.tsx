@@ -15,6 +15,7 @@ import { Card } from '../../../components/Card';
 import Button from '../../../components/Button';
 import { useInvestStore } from '../store/invest';
 import { formatCurrency } from '../../../lib/format';
+import { formatPrice } from '../../../lib/formatPrice';
 import { convertCurrency } from '../../../lib/fx';
 import { useProfileStore } from '../../../store/profile';
 
@@ -409,7 +410,7 @@ const PortfolioList: React.FC = () => {
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>{holding.sym}</Text>
                           <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
-                            {holding.qty.toFixed(4)} shares @ {formatCurrency(holding.last)}
+                            {holding.qty.toFixed(4)} shares @ {formatPrice(holding.last, 'USD')}
                           </Text>
                         </View>
                       </View>

@@ -71,6 +71,153 @@ const AnimatedPressable: React.FC<{
   );
 };
 
+const SwipeableTransactionRow: React.FC<{
+  tx: any;
+  isLast: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}> = ({ tx, isLast, onEdit, onDelete }) => {
+  const { get } = useThemeTokens();
+  const text = get('text.primary') as string;
+  const muted = get('text.muted') as string;
+  const successColor = get('semantic.success') as string;
+  const dangerColor = get('semantic.danger') as string;
+  const outline = get('border.subtle') as string;
+  const cardBg = get('surface.level1') as string;
+
+  const REVEAL = 128; // Show both edit and delete buttons
+  const DELETE_AT = 200;
+
+  const translateX = useSharedValue(0);
+
+  const pan = Gesture.Pan()
+    .onUpdate((e) => {
+      if (e.translationX < 0) {
+        translateX.value = e.translationX;
+      } else {
+        translateX.value = e.translationX * 0.2; // resist right swipe
+      }
+    })
+    .onEnd(() => {
+      const x = translateX.value;
+      if (x < -DELETE_AT) {
+        translateX.value = withTiming(-600, { duration: 180 }, (finished) => {
+          if (finished) runOnJS(onDelete)();
+        });
+      } else if (x < -REVEAL) {
+        translateX.value = withSpring(-REVEAL, { damping: 18, stiffness: 180 });
+      } else {
+        translateX.value = withSpring(0, { damping: 18, stiffness: 180 });
+      }
+    });
+
+  const rowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  return (
+    <View style={{ backgroundColor: cardBg, position: 'relative' }}>
+      {/* Action buttons background */}
+      <View
+        style={{
+          position: 'absolute',
+          right: 0,
+          left: 0,
+          top: 0,
+          bottom: 0,
+          flexDirection: 'row',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          paddingHorizontal: spacing.s12,
+          gap: spacing.s8,
+        }}
+      >
+        <Pressable
+          onPress={() => {
+            translateX.value = withSpring(0, { damping: 18, stiffness: 180 });
+            onEdit();
+          }}
+          style={{
+            paddingVertical: spacing.s10,
+            paddingHorizontal: spacing.s16,
+            borderRadius: radius.lg,
+            backgroundColor: withAlpha(successColor, 0.15),
+          }}
+        >
+          <Text style={{ color: successColor, fontWeight: '700', fontSize: 14 }}>Edit</Text>
+        </Pressable>
+        <Pressable
+          onPress={onDelete}
+          style={{
+            paddingVertical: spacing.s10,
+            paddingHorizontal: spacing.s16,
+            borderRadius: radius.lg,
+            backgroundColor: withAlpha(dangerColor, 0.15),
+          }}
+        >
+          <Text style={{ color: dangerColor, fontWeight: '700', fontSize: 14 }}>Delete</Text>
+        </Pressable>
+      </View>
+
+      {/* Swipeable row */}
+      <GestureDetector gesture={pan}>
+        <Animated.View style={[{ backgroundColor: cardBg }, rowStyle]}>
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              paddingVertical: spacing.s12,
+              paddingHorizontal: spacing.s16,
+              borderBottomWidth: isLast ? 0 : 1,
+              borderBottomColor: outline,
+              minHeight: 60,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, flex: 1 }}>
+              <View
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 12,
+                  backgroundColor: withAlpha(tx.type === 'income' ? successColor : dangerColor, 0.15),
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Icon
+                  name={tx.type === 'income' ? 'arrow-down' : 'arrow-up'}
+                  size={12}
+                  color={tx.type === 'income' ? successColor : dangerColor}
+                />
+              </View>
+              <View style={{ flex: 1, gap: spacing.s2 }}>
+                <Text style={{ color: text, fontWeight: '600' }} numberOfLines={1}>
+                  {tx.note || (tx.type === 'income' ? 'Deposit' : 'Withdrawal')}
+                </Text>
+                <Text style={{ color: muted, fontSize: 12 }}>
+                  {new Date(tx.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </Text>
+              </View>
+            </View>
+            <Text
+              style={{
+                color: tx.type === 'income' ? successColor : dangerColor,
+                fontWeight: '800',
+                fontSize: 16,
+                marginLeft: spacing.s12,
+              }}
+            >
+              {tx.type === 'income' ? '+' : '-'}
+              {formatCurrency(Math.abs(tx.amount))}
+            </Text>
+          </View>
+        </Animated.View>
+      </GestureDetector>
+    </View>
+  );
+};
+
 const ChartBar: React.FC<{
   height: number;
   maxHeight: number;
@@ -203,9 +350,14 @@ export default function AccountDetail() {
   const [note, setNote] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimeOverlay, setShowTimeOverlay] = useState(false);
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
 
   const [chartPeriod, setChartPeriod] = useState<'day' | 'week'>('day');
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
+
+  // Refs for synchronized scrolling
+  const barScrollRef = React.useRef<ScrollView>(null);
+  const labelScrollRef = React.useRef<ScrollView>(null);
 
   // Controlled tooltip animation
   const tooltipOpacity = useSharedValue(0);
@@ -238,57 +390,94 @@ export default function AccountDetail() {
     try {
       const accountTransactions = (transactions || []).filter(tx => tx.account === acc.name);
       const now = new Date();
-      const points: Array<{ date: Date; balance: number; label: string }> = [];
+      const points: Array<{ date: Date; balance: number; label: string; showLabel: boolean }> = [];
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+      // Sort transactions chronologically for forward accumulation
+      const sortedTransactions = [...accountTransactions].sort((a, b) =>
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
       // Determine the earliest date we should show data for
+      // Use the earliest of: account creation date OR first transaction date
       let accountStartDate: Date;
-      if (acc.createdAt) {
+      const earliestTransactionDate = sortedTransactions.length > 0
+        ? new Date(sortedTransactions[0].date)
+        : null;
+
+      if (acc.createdAt && earliestTransactionDate) {
+        // Use whichever is earlier
+        accountStartDate = new Date(Math.min(new Date(acc.createdAt).getTime(), earliestTransactionDate.getTime()));
+      } else if (acc.createdAt) {
         accountStartDate = new Date(acc.createdAt);
-      } else if (accountTransactions.length > 0) {
-        accountStartDate = new Date(Math.min(...accountTransactions.map(tx => new Date(tx.date).getTime())));
+      } else if (earliestTransactionDate) {
+        accountStartDate = earliestTransactionDate;
       } else {
         accountStartDate = now;
       }
 
+      // Normalize to start of day for proper comparison
+      accountStartDate.setHours(0, 0, 0, 0);
+
       if (chartPeriod === 'day') {
         // Show up to 45 days (each bar = 1 day)
+        // Use forward accumulation: start from earliest date and build up
+        let runningBalance = 0;
+        let txIndex = 0;
+
         for (let i = 44; i >= 0; i--) {
           const dayDate = new Date(now);
           dayDate.setDate(dayDate.getDate() - i);
-          dayDate.setHours(23, 59, 59, 999); // End of day
 
-          // Skip periods before account was created
-          if (dayDate < accountStartDate) {
+          // Create normalized version for comparison (start of day)
+          const dayDateNormalized = new Date(dayDate);
+          dayDateNormalized.setHours(0, 0, 0, 0);
+
+          // Skip periods before account/transactions started
+          if (dayDateNormalized < accountStartDate) {
             continue;
           }
 
-          // Calculate balance at end of this day by working backwards from current balance
-          let dayBalance = acc.balance || 0;
-          accountTransactions.forEach(tx => {
-            const txDate = new Date(tx.date);
-            if (txDate > dayDate) {
-              // This transaction happened after this day, so subtract it to go back in time
-              if (tx.type === 'income') {
-                dayBalance -= tx.amount;
-              } else {
-                dayBalance += tx.amount;
-              }
-            }
-          });
+          // Set to end of day for transaction processing
+          dayDate.setHours(23, 59, 59, 999);
 
-          // Format as "25" (just day number)
+          // Add all transactions that occurred on or before this day
+          while (txIndex < sortedTransactions.length) {
+            const tx = sortedTransactions[txIndex];
+            const txDate = new Date(tx.date);
+
+            if (txDate <= dayDate) {
+              // Apply this transaction to running balance
+              if (tx.type === 'income') {
+                runningBalance += tx.amount;
+              } else {
+                runningBalance -= tx.amount;
+              }
+              txIndex++;
+            } else {
+              break; // This transaction is in the future for this day
+            }
+          }
+
+          // Format label as "25 Aug" (day + month)
           const day = dayDate.getDate();
           const month = monthNames[dayDate.getMonth()].slice(0, 3);
 
+          // Show every 5th label (roughly 9 labels for 45 days)
+          const showLabel = (44 - i) % 5 === 0 || i === 0; // Show first and every 5th
+
           points.push({
             date: dayDate,
-            balance: dayBalance,
-            label: `${day}`,
+            balance: runningBalance,
+            label: `${day} ${month}`,
+            showLabel,
           });
         }
       } else {
         // Show up to 26 weeks (6 months = ~26 weeks, each bar = 1 week)
+        let runningBalance = 0;
+        let txIndex = 0;
+
         for (let i = 25; i >= 0; i--) {
           const weekEnd = new Date(now);
 
@@ -298,35 +487,49 @@ export default function AccountDetail() {
 
           // Go back the required number of weeks
           weekEnd.setDate(weekEnd.getDate() - (i * 7));
-          weekEnd.setHours(23, 59, 59, 999);
 
-          // Skip periods before account was created
-          if (weekEnd < accountStartDate) {
+          // Create normalized version for comparison (start of day)
+          const weekEndNormalized = new Date(weekEnd);
+          weekEndNormalized.setHours(0, 0, 0, 0);
+
+          // Skip periods before account/transactions started
+          if (weekEndNormalized < accountStartDate) {
             continue;
           }
 
-          // Calculate balance at end of this week by working backwards from current balance
-          let weekBalance = acc.balance || 0;
-          accountTransactions.forEach(tx => {
-            const txDate = new Date(tx.date);
-            if (txDate > weekEnd) {
-              // This transaction happened after this period, so subtract it to go back in time
-              if (tx.type === 'income') {
-                weekBalance -= tx.amount;
-              } else {
-                weekBalance += tx.amount;
-              }
-            }
-          });
+          // Set to end of day for transaction processing
+          weekEnd.setHours(23, 59, 59, 999);
 
-          // Format as "25 May"
+          // Add all transactions that occurred on or before this week end
+          while (txIndex < sortedTransactions.length) {
+            const tx = sortedTransactions[txIndex];
+            const txDate = new Date(tx.date);
+
+            if (txDate <= weekEnd) {
+              // Apply this transaction to running balance
+              if (tx.type === 'income') {
+                runningBalance += tx.amount;
+              } else {
+                runningBalance -= tx.amount;
+              }
+              txIndex++;
+            } else {
+              break; // This transaction is in the future for this week
+            }
+          }
+
+          // Format label as "25 Aug"
           const day = weekEnd.getDate();
           const month = monthNames[weekEnd.getMonth()].slice(0, 3);
 
+          // Show every 4th label (roughly 6-7 labels for 26 weeks)
+          const showLabel = (25 - i) % 4 === 0 || i === 0; // Show first and every 4th
+
           points.push({
             date: weekEnd,
-            balance: weekBalance,
+            balance: runningBalance,
             label: `${day} ${month}`,
+            showLabel,
           });
         }
       }
@@ -338,7 +541,8 @@ export default function AccountDetail() {
         points.push({
           date: now,
           balance: acc.balance || 0,
-          label: chartPeriod === 'day' ? `${day}` : `${day} ${month}`,
+          label: `${day} ${month}`,
+          showLabel: true,
         });
       }
 
@@ -353,7 +557,8 @@ export default function AccountDetail() {
       return [{
         date: now,
         balance: acc.balance || 0,
-        label: chartPeriod === 'day' ? `${day}` : `${day} ${month}`,
+        label: `${day} ${month}`,
+        showLabel: true,
       }];
     }
   }, [acc, transactions, chartPeriod]);
@@ -442,11 +647,25 @@ export default function AccountDetail() {
   }, [transactions, acc]);
 
   // Handle opening transaction sheet
-  const openTransactionSheet = (type: 'deposit' | 'withdraw') => {
-    setTransactionType(type);
-    setAmount('');
-    setNote('');
-    setTransactionDate(new Date());
+  const openTransactionSheet = (type: 'deposit' | 'withdraw', txId?: string) => {
+    if (txId) {
+      // Edit mode: pre-populate form
+      const tx = transactions.find(t => t.id === txId);
+      if (tx) {
+        setEditingTransactionId(txId);
+        setTransactionType(tx.type === 'income' ? 'deposit' : 'withdraw');
+        setAmount(tx.amount.toString());
+        setNote(tx.note || '');
+        setTransactionDate(new Date(tx.date));
+      }
+    } else {
+      // Create mode: clear form
+      setEditingTransactionId(null);
+      setTransactionType(type);
+      setAmount('');
+      setNote('');
+      setTransactionDate(new Date());
+    }
     setShowTransactionSheet(true);
   };
 
@@ -458,23 +677,48 @@ export default function AccountDetail() {
     const isDeposit = transactionType === 'deposit';
 
     try {
-      // Create transaction
-      await addTx({
-        type: isDeposit ? 'income' : 'expense',
-        amount: amountNum,
-        category: isDeposit ? 'Deposit' : 'Withdrawal',
-        account: acc.name,
-        date: transactionDate.toISOString(),
-        note: note || undefined,
-      });
+      if (editingTransactionId) {
+        // Edit mode: update existing transaction
+        const { updateTransaction } = useTxStore.getState();
+        const oldTx = transactions.find(t => t.id === editingTransactionId);
 
-      // Update account balance
-      // For deposits (income), isExpense = false; for withdrawals (expense), isExpense = true
-      await updateAccountBalance(acc.name, amountNum, !isDeposit);
+        if (oldTx) {
+          // Reverse old transaction's effect on balance
+          const oldAmountChange = oldTx.type === 'income' ? -oldTx.amount : oldTx.amount;
+          await updateAccountBalance(acc.name, Math.abs(oldAmountChange), oldAmountChange > 0);
+
+          // Update transaction
+          await updateTransaction(editingTransactionId, {
+            type: isDeposit ? 'income' : 'expense',
+            amount: amountNum,
+            category: isDeposit ? 'Deposit' : 'Withdrawal',
+            account: acc.name,
+            date: transactionDate.toISOString(),
+            note: note || undefined,
+          });
+
+          // Apply new transaction's effect on balance
+          await updateAccountBalance(acc.name, amountNum, !isDeposit);
+        }
+      } else {
+        // Create mode: new transaction
+        await addTx({
+          type: isDeposit ? 'income' : 'expense',
+          amount: amountNum,
+          category: isDeposit ? 'Deposit' : 'Withdrawal',
+          account: acc.name,
+          date: transactionDate.toISOString(),
+          note: note || undefined,
+        });
+
+        // Update account balance
+        await updateAccountBalance(acc.name, amountNum, !isDeposit);
+      }
 
       // Only update state if component is still mounted
       if (isMountedRef.current) {
         setShowTransactionSheet(false);
+        setEditingTransactionId(null);
         setAmount('');
         setNote('');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -570,10 +814,10 @@ export default function AccountDetail() {
               paddingHorizontal: spacing.s12,
               paddingVertical: spacing.s6,
               borderRadius: radius.pill,
-              backgroundColor: withAlpha(trendColor, 0.15),
+              backgroundColor: withAlpha(accent, 0.15),
             }}
           >
-            <Text style={{ color: trendColor, fontSize: 12, fontWeight: '700' }}>
+            <Text style={{ color: accent, fontSize: 12, fontWeight: '700' }}>
               {acc.kind.toUpperCase()}
             </Text>
           </View>
@@ -777,6 +1021,14 @@ export default function AccountDetail() {
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingVertical: spacing.s8, flexGrow: balanceHistory.length <= 15 ? 1 : 0 }}
+            scrollEventThrottle={16}
+            onScroll={(e) => {
+              // Sync label scroll with bar chart scroll
+              if (labelScrollRef.current) {
+                labelScrollRef.current.scrollTo({ x: e.nativeEvent.contentOffset.x, animated: false });
+              }
+            }}
+            ref={barScrollRef}
           >
             <View style={{ height: chartHeight, flex: balanceHistory.length <= 15 ? 1 : 0 }}>
               {/* Bar chart */}
@@ -822,12 +1074,13 @@ export default function AccountDetail() {
             </View>
           </ScrollView>
 
-          {/* Labels */}
+          {/* Labels - synchronized scrolling */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             scrollEnabled={false}
             contentContainerStyle={{ flexGrow: balanceHistory.length <= 15 ? 1 : 0 }}
+            ref={labelScrollRef}
           >
             <View style={{ flexDirection: 'row', gap: 4, flex: balanceHistory.length <= 15 ? 1 : 0 }}>
               {balanceHistory.map((point, index) => {
@@ -842,9 +1095,11 @@ export default function AccountDetail() {
                       : { width: barWidth, alignItems: 'center' }
                     }
                   >
-                    <Text style={{ color: selectedBarIndex === index ? text : muted, fontSize: 9, fontWeight: selectedBarIndex === index ? '700' : '600' }}>
-                      {point.label}
-                    </Text>
+                    {point.showLabel && (
+                      <Text style={{ color: selectedBarIndex === index ? text : muted, fontSize: 9, fontWeight: selectedBarIndex === index ? '700' : '600' }}>
+                        {point.label}
+                      </Text>
+                    )}
                   </View>
                 );
               })}
@@ -910,7 +1165,7 @@ export default function AccountDetail() {
               <Text style={{ color: muted, fontSize: 12, fontWeight: '600' }}>Net Change</Text>
               <Text
                 style={{
-                  color: stats.netChange >= 0 ? successColor : errorColor,
+                  color: stats.netChange >= 0 ? successColor : dangerColor,
                   fontSize: 20,
                   fontWeight: '800',
                   marginTop: spacing.s4,
@@ -927,57 +1182,21 @@ export default function AccountDetail() {
       {recentAccountTransactions.length > 0 && (
         <View style={{ gap: spacing.s12 }}>
           <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>Recent Activity</Text>
-          <Card style={{ padding: spacing.s16, gap: spacing.s14 }}>
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
             {recentAccountTransactions.map((tx, idx) => (
-              <View
+              <SwipeableTransactionRow
                 key={tx.id}
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  paddingVertical: spacing.s8,
-                  borderBottomWidth: idx < recentAccountTransactions.length - 1 ? 1 : 0,
-                  borderBottomColor: outline,
+                tx={tx}
+                isLast={idx === recentAccountTransactions.length - 1}
+                onEdit={() => openTransactionSheet(tx.type === 'income' ? 'deposit' : 'withdraw', tx.id)}
+                onDelete={async () => {
+                  const { remove } = useTxStore.getState();
+                  await remove(tx.id);
+                  // Update account balance
+                  const amountChange = tx.type === 'income' ? -tx.amount : tx.amount;
+                  await updateAccountBalance(acc.name, Math.abs(amountChange), amountChange > 0);
                 }}
-              >
-                <View style={{ flex: 1, gap: spacing.s2 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
-                    <View
-                      style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: 12,
-                        backgroundColor: withAlpha(tx.type === 'income' ? successColor : dangerColor, 0.15),
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Icon
-                        name={tx.type === 'income' ? 'arrow-down' : 'arrow-up'}
-                        size={12}
-                        color={tx.type === 'income' ? successColor : dangerColor}
-                      />
-                    </View>
-                    <Text style={{ color: text, fontWeight: '600', flex: 1 }} numberOfLines={1}>
-                      {tx.note || tx.category || 'Transaction'}
-                    </Text>
-                  </View>
-                  <Text style={{ color: muted, fontSize: 12, marginLeft: 32 }}>
-                    {new Date(tx.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                    {tx.category && ` • ${tx.category}`}
-                  </Text>
-                </View>
-                <Text
-                  style={{
-                    color: tx.type === 'income' ? successColor : dangerColor,
-                    fontWeight: '800',
-                    fontSize: 16,
-                    marginLeft: spacing.s12,
-                  }}
-                >
-                  {tx.type === 'income' ? '+' : '-'}{formatCurrency(Math.abs(tx.amount))}
-                </Text>
-              </View>
+              />
             ))}
           </Card>
         </View>
@@ -1002,10 +1221,14 @@ export default function AccountDetail() {
           {/* Header */}
           <View>
             <Text style={{ color: text, fontSize: 24, fontWeight: '700' }}>
-              {transactionType === 'deposit' ? 'Deposit Money' : 'Withdraw Money'}
+              {editingTransactionId
+                ? `Edit ${transactionType === 'deposit' ? 'Deposit' : 'Withdrawal'}`
+                : transactionType === 'deposit' ? 'Deposit Money' : 'Withdraw Money'}
             </Text>
             <Text style={{ color: muted, marginTop: spacing.s6 }}>
-              {transactionType === 'deposit'
+              {editingTransactionId
+                ? `Update the ${transactionType === 'deposit' ? 'deposit' : 'withdrawal'} details`
+                : transactionType === 'deposit'
                 ? 'Add money to your account'
                 : 'Withdraw money from your account'}
             </Text>
@@ -1109,12 +1332,15 @@ export default function AccountDetail() {
           <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
             <Button
               title="Cancel"
-              onPress={() => setShowTransactionSheet(false)}
+              onPress={() => {
+                setShowTransactionSheet(false);
+                setEditingTransactionId(null);
+              }}
               variant="secondary"
               style={{ flex: 1 }}
             />
             <Button
-              title={transactionType === 'deposit' ? 'Deposit' : 'Withdraw'}
+              title={editingTransactionId ? 'Save' : (transactionType === 'deposit' ? 'Deposit' : 'Withdraw')}
               onPress={handleSubmitTransaction}
               disabled={!amount || parseFloat(amount) <= 0}
               style={{ flex: 1 }}

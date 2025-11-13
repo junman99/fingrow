@@ -211,7 +211,7 @@ const HoldingRow = React.memo(({ sym, onPress, portfolioId, variant = 'card' }: 
           ) : (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s6 }}>
               <Text style={{ color: positive ? good : bad, fontWeight: '600', fontSize: 13 }}>
-                {changePct >= 0 ? '+' : ''}{formatPercent(changePct)} Today
+                {formatPercent(changePct)} Today
               </Text>
               <Text style={{ color: totalGainPositive ? good : bad, fontWeight: '600', fontSize: 13 }}>
                 {totalGainPct >= 0 ? '+' : ''}{totalGainPct.toFixed(2)}% Total

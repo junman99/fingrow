@@ -1,10 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, Alert, Pressable, Switch, Modal, TouchableWithoutFeedback, ScrollView } from 'react-native';
-import { ScreenScroll } from '../components/ScreenScroll';
-import Input from '../components/Input';
+import { View, Text, Alert, Pressable, Switch, Modal, TouchableWithoutFeedback, ScrollView, TextInput, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../components/Button';
+import Input from '../components/Input';
 import Icon from '../components/Icon';
-import { Card } from '../components/Card';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { useAccountsStore } from '../store/accounts';
@@ -21,6 +20,34 @@ const kinds: { key: AccountKind; title: string; caption: string; icon: string }[
   { key: 'cash', title: 'Cash & wallets', caption: 'Physical cash, prepaid, e-wallets', icon: 'wallet' },
   { key: 'credit', title: 'Credit & charge', caption: 'Cards that require monthly payment', icon: 'credit-card' },
   { key: 'investment', title: 'Investment cash', caption: 'Brokerage cash, robo wallets', icon: 'trending-up' },
+];
+
+const institutions: { name: string; domain?: string }[] = [
+  { name: 'DBS Bank', domain: 'dbs.com' },
+  { name: 'OCBC Bank', domain: 'ocbc.com' },
+  { name: 'UOB', domain: 'uob.com.sg' },
+  { name: 'Citibank', domain: 'citibank.com' },
+  { name: 'HSBC', domain: 'hsbc.com' },
+  { name: 'Standard Chartered', domain: 'sc.com' },
+  { name: 'Maybank', domain: 'maybank.com' },
+  { name: 'Chase', domain: 'chase.com' },
+  { name: 'Bank of America', domain: 'bankofamerica.com' },
+  { name: 'Wells Fargo', domain: 'wellsfargo.com' },
+  { name: 'Capital One', domain: 'capitalone.com' },
+  { name: 'American Express', domain: 'americanexpress.com' },
+  { name: 'Discover', domain: 'discover.com' },
+  { name: 'Fidelity', domain: 'fidelity.com' },
+  { name: 'Charles Schwab', domain: 'schwab.com' },
+  { name: 'Vanguard', domain: 'vanguard.com' },
+  { name: 'Robinhood', domain: 'robinhood.com' },
+  { name: 'Coinbase', domain: 'coinbase.com' },
+  { name: 'Binance', domain: 'binance.com' },
+  { name: 'PayPal', domain: 'paypal.com' },
+  { name: 'Venmo', domain: 'venmo.com' },
+  { name: 'Cash App', domain: 'cash.app' },
+  { name: 'Revolut', domain: 'revolut.com' },
+  { name: 'Wise', domain: 'wise.com' },
+  { name: 'Other' },
 ];
 
 function withAlpha(color: string, alpha: number) {
@@ -65,6 +92,8 @@ export default function AccountSettings() {
   const [minPaymentPercent, setMinPaymentPercent] = useState(String(acc?.minPaymentPercent ?? '2.5'));
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showTypeSelector, setShowTypeSelector] = useState(false);
+  const [institutionSheet, setInstitutionSheet] = useState(false);
+  const [institutionQuery, setInstitutionQuery] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [selectedPaymentAccount, setSelectedPaymentAccount] = useState<string>('');
 
@@ -84,13 +113,32 @@ export default function AccountSettings() {
     return (accounts || []).filter(a => a.kind !== 'credit' && a.id !== acc?.id);
   }, [accounts, acc]);
 
+  const filteredInstitutions = useMemo(() => {
+    if (!institutionQuery.trim()) return institutions;
+    const q = institutionQuery.toLowerCase();
+    return institutions.filter((inst) => inst.name.toLowerCase().includes(q));
+  }, [institutionQuery]);
+
+  const bgDefault = get('background.default') as string;
+  const borderSubtle = get('border.subtle') as string;
+
   if (!acc) {
     return (
-      <ScreenScroll inTab contentStyle={{ padding: spacing.s16 }}>
-        <Text style={{ color: text }}>Account not found.</Text>
-      </ScreenScroll>
+      <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: bgDefault }}>
+        <View style={{ padding: spacing.s16 }}>
+          <Text style={{ color: text }}>Account not found.</Text>
+        </View>
+      </SafeAreaView>
     );
   }
+
+  const inputStyle = {
+    color: text,
+    fontSize: 15,
+    textAlign: 'right' as const,
+    flex: 1,
+    paddingVertical: 0,
+  };
 
   async function onSave() {
     const aprNum = parseFloat(apr || '0');
@@ -161,218 +209,449 @@ export default function AccountSettings() {
   const selectedKind = kinds.find(k => k.key === kind);
 
   return (
-    <ScreenScroll inTab contentStyle={{ padding: spacing.s16, paddingBottom: spacing.s32, gap: spacing.s20 }}>
-      {/* Header */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
-        <Pressable
-          onPress={() => nav.goBack()}
-          style={({ pressed }) => ({
-            width: 40,
-            height: 40,
-            borderRadius: radius.lg,
-            backgroundColor: cardBg,
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderWidth: 1,
-            borderColor: outline,
-            opacity: pressed ? 0.6 : 1,
-          })}
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: bgDefault }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, padding: spacing.s16, paddingBottom: spacing.s32, gap: spacing.s20 }}
+          bounces={false}
+          keyboardShouldPersistTaps="handled"
         >
-          <Icon name="chevron-left" size={20} color={text} />
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <Text style={{ color: text, fontSize: 28, fontWeight: '800', letterSpacing: -0.6 }}>
-            Account Settings
-          </Text>
-          <Text style={{ color: muted, fontSize: 14, marginTop: spacing.s4 }}>
-            {name || 'Configure your account'}
-          </Text>
-        </View>
-      </View>
-
-      {/* Basic Info */}
-      <View style={{ gap: spacing.s12 }}>
-        <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>Basic Information</Text>
-        <Input label="Account Name" value={name} onChangeText={setName} placeholder="e.g., Main Checking" />
-        <Input label="Institution" value={institution} onChangeText={setInstitution} placeholder="e.g., DBS Bank" />
-        <Input label="Current Balance" value={balance} onChangeText={setBalance} keyboardType="decimal-pad" />
-        <Input
-          label="Account hint (last 4-6 digits)"
-          value={mask}
-          onChangeText={value => setMask(value.replace(/\D/g, '').slice(0, 6))}
-          keyboardType="number-pad"
-          placeholder="e.g., 1234"
-        />
-      </View>
-
-      {/* Account Type */}
-      <View style={{ gap: spacing.s12 }}>
-        <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>Account Type</Text>
-        <Pressable
-          onPress={() => setShowTypeSelector(true)}
-          style={({ pressed }) => ({
-            padding: spacing.s16,
-            borderRadius: radius.lg,
-            backgroundColor: cardBg,
-            borderWidth: 1,
-            borderColor: outline,
-            opacity: pressed ? 0.7 : 1,
-          })}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
-              <View
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: radius.md,
-                  backgroundColor: withAlpha(accent, 0.15),
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Icon name={selectedKind?.icon as any || 'wallet'} size={20} color={accent} />
-              </View>
-              <View>
-                <Text style={{ color: text, fontWeight: '700' }}>{selectedKind?.title || 'Select type'}</Text>
-                <Text style={{ color: muted, fontSize: 12, marginTop: spacing.s2 }}>
-                  {selectedKind?.caption || 'Tap to select'}
-                </Text>
-              </View>
-            </View>
-            <Icon name="chevron-right" size={18} color={muted} />
-          </View>
-        </Pressable>
-      </View>
-
-      {/* Credit Card Settings */}
-      {kind === 'credit' && (
-        <View style={{ gap: spacing.s12 }}>
-          <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>Credit Card Settings</Text>
-          <Input
-            label="APR (%)"
-            value={apr}
-            onChangeText={setApr}
-            keyboardType="decimal-pad"
-            placeholder="e.g., 18.99"
-          />
-          <Input
-            label="Credit Limit"
-            value={creditLimit}
-            onChangeText={setCreditLimit}
-            keyboardType="decimal-pad"
-            placeholder="e.g., 5000"
-          />
-          <Input
-            label="Minimum Payment (%)"
-            value={minPaymentPercent}
-            onChangeText={setMinPaymentPercent}
-            keyboardType="decimal-pad"
-            placeholder="e.g., 2.5"
-          />
-        </View>
-      )}
-
-      {/* Net Worth Toggle */}
-      <Card style={{ padding: spacing.s16 }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <View style={{ flex: 1, paddingRight: spacing.s12 }}>
-            <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>Include in net worth</Text>
-            <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s4 }}>
-              Turn off if this account shouldn't count toward totals
+          {/* Centered Header */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.s12 }}>
+            <Pressable
+              onPress={() => nav.goBack()}
+              style={({ pressed }) => ({
+                position: 'absolute',
+                left: -spacing.s8,
+                padding: spacing.s8,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? cardBg : 'transparent',
+              })}
+              hitSlop={8}
+            >
+              <Icon name="chevron-left" size={28} color={text} />
+            </Pressable>
+            <Text style={{ color: text, fontSize: 20, fontWeight: '800' }}>
+              Account Settings
             </Text>
           </View>
-          <Switch value={includeInNetWorth} onValueChange={setIncludeInNetWorth} trackColor={{ true: accent }} />
-        </View>
-      </Card>
 
-      {/* Notes */}
-      <View style={{ gap: spacing.s12 }}>
-        <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>Notes</Text>
-        <Input
-          value={note}
-          onChangeText={setNote}
-          multiline
-          placeholder="Optional: planning notes, reminders, or context"
-        />
-      </View>
+          {/* Main Details Card */}
+          <View
+            style={{
+              backgroundColor: cardBg,
+              borderRadius: radius.lg,
+              padding: spacing.s16,
+              gap: spacing.s16,
+            }}
+          >
+            {/* Account Type Row */}
+            <Pressable
+              onPress={() => setShowTypeSelector(true)}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+            >
+              <Text style={{ color: text, fontSize: 15, fontWeight: '600' }}>
+                Account type
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+                <Text style={{ color: text, fontSize: 15 }}>
+                  {selectedKind?.title || 'Select'}
+                </Text>
+                <Icon name="chevron-right" size={20} color={muted} />
+              </View>
+            </Pressable>
 
-      {/* Payment for Credit Cards */}
-      {kind === 'credit' && balanceNumber < 0 && (
-        <View style={{ gap: spacing.s12 }}>
-          <Text style={{ color: text, fontSize: 18, fontWeight: '700' }}>Payment</Text>
-          <Button
-            title={`Make Payment (${formatCurrency(Math.abs(balanceNumber))} owed)`}
-            onPress={() => setShowPaymentModal(true)}
-            icon="credit-card"
-          />
-        </View>
-      )}
+            {/* Divider */}
+            <View style={{ height: 1, backgroundColor: borderSubtle }} />
 
-      {/* Actions */}
-      <View style={{ gap: spacing.s12 }}>
-        <Button title="Save changes" onPress={onSave} />
-        <Button title="Delete account" variant="secondary" onPress={onDelete} />
-      </View>
+            {/* Account Name Row */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: text, fontSize: 15, fontWeight: '600' }}>
+                Account name
+              </Text>
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                placeholder="e.g. DBS Multiplier"
+                placeholderTextColor={muted}
+                style={inputStyle}
+                autoCapitalize="words"
+              />
+            </View>
 
-      {/* Type Selector Bottom Sheet */}
+            {/* Divider */}
+            <View style={{ height: 1, backgroundColor: borderSubtle }} />
+
+            {/* Institution Row */}
+            <Pressable
+              onPress={() => setInstitutionSheet(true)}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+            >
+              <Text style={{ color: text, fontSize: 15, fontWeight: '600' }}>
+                Institution
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+                <Text style={{ color: institution === 'Manual' ? muted : text, fontSize: 15 }}>
+                  {institution || 'Select'}
+                </Text>
+                <Icon name="chevron-right" size={20} color={muted} />
+              </View>
+            </Pressable>
+
+            {/* Divider */}
+            <View style={{ height: 1, backgroundColor: borderSubtle }} />
+
+            {/* Account Hint Row */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: text, fontSize: 15, fontWeight: '600' }}>
+                Account hint
+              </Text>
+              <TextInput
+                value={mask}
+                onChangeText={value => setMask(value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="Last 4-6 digits"
+                placeholderTextColor={muted}
+                style={inputStyle}
+                keyboardType="number-pad"
+              />
+            </View>
+
+            {/* Divider */}
+            <View style={{ height: 1, backgroundColor: borderSubtle }} />
+
+            {/* Current Balance Row */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: text, fontSize: 15, fontWeight: '600' }}>
+                Current balance
+              </Text>
+              <TextInput
+                value={balance}
+                onChangeText={setBalance}
+                placeholder="0"
+                placeholderTextColor={muted}
+                style={inputStyle}
+                keyboardType="decimal-pad"
+              />
+            </View>
+          </View>
+
+          {/* Credit Card Settings */}
+          {kind === 'credit' && (
+            <View
+              style={{
+                backgroundColor: cardBg,
+                borderRadius: radius.lg,
+                padding: spacing.s16,
+                gap: spacing.s16,
+              }}
+            >
+              {/* APR Row */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ color: text, fontSize: 15, fontWeight: '600' }}>
+                  APR (%)
+                </Text>
+                <TextInput
+                  value={apr}
+                  onChangeText={setApr}
+                  placeholder="18.99"
+                  placeholderTextColor={muted}
+                  style={inputStyle}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+
+              {/* Divider */}
+              <View style={{ height: 1, backgroundColor: borderSubtle }} />
+
+              {/* Credit Limit Row */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ color: text, fontSize: 15, fontWeight: '600' }}>
+                  Credit limit
+                </Text>
+                <TextInput
+                  value={creditLimit}
+                  onChangeText={setCreditLimit}
+                  placeholder="5000"
+                  placeholderTextColor={muted}
+                  style={inputStyle}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+
+              {/* Divider */}
+              <View style={{ height: 1, backgroundColor: borderSubtle }} />
+
+              {/* Minimum Payment Row */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ color: text, fontSize: 15, fontWeight: '600' }}>
+                  Min payment (%)
+                </Text>
+                <TextInput
+                  value={minPaymentPercent}
+                  onChangeText={setMinPaymentPercent}
+                  placeholder="2.5"
+                  placeholderTextColor={muted}
+                  style={inputStyle}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            </View>
+          )}
+
+          {/* Settings Card */}
+          <View
+            style={{
+              backgroundColor: cardBg,
+              borderRadius: radius.lg,
+              padding: spacing.s16,
+              gap: spacing.s16,
+            }}
+          >
+            {/* Include in Net Worth Toggle Row */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: text, fontWeight: '600', fontSize: 15 }}>
+                Include in net worth
+              </Text>
+              <Switch value={includeInNetWorth} onValueChange={setIncludeInNetWorth} />
+            </View>
+
+            {/* Divider */}
+            <View style={{ height: 1, backgroundColor: borderSubtle }} />
+
+            {/* Note Row */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: text, fontSize: 15, fontWeight: '600' }}>
+                Note
+              </Text>
+              <TextInput
+                value={note}
+                onChangeText={setNote}
+                placeholder="Optional"
+                placeholderTextColor={muted}
+                style={inputStyle}
+                multiline={false}
+              />
+            </View>
+          </View>
+
+          {/* Payment for Credit Cards */}
+          {kind === 'credit' && balanceNumber < 0 && (
+            <Button
+              title={`Make Payment (${formatCurrency(Math.abs(balanceNumber))} owed)`}
+              onPress={() => setShowPaymentModal(true)}
+              icon="credit-card"
+            />
+          )}
+
+          {/* Actions */}
+          <Button title="Save changes" onPress={onSave} />
+
+          {/* Danger Zone */}
+          <View
+            style={{
+              backgroundColor: cardBg,
+              borderRadius: radius.lg,
+              padding: spacing.s16,
+              borderWidth: 1,
+              borderColor: errorColor,
+            }}
+          >
+            <Pressable
+              onPress={onDelete}
+              style={({ pressed }) => ({
+                opacity: pressed ? 0.6 : 1,
+              })}
+            >
+              <Text style={{ color: errorColor, fontWeight: '600', fontSize: 15, textAlign: 'center' }}>
+                Delete Account
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Account Type Bottom Sheet */}
       <BottomSheet
         visible={showTypeSelector}
         onClose={() => setShowTypeSelector(false)}
       >
-        <View style={{ gap: spacing.s16, paddingBottom: spacing.s16 }}>
-          <Text style={{ color: text, fontSize: 24, fontWeight: '700' }}>
-            Account Type
+        <View style={{ height: '100%' }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: text, textAlign: 'center', marginBottom: spacing.s16 }}>
+            Choose account type
           </Text>
-          <View style={{ gap: spacing.s8 }}>
-            {kinds.map(option => {
-              const active = option.key === kind;
+
+          <ScrollView
+            style={{ flex: 1, marginHorizontal: -spacing.s16 }}
+            contentContainerStyle={{ paddingHorizontal: spacing.s16, paddingBottom: 60 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {kinds.map((type, idx) => {
+              const isSelected = type.key === kind;
               return (
-                <Pressable
-                  key={option.key}
-                  onPress={() => {
-                    setKind(option.key);
-                    setShowTypeSelector(false);
-                  }}
-                  style={({ pressed }) => ({
-                    paddingVertical: spacing.s14,
-                    paddingHorizontal: spacing.s16,
-                    borderRadius: radius.lg,
-                    borderWidth: active ? 2 : 1,
-                    borderColor: active ? accent : outline,
-                    backgroundColor: active ? withAlpha(accent, isDark ? 0.2 : 0.1) : cardBg2,
-                    opacity: pressed ? 0.7 : 1,
-                  })}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
-                    <View
-                      style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: radius.md,
-                        backgroundColor: withAlpha(accent, active ? 0.2 : 0.1),
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Icon name={option.icon as any} size={22} color={accent} />
+                <View key={type.key}>
+                  <Pressable
+                    onPress={() => {
+                      setKind(type.key);
+                      setShowTypeSelector(false);
+                    }}
+                    style={({ pressed }) => ({
+                      paddingVertical: spacing.s12,
+                      paddingHorizontal: spacing.s4,
+                      opacity: pressed ? 0.6 : 1,
+                      backgroundColor: isSelected ? withAlpha(accent, isDark ? 0.15 : 0.08) : 'transparent',
+                      marginHorizontal: -spacing.s16,
+                      paddingLeft: spacing.s16,
+                      paddingRight: spacing.s16,
+                    })}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+                      <View
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: radius.md,
+                          backgroundColor: withAlpha(accent, isDark ? 0.2 : 0.15),
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Icon name={type.icon as any} size={20} color={accent} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: text, fontWeight: '600', fontSize: 15 }}>
+                          {type.title}
+                        </Text>
+                        <Text style={{ color: muted, fontSize: 13, marginTop: 2 }}>
+                          {type.caption}
+                        </Text>
+                      </View>
+                      {isSelected && (
+                        <Icon name="check" size={20} color={accent} />
+                      )}
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>{option.title}</Text>
-                      <Text style={{ color: muted, marginTop: spacing.s4, fontSize: 13 }}>{option.caption}</Text>
-                    </View>
-                    {active && <Icon name="check" size={20} color={accent} />}
-                  </View>
-                </Pressable>
+                  </Pressable>
+                  {idx < kinds.length - 1 && (
+                    <View style={{ height: 1, backgroundColor: borderSubtle }} />
+                  )}
+                </View>
               );
             })}
+          </ScrollView>
+        </View>
+      </BottomSheet>
+
+      {/* Institution Bottom Sheet */}
+      <BottomSheet
+        visible={institutionSheet}
+        onClose={() => {
+          setInstitutionSheet(false);
+          setInstitutionQuery('');
+        }}
+      >
+        <View style={{ height: '100%' }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: text, textAlign: 'center', marginBottom: spacing.s16 }}>
+            Choose institution
+          </Text>
+
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingBottom: spacing.s8,
+              borderBottomWidth: 1,
+              borderBottomColor: borderSubtle,
+            }}
+          >
+            <Icon name="search" size={18} color={muted} />
+            <TextInput
+              value={institutionQuery}
+              onChangeText={setInstitutionQuery}
+              placeholder="Search institutions..."
+              placeholderTextColor={muted}
+              style={{
+                flex: 1,
+                height: 36,
+                color: text,
+                paddingHorizontal: spacing.s12,
+                fontSize: 15,
+              }}
+            />
           </View>
+
+          <ScrollView
+            style={{ flex: 1, marginHorizontal: -spacing.s16 }}
+            contentContainerStyle={{ paddingHorizontal: spacing.s16, paddingBottom: 60 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {filteredInstitutions.map((inst, idx) => {
+              const isSelected = institution === inst.name;
+              return (
+                <View key={inst.name}>
+                  <Pressable
+                    onPress={() => {
+                      setInstitution(inst.name);
+                      setInstitutionSheet(false);
+                    }}
+                    style={({ pressed }) => ({
+                      paddingVertical: spacing.s12,
+                      paddingHorizontal: spacing.s4,
+                      opacity: pressed ? 0.6 : 1,
+                      backgroundColor: isSelected ? withAlpha(accent, isDark ? 0.15 : 0.08) : 'transparent',
+                      marginHorizontal: -spacing.s16,
+                      paddingLeft: spacing.s16,
+                      paddingRight: spacing.s16,
+                    })}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+                      {inst.domain ? (
+                        <View
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: radius.md,
+                            backgroundColor: isDark ? '#FFFFFF' : '#F3F4F6',
+                            padding: 6,
+                          }}
+                        >
+                          <Image
+                            source={{ uri: `https://www.google.com/s2/favicons?domain=${inst.domain}&sz=128` }}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                            }}
+                            resizeMode="contain"
+                          />
+                        </View>
+                      ) : (
+                        <View
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: radius.md,
+                            backgroundColor: withAlpha(muted, 0.2),
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Icon name="building-2" size={20} color={muted} />
+                        </View>
+                      )}
+                      <Text style={{ color: text, fontWeight: '600', fontSize: 15, flex: 1 }}>
+                        {inst.name}
+                      </Text>
+                      {isSelected && (
+                        <Icon name="check" size={20} color={accent} />
+                      )}
+                    </View>
+                  </Pressable>
+                  {idx < filteredInstitutions.length - 1 && (
+                    <View style={{ height: 1, backgroundColor: borderSubtle }} />
+                  )}
+                </View>
+              );
+            })}
+          </ScrollView>
         </View>
       </BottomSheet>
 
@@ -505,6 +784,6 @@ export default function AccountSettings() {
           </View>
         </View>
       </Modal>
-    </ScreenScroll>
+    </SafeAreaView>
   );
 }

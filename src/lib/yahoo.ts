@@ -5,6 +5,15 @@
 
 export type YahooBar = { date: number; open: number; high: number; low: number; close: number; volume: number };
 
+export type YahooChartResult = {
+  bars: YahooBar[];
+  meta?: {
+    longName?: string;
+    shortName?: string;
+    currency?: string;
+  };
+};
+
 export function toYahooSymbol(userSymbol: string): string {
   if (!userSymbol) return '';
   // Keep ^ prefix for indices (^GSPC, ^DJI, etc.)
@@ -29,9 +38,10 @@ async function fetchJson(url: string): Promise<any> {
   return await res.json();
 }
 
-function chartToBars(json: any): YahooBar[] {
+function chartToBars(json: any): YahooChartResult {
   const r = json?.chart?.result?.[0];
-  if (!r || !Array.isArray(r.timestamp)) return [];
+  if (!r || !Array.isArray(r.timestamp)) return { bars: [] };
+
   const ts: number[] = r.timestamp;
   const q = r.indicators?.quote?.[0] || {};
   const opens = q.open || [];
@@ -39,10 +49,11 @@ function chartToBars(json: any): YahooBar[] {
   const lows  = q.low  || [];
   const closes= q.close|| [];
   const vols  = q.volume||[];
-  const out: YahooBar[] = [];
+  const bars: YahooBar[] = [];
+
   for (let i=0; i<ts.length; i++) {
     const c = Number((closes[i] ?? 0) || 0);
-    out.push({
+    bars.push({
       date: (ts[i] || 0) * 1000,
       open: Number(opens[i] ?? c ?? 0) || 0,
       high: Number(highs[i] ?? c ?? 0) || 0,
@@ -51,7 +62,18 @@ function chartToBars(json: any): YahooBar[] {
       volume: Number(vols[i] ?? 0) || 0,
     });
   }
-  return out.filter(b => b.close > 0);
+
+  // Extract metadata (company name, currency, etc.)
+  const meta = {
+    longName: r.meta?.longName,
+    shortName: r.meta?.shortName,
+    currency: r.meta?.currency,
+  };
+
+  return {
+    bars: bars.filter(b => b.close > 0),
+    meta,
+  };
 }
 
 function sparkToBars(json: any): YahooBar[] {
@@ -68,29 +90,29 @@ function sparkToBars(json: any): YahooBar[] {
   return out;
 }
 
-export async function fetchDailyHistoryYahoo(userSymbol: string, range: '1y'|'2y'|'5y'|'max' = '5y'): Promise<YahooBar[]> {
+export async function fetchDailyHistoryYahoo(userSymbol: string, range: '1y'|'2y'|'5y'|'max' = '5y'): Promise<YahooChartResult> {
   const sym = toYahooSymbol(userSymbol);
   if (!sym) throw new Error('Bad symbol');
 
   // 1) query1 chart
   try {
     const j1 = await fetchJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=1d&includePrePost=false`);
-    const b1 = chartToBars(j1);
-    if (b1.length) return b1;
+    const result = chartToBars(j1);
+    if (result.bars.length) return result;
   } catch {}
 
   // 2) query2 chart
   try {
     const j2 = await fetchJson(`https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=1d&includePrePost=false`);
-    const b2 = chartToBars(j2);
-    if (b2.length) return b2;
+    const result = chartToBars(j2);
+    if (result.bars.length) return result;
   } catch {}
 
-  // 3) spark fallback
+  // 3) spark fallback (no metadata available)
   try {
     const s = await fetchJson(`https://query2.finance.yahoo.com/v7/finance/spark?symbols=${encodeURIComponent(sym)}&range=${range}&interval=1d`);
     const bs = sparkToBars(s);
-    if (bs.length) return bs;
+    if (bs.length) return { bars: bs };
   } catch {}
 
   throw new Error('Yahoo failed');

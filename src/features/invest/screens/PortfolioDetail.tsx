@@ -48,6 +48,7 @@ export default function PortfolioDetail() {
   const [showFilterSheet, setShowFilterSheet] = React.useState(false);
   const [showSortSheet, setShowSortSheet] = React.useState(false);
   const [menuVisible, setMenuVisible] = React.useState(false);
+  const [showClosedPositions, setShowClosedPositions] = React.useState(false);
   const [menuAnchor, setMenuAnchor] = React.useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const menuBtnRef = React.useRef<View>(null);
 
@@ -205,6 +206,60 @@ export default function PortfolioDetail() {
 
     return holdings;
   }, [summary, filterQuery, minWeight, sortKey, sortDir, p, quotes]);
+
+  // Closed positions: holdings with qty = 0 but have transaction history
+  const closedPositions = React.useMemo(() => {
+    if (!p) return [] as Array<{ sym: string; realizedPnL: number; realizedPct: number }>;
+
+    const closed: Array<{ sym: string; realizedPnL: number; realizedPct: number }> = [];
+    const base = (p.baseCurrency || 'USD').toUpperCase();
+
+    Object.values(p.holdings || {}).forEach((h: any) => {
+      if (!h) return;
+      const lots = h.lots || [];
+      if (lots.length === 0) return;
+
+      const qty = lots.reduce((acc: number, lot: any) => acc + (lot.side === 'buy' ? lot.qty : -lot.qty), 0);
+      if (qty > 0) return; // Skip open positions
+
+      const sym = h.symbol;
+
+      // Get ticker currency
+      let holdingCurrency = h.currency || 'USD';
+      holdingCurrency = String(holdingCurrency).toUpperCase();
+
+      // Convert lot prices for P&L calculation
+      const normalizedLots = lots.map((l: any) => ({
+        ...l,
+        price: convertCurrency(fxRates, l.price || 0, holdingCurrency, base),
+        fee: convertCurrency(fxRates, (l.fee ?? l.fees) || 0, holdingCurrency, base)
+      }));
+
+      // For closed positions, use last known price from the final sell
+      const lastSell = lots.filter((l: any) => l.side === 'sell').sort((a: any, b: any) =>
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      )[0];
+      const lastPrice = lastSell ? convertCurrency(fxRates, lastSell.price, holdingCurrency, base) : 0;
+
+      const pnl = computePnL(normalizedLots, lastPrice);
+      const realizedPnL = pnl.realized || 0;
+
+      // Calculate realized % based on cost basis
+      let totalCost = 0;
+      lots.forEach((lot: any) => {
+        const lotPrice = convertCurrency(fxRates, lot.price || 0, holdingCurrency, base);
+        if (lot.side === 'buy') {
+          totalCost += lot.qty * lotPrice;
+        }
+      });
+
+      const realizedPct = totalCost > 0 ? (realizedPnL / totalCost) * 100 : 0;
+
+      closed.push({ sym, realizedPnL, realizedPct });
+    });
+
+    return closed.sort((a, b) => b.realizedPnL - a.realizedPnL);
+  }, [p, fxRates]);
 
   if (!p || !summary) {
     return (
@@ -806,24 +861,119 @@ export default function PortfolioDetail() {
             )
           ) : viewMode === 'holdings' ? (
             // Holdings View
-            filteredAndSortedHoldings.length > 0 ? (
-              filteredAndSortedHoldings.map((sym, index) => (
-                <View key={sym}>
-                  <HoldingRow sym={sym} portfolioId={portfolioId} variant="list" />
-                  {index < filteredAndSortedHoldings.length - 1 && (
-                    <View style={{ height: 1, backgroundColor: withAlpha(border, 0.3), marginHorizontal: spacing.s12 }} />
+            <View>
+              {filteredAndSortedHoldings.length > 0 ? (
+                filteredAndSortedHoldings.map((sym, index) => (
+                  <View key={sym}>
+                    <HoldingRow sym={sym} portfolioId={portfolioId} variant="list" />
+                    {index < filteredAndSortedHoldings.length - 1 && (
+                      <View style={{ height: 1, backgroundColor: withAlpha(border, 0.3), marginHorizontal: spacing.s12 }} />
+                    )}
+                  </View>
+                ))
+              ) : (
+                <View style={{ padding: spacing.s24, alignItems: 'center', gap: spacing.s8 }}>
+                  <Icon name="briefcase" size={48} color={textMuted} />
+                  <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>No holdings yet</Text>
+                  <Text style={{ color: textMuted, fontSize: 14, textAlign: 'center' }}>
+                    Add your first position by tapping a ticker from the watchlist or search for a stock to buy
+                  </Text>
+                </View>
+              )}
+
+              {/* Closed Positions Section */}
+              {closedPositions.length > 0 && (
+                <View style={{ marginTop: spacing.s16 }}>
+                  <Pressable
+                    onPress={() => setShowClosedPositions(!showClosedPositions)}
+                    style={({ pressed }) => ({
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      paddingVertical: spacing.s12,
+                      paddingHorizontal: spacing.s12,
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+                      <Icon
+                        name={showClosedPositions ? 'chevron-down' : 'chevron-right'}
+                        size={20}
+                        color={textMuted}
+                      />
+                      <Text style={{ color: textMuted, fontSize: 14, fontWeight: '600' }}>
+                        Closed Positions ({closedPositions.length})
+                      </Text>
+                    </View>
+                    <Text style={{ color: textMuted, fontSize: 12 }}>
+                      Realized P&L
+                    </Text>
+                  </Pressable>
+
+                  {showClosedPositions && (
+                    <View>
+                      {closedPositions.map((pos, index) => (
+                        <View key={pos.sym}>
+                          <Pressable
+                            onPress={() => {}}
+                            style={({ pressed }) => ({
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              paddingVertical: spacing.s14,
+                              paddingHorizontal: spacing.s12,
+                              opacity: pressed ? 0.7 : 1,
+                            })}
+                          >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+                              <View style={{
+                                width: 36,
+                                height: 36,
+                                borderRadius: 18,
+                                backgroundColor: cardBg,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}>
+                                <Text style={{ color: textMuted, fontSize: 14, fontWeight: '700' }}>
+                                  {pos.sym.slice(0, 2)}
+                                </Text>
+                              </View>
+                              <View>
+                                <Text style={{ color: textMuted, fontSize: 14, fontWeight: '700' }}>
+                                  {pos.sym}
+                                </Text>
+                                <Text style={{ color: textMuted, fontSize: 11 }}>
+                                  Closed
+                                </Text>
+                              </View>
+                            </View>
+
+                            <View style={{ alignItems: 'flex-end' }}>
+                              <Text style={{
+                                color: pos.realizedPnL >= 0 ? successColor : dangerColor,
+                                fontSize: 14,
+                                fontWeight: '700',
+                              }}>
+                                {pos.realizedPnL >= 0 ? '+' : ''}{formatCurrency(pos.realizedPnL, summary?.base || 'USD')}
+                              </Text>
+                              <Text style={{
+                                color: pos.realizedPnL >= 0 ? successColor : dangerColor,
+                                fontSize: 12,
+                              }}>
+                                {pos.realizedPct >= 0 ? '+' : ''}{pos.realizedPct.toFixed(2)}%
+                              </Text>
+                            </View>
+                          </Pressable>
+                          {index < closedPositions.length - 1 && (
+                            <View style={{ height: 1, backgroundColor: withAlpha(border, 0.3), marginLeft: spacing.s12 }} />
+                          )}
+                        </View>
+                      ))}
+                    </View>
                   )}
                 </View>
-              ))
-            ) : (
-              <View style={{ padding: spacing.s24, alignItems: 'center', gap: spacing.s8 }}>
-                <Icon name="briefcase" size={48} color={textMuted} />
-                <Text style={{ color: textPrimary, fontSize: 16, fontWeight: '700' }}>No holdings yet</Text>
-                <Text style={{ color: textMuted, fontSize: 14, textAlign: 'center' }}>
-                  Add your first position by tapping a ticker from the watchlist or search for a stock to buy
-                </Text>
-              </View>
-            )
+              )}
+            </View>
           ) : (
             // Cash View
             <View style={{ padding: spacing.s24, alignItems: 'center', gap: spacing.s16 }}>

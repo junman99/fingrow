@@ -11,6 +11,7 @@ import { useInvestStore } from '../store/invest';
 import { formatCurrency } from '../../../lib/format';
 import { useProfileStore } from '../../../store/profile';
 import { useNavigation } from '@react-navigation/native';
+import { useTabBarScroll } from '../../../contexts/TabBarScrollContext';
 import LineChart from '../../../components/LineChart';
 import { computePnL } from '../../../lib/positions';
 import { convertCurrency } from '../../../lib/fx';
@@ -121,10 +122,16 @@ export const Invest = React.memo(() => {
   const activePortfolioId = useInvestStore(state => state.activePortfolioId);
   const { profile } = useProfileStore();
 
+  // Tab bar scroll context for auto-hide
+  const { scrollY: tabBarScrollY, contentHeight, layoutHeight } = useTabBarScroll();
+
   // Main Tab Title Animation
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler((event) => {
     scrollY.value = event.contentOffset.y;
+    tabBarScrollY.value = event.contentOffset.y;
+    contentHeight.value = event.contentSize.height;
+    layoutHeight.value = event.layoutMeasurement.height;
   });
 
   // Get invest currency from profile (fallback to primary currency)
@@ -993,7 +1000,7 @@ export const Invest = React.memo(() => {
         scrollEventThrottle={16}
         contentStyle={{
           paddingTop: insets.top + spacing.s16,
-          paddingBottom: spacing.s32,
+          paddingBottom: 68 + Math.max(insets.bottom, 20) + 16 + spacing.s32,
         }}
       >
       <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12 }}>

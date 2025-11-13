@@ -11,6 +11,7 @@ import { baseCryptoSymbol, fetchYahooCryptoOhlc } from '../../../lib/yahoo-crypt
 import { fetchDailyHistoryYahoo } from '../../../lib/yahoo';
 import { useInvestStore } from '../store';
 import { useProfileStore } from '../../../store/profile';
+import { formatPrice } from '../../../lib/formatPrice';
 
 type Item = { key: string; symbol: string; provider: 'Yahoo'|'CoinGecko' };
 
@@ -291,7 +292,7 @@ export default function AddHoldingSheet({ visible, onClose, portfolioId, mode='h
                     {/* Price (right) */}
                     <View style={{ minWidth: 90, alignItems: 'flex-end' }}>
                       <Text style={{ color: text, fontWeight: '700' }}>
-                        {price == null ? (loading ? '...' : '—') : `${price.toFixed(2)}`}
+                        {price == null ? (loading ? '...' : '—') : formatPrice(price, 'USD').replace(/[^\d,.-]/g, '')}
                       </Text>
                     </View>
                   </View>

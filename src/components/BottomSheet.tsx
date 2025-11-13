@@ -20,7 +20,7 @@ export default function BottomSheet({ visible, onClose, children, height, dimmed
   const insets = useSafeAreaInsets();
   const screenH = Dimensions.get('window').height;
   const maxH = Math.max(0, screenH - insets.top - 8);
-  const desired = fullHeight ? maxH : (height || Math.round(screenH * 0.5));
+  const desired = fullHeight ? maxH : (height || Math.round(screenH * 0.7));
   const SHEET_H = Math.min(desired, maxH);
   const CLOSED_Y = SHEET_H + 24; // offscreen
   const MID_Y = SHEET_H * 0.48;

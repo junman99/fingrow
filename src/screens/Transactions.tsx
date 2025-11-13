@@ -602,7 +602,7 @@ export const Transactions: React.FC = () => {
           <FlatList
           data={sectionsRaw}
           keyExtractor={(s) => s.key}
-          bounces={false}
+          bounces={true}
           onScroll={(event) => {
             scrollY.value = event.nativeEvent.contentOffset.y;
           }}

@@ -5,8 +5,13 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
+  useAnimatedScrollHandler,
+  interpolate,
+  Extrapolate,
 } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenScroll } from '../components/ScreenScroll';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
@@ -141,6 +146,7 @@ const CollapsibleSection: React.FC<{
 
 const DebtsList: React.FC = () => {
   const nav = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const { get, isDark } = useThemeTokens();
   const { items: debts, hydrate: hydrateDebts } = useDebtsStore();
   const { accounts } = useAccountsStore();
@@ -156,6 +162,58 @@ const DebtsList: React.FC = () => {
   const border = get('border.subtle') as string;
   const warningColor = get('semantic.warning') as string;
   const errorColor = get('semantic.error') as string;
+  const bgDefault = get('background.default') as string;
+
+  // Main Tab Title Animation
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+
+  // Original title animation (fades out)
+  const originalTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: 1 - progress,
+    };
+  });
+
+  // Floating title animation (fades in)
+  const floatingTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
+  // Gradient background animation
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
 
   const debtsList = debts || [];
 
@@ -332,39 +390,99 @@ const DebtsList: React.FC = () => {
   };
 
   return (
-    <ScreenScroll
-      inTab
-      contentStyle={{ padding: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s32, gap: spacing.s20 }}
-    >
-      {/* Header */}
-      <Animated.View style={[{ gap: spacing.s8 }, fadeStyle]}>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8 }}>
-          <Pressable
-            onPress={() => nav.goBack()}
-            style={({ pressed }) => ({
-              padding: spacing.s8,
-              marginLeft: -spacing.s8,
-              marginTop: -spacing.s4,
-              borderRadius: radius.md,
-              backgroundColor: pressed ? cardBg : 'transparent',
-            })}
-            hitSlop={8}
+    <>
+      {/* Main Tab Title Animation - Floating Gradient Header */}
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            pointerEvents: 'none',
+          },
+          gradientAnimatedStyle,
+        ]}
+      >
+        <LinearGradient
+          colors={[
+            bgDefault,
+            bgDefault,
+            withAlpha(bgDefault, 0.95),
+            withAlpha(bgDefault, 0.8),
+            withAlpha(bgDefault, 0.5),
+            withAlpha(bgDefault, 0)
+          ]}
+          style={{
+            paddingTop: insets.top + spacing.s16,
+            paddingBottom: spacing.s32 + spacing.s20,
+            paddingHorizontal: spacing.s16,
+          }}
+        >
+          <Animated.Text
+            style={[
+              {
+                color: text,
+                fontSize: 20,
+                fontWeight: '700',
+                letterSpacing: -0.5,
+                textAlign: 'center',
+              },
+              floatingTitleAnimatedStyle,
+            ]}
           >
-            <Icon name="chevron-left" size={28} color={text} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: muted, fontSize: 14, fontWeight: '600' }}>
-              Your Debts
-            </Text>
-            <Text style={{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.8, marginTop: spacing.s2 }}>
-              Debt Overview
-            </Text>
-            <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s4 }}>
-              Track and manage your debt payoff journey
-            </Text>
-          </View>
-        </View>
+            Debt Overview
+          </Animated.Text>
+        </LinearGradient>
       </Animated.View>
+
+      <ScreenScroll
+        inTab
+        fullScreen
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        contentStyle={{
+          paddingHorizontal: spacing.s16,
+          paddingTop: insets.top + spacing.s24,
+          paddingBottom: 68 + Math.max(insets.bottom, 20) + 16 + spacing.s32,
+          gap: spacing.s20,
+        }}
+      >
+        {/* Header */}
+        <Animated.View style={[{ gap: spacing.s8 }, fadeStyle]}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8, marginBottom: spacing.s8 }}>
+            <Pressable
+              onPress={() => nav.goBack()}
+              style={({ pressed }) => ({
+                padding: spacing.s8,
+                marginLeft: -spacing.s8,
+                marginTop: -spacing.s4,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? cardBg : 'transparent',
+              })}
+              hitSlop={8}
+            >
+              <Icon name="chevron-left" size={28} color={text} />
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Animated.Text
+                style={[
+                  {
+                    color: text,
+                    fontSize: 28,
+                    fontWeight: '800',
+                    letterSpacing: -0.5,
+                    marginTop: spacing.s2,
+                  },
+                  originalTitleAnimatedStyle,
+                ]}
+              >
+                Debt Overview
+              </Animated.Text>
+            </View>
+          </View>
+        </Animated.View>
 
       {/* Summary Card */}
       <Animated.View style={fadeStyle}>
@@ -445,7 +563,7 @@ const DebtsList: React.FC = () => {
               </View>
               <Button
                 title="Add debt"
-                onPress={() => nav.navigate('AddDebt')}
+                onPress={() => nav.navigate('AddAccount', { context: 'debt' })}
                 style={{ width: '100%' }}
               />
             </View>
@@ -501,7 +619,7 @@ const DebtsList: React.FC = () => {
         <View style={{ gap: spacing.s8 }}>
           <Button
             title="Add debt"
-            onPress={() => nav.navigate('AddDebt')}
+            onPress={() => nav.navigate('AddAccount', { context: 'debt' })}
             variant="secondary"
             icon="plus"
           />
@@ -516,6 +634,7 @@ const DebtsList: React.FC = () => {
         </View>
       </Animated.View>
     </ScreenScroll>
+    </>
   );
 };
 

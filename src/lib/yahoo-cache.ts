@@ -6,7 +6,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchDailyHistoryYahoo, fetchYahooFundamentals, YahooBar, YahooFundamentals } from './yahoo';
+import { fetchDailyHistoryYahoo, fetchYahooFundamentals, YahooBar, YahooFundamentals, YahooChartResult } from './yahoo';
 
 const HISTORICAL_CACHE_PREFIX = 'fingrow/yahoo/historical/';
 const PRICE_CACHE_PREFIX = 'fingrow/yahoo/price/';
@@ -18,6 +18,7 @@ export type HistoricalCache = {
   symbol: string;
   bars: YahooBar[];
   fundamentals?: YahooFundamentals | null;
+  companyName?: string;
   timestamp: number;
 };
 
@@ -58,17 +59,18 @@ async function getCachedHistorical(symbol: string): Promise<HistoricalCache | nu
 /**
  * Save historical data to cache
  */
-async function setCachedHistorical(symbol: string, bars: YahooBar[], fundamentals?: YahooFundamentals | null): Promise<void> {
+async function setCachedHistorical(symbol: string, bars: YahooBar[], fundamentals?: YahooFundamentals | null, companyName?: string): Promise<void> {
   try {
     const key = `${HISTORICAL_CACHE_PREFIX}${symbol}`;
     const cache: HistoricalCache = {
       symbol,
       bars,
       fundamentals,
+      companyName,
       timestamp: Date.now(),
     };
     await AsyncStorage.setItem(key, JSON.stringify(cache));
-    console.log(`📊 [Yahoo Cache] 💾 Cached historical for ${symbol} (${bars.length} bars)`);
+    console.log(`📊 [Yahoo Cache] 💾 Cached historical for ${symbol} (${bars.length} bars)${companyName ? ` - ${companyName}` : ''}`);
   } catch (error) {
     console.error(`📊 [Yahoo Cache] Error writing historical cache for ${symbol}:`, error);
   }
@@ -126,19 +128,22 @@ async function setCachedPrice(symbol: string, price: number, change: number, cha
 export async function fetchHistoricalWithCache(
   symbol: string,
   range: '1y' | '2y' | '5y' | 'max' = '5y'
-): Promise<{ bars: YahooBar[]; fundamentals?: YahooFundamentals | null; fromCache: boolean }> {
+): Promise<{ bars: YahooBar[]; fundamentals?: YahooFundamentals | null; companyName?: string; fromCache: boolean }> {
   // Check cache first
   const cached = await getCachedHistorical(symbol);
   if (cached) {
-    return { bars: cached.bars, fundamentals: cached.fundamentals, fromCache: true };
+    return { bars: cached.bars, fundamentals: cached.fundamentals, companyName: cached.companyName, fromCache: true };
   }
 
   // Cache miss - fetch from Yahoo
   console.log(`📊 [Yahoo Cache] Fetching fresh historical for ${symbol}...`);
 
   try {
-    const bars = await fetchDailyHistoryYahoo(symbol, range);
+    const result = await fetchDailyHistoryYahoo(symbol, range);
     let fundamentals: YahooFundamentals | null = null;
+
+    // Extract company name from chart metadata
+    const companyName = result.meta?.longName || result.meta?.shortName;
 
     // Only fetch fundamentals for stocks (not crypto, FX, etc.)
     if (!symbol.includes('=X') && !symbol.includes('-USD')) {
@@ -150,16 +155,16 @@ export async function fetchHistoricalWithCache(
     }
 
     // Save to cache
-    await setCachedHistorical(symbol, bars, fundamentals);
+    await setCachedHistorical(symbol, result.bars, fundamentals, companyName);
 
-    return { bars, fundamentals, fromCache: false };
+    return { bars: result.bars, fundamentals, companyName, fromCache: false };
   } catch (error) {
     console.error(`📊 [Yahoo Cache] Failed to fetch historical for ${symbol}:`, error);
 
     // If we have stale cache, return it anyway (better than nothing)
     if (cached) {
       console.log(`📊 [Yahoo Cache] ⚠️ Using stale cache for ${symbol} as fallback`);
-      return { bars: cached.bars, fundamentals: cached.fundamentals, fromCache: true };
+      return { bars: cached.bars, fundamentals: cached.fundamentals, companyName: cached.companyName, fromCache: true };
     }
 
     throw error;
@@ -181,14 +186,14 @@ export async function fetchPriceWithCache(symbol: string): Promise<{ price: numb
   console.log(`💰 [Yahoo Cache] Fetching fresh price for ${symbol}...`);
 
   try {
-    const bars = await fetchDailyHistoryYahoo(symbol, '1y');
+    const result = await fetchDailyHistoryYahoo(symbol, '1y');
 
-    if (!bars || bars.length === 0) {
+    if (!result.bars || result.bars.length === 0) {
       throw new Error('No price data available');
     }
 
-    const lastBar = bars[bars.length - 1];
-    const prevBar = bars.length > 1 ? bars[bars.length - 2] : lastBar;
+    const lastBar = result.bars[result.bars.length - 1];
+    const prevBar = result.bars.length > 1 ? result.bars[result.bars.length - 2] : lastBar;
 
     const price = lastBar.close;
     const prevClose = prevBar.close;

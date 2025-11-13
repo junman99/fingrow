@@ -19,6 +19,7 @@ import { useAccountsStore } from '../store/accounts';
 import { useInvestStore } from '../features/invest';
 import { formatCurrency } from '../lib/format';
 import { useNavigation } from '@react-navigation/native';
+import { useTabBarScroll } from '../contexts/TabBarScrollContext';
 import { useRecurringStore, computeNextDue, Recurring } from '../store/recurring';
 import { usePlansStore } from '../store/plans';
 import { useDebtsStore } from '../store/debts';
@@ -303,10 +304,16 @@ const Money: React.FC = () => {
   const [showDebtsSheet, setShowDebtsSheet] = useState(false);
   const [showWealthJourney, setShowWealthJourney] = useState(false);
 
+  // Tab bar scroll context for auto-hide
+  const { scrollY: tabBarScrollY, contentHeight, layoutHeight } = useTabBarScroll();
+
   // Main Tab Title Animation
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler((event) => {
     scrollY.value = event.contentOffset.y;
+    tabBarScrollY.value = event.contentOffset.y;
+    contentHeight.value = event.contentSize.height;
+    layoutHeight.value = event.layoutMeasurement.height;
   });
   const { accounts, hydrate: hydrateAcc } = useAccountsStore();
   const { holdings, quotes, hydrate: hydrateInvest } = useInvestStore();
@@ -707,7 +714,7 @@ const Money: React.FC = () => {
   if (accountsList.length === 0) {
     insights.push({
       message: 'Add your first account to start tracking your finances',
-      action: { label: 'Add account', onPress: () => nav.navigate('AddAccount') },
+      action: { label: 'Add account', onPress: () => nav.navigate('AddAccount', { context: 'asset' }) },
     });
   } else if (runwayDays < 30 && runwayDays > 0) {
     insights.push({
@@ -840,7 +847,7 @@ const Money: React.FC = () => {
         contentStyle={{
           paddingHorizontal: 0,
           paddingTop: insets.top + spacing.s24,
-          paddingBottom: spacing.s32,
+          paddingBottom: 68 + Math.max(insets.bottom, 20) + 16 + spacing.s32, // Floating tab bar (68) + bottom padding + gap + extra space
           gap: spacing.s16,
         }}
       >
@@ -1111,7 +1118,7 @@ const Money: React.FC = () => {
         <Text style={{ color: text, fontSize: 16, fontWeight: '700' }}>Quick access</Text>
         <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
           <Pressable
-            onPress={() => nav.navigate('AddAccount')}
+            onPress={() => nav.navigate('AddAccount', { context: 'asset' })}
             style={({ pressed }) => ({
               flex: 1,
               backgroundColor: cardBg,
@@ -1223,7 +1230,7 @@ const Money: React.FC = () => {
               </Text>
               <Button
                 title="Add account"
-                onPress={() => closeSheetThen(setShowAccountsSheet, () => nav.navigate('AddAccount'), { immediate: true })}
+                onPress={() => closeSheetThen(setShowAccountsSheet, () => nav.navigate('AddAccount', { context: 'asset' }), { immediate: true })}
               />
             </Card>
           ) : (
@@ -1283,7 +1290,7 @@ const Money: React.FC = () => {
               })}
               <Button
                 title="Add account"
-                onPress={() => closeSheetThen(setShowAccountsSheet, () => nav.navigate('AddAccount'), { immediate: true })}
+                onPress={() => closeSheetThen(setShowAccountsSheet, () => nav.navigate('AddAccount', { context: 'asset' }), { immediate: true })}
                 variant="secondary"
                 style={{ marginTop: spacing.s8 }}
               />

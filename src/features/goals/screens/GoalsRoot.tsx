@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
+import { useTabBarScroll } from '../../../contexts/TabBarScrollContext';
 import { ScreenScroll } from '../../../components/ScreenScroll';
 import Icon from '../../../components/Icon';
 import { useThemeTokens } from '../../../theme/ThemeProvider';
@@ -121,10 +122,16 @@ const GoalsRoot: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('milestone');
   const [showWealthJourney, setShowWealthJourney] = useState(false);
 
+  // Tab bar scroll context for auto-hide
+  const { scrollY: tabBarScrollY, contentHeight, layoutHeight } = useTabBarScroll();
+
   // Main Tab Title Animation
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler((event) => {
     scrollY.value = event.contentOffset.y;
+    tabBarScrollY.value = event.contentOffset.y;
+    contentHeight.value = event.contentSize.height;
+    layoutHeight.value = event.layoutMeasurement.height;
   });
 
   useEffect(() => {
@@ -682,7 +689,7 @@ const GoalsRoot: React.FC = () => {
         contentStyle={{
           paddingHorizontal: 0,
           paddingTop: insets.top + spacing.s24,
-          paddingBottom: Math.max(insets.bottom, spacing.s24),
+          paddingBottom: 68 + Math.max(insets.bottom, 20) + 16 + spacing.s24,
         }}
       >
       <View style={{ paddingHorizontal: spacing.s16, gap: spacing.s16 }}>

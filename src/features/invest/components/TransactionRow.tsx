@@ -6,6 +6,7 @@ import { useThemeTokens } from '../../../theme/ThemeProvider';
 import { spacing, radius } from '../../../theme/tokens';
 import Icon from '../../../components/Icon';
 import { useInvestStore } from '../store';
+import { formatPrice } from '../../../lib/formatPrice';
 
 type Lot = { id: string; side: 'buy'|'sell'; qty: number; price: number; date: string; fees?: number };
 type Props = {
@@ -147,14 +148,14 @@ export default function TransactionRow({ lot, currency, symbol, onEdit, onDelete
               </Text>
             </View>
             <Text style={{ color: muted, fontSize: 13 }}>
-              {lot.qty} shares @ {Intl.NumberFormat(undefined, { style:'currency', currency }).format(lot.price)}
+              {lot.qty} shares @ {formatPrice(lot.price, currency)}
             </Text>
           </View>
 
           {/* Right: Total Value, Date */}
           <View style={{ alignItems:'flex-end', gap: spacing.s4, marginLeft: spacing.s8 }}>
             <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>
-              {Intl.NumberFormat(undefined, { style:'currency', currency }).format(totalValue)}
+              {formatPrice(totalValue, currency)}
             </Text>
             <Text style={{ color: muted, fontSize: 12 }}>
               {formatDate(lot.date)}

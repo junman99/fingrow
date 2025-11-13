@@ -7,6 +7,7 @@ import { spacing, radius } from '../../../theme/tokens';
 import { useInvestStore } from '../store';
 import { useProfileStore } from '../../../store/profile';
 import { formatCurrency, formatPercent } from '../../../lib/format';
+import { formatPrice } from '../../../lib/formatPrice';
 import { convertCurrency } from '../../../lib/fx';
 import { TickerLogo } from '../../../components/TickerLogo';
 
@@ -120,7 +121,7 @@ export default function WatchRow({ sym, onPress, portfolioCurrency }: { sym: str
         <View style={{ alignItems: 'flex-end', gap: spacing.s2 }}>
           <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
             <Text style={{ color: text, fontWeight: '700', fontSize: 15 }}>
-              {formatCurrency(last, cur).replace(/[^\d,.-]/g, '')}
+              {formatPrice(last, cur).replace(/[^\d,.-]/g, '')}
             </Text>
             <Text style={{ color: muted, fontSize: 11, marginLeft: 3, fontWeight: '600' }}>
               {cur}

@@ -13,13 +13,36 @@ function preferredCurrency() {
 export function formatCurrency(
   amount: number,
   currency?: string,
-  opts?: { compact?: boolean; forceDecimals?: boolean }
+  opts?: { compact?: boolean; forceDecimals?: boolean; dynamicPrecision?: boolean }
 ): string {
   const code = (currency || preferredCurrency() || 'USD').toUpperCase();
   const compact = !!opts?.compact;
-  // Always show 2 decimal places unless compact mode is enabled
-  const minimumFractionDigits = compact ? 0 : 2;
-  const maximumFractionDigits = compact ? 2 : 2;
+  const useDynamicPrecision = !!opts?.dynamicPrecision;
+
+  // Dynamic precision based on amount magnitude (for prices like crypto)
+  let minimumFractionDigits = 2;
+  let maximumFractionDigits = 2;
+
+  if (useDynamicPrecision) {
+    const absAmount = Math.abs(amount);
+    if (absAmount >= 1) {
+      minimumFractionDigits = 2;
+      maximumFractionDigits = 2;
+    } else if (absAmount >= 0.01) {
+      minimumFractionDigits = 4;
+      maximumFractionDigits = 4;
+    } else if (absAmount >= 0.0001) {
+      minimumFractionDigits = 6;
+      maximumFractionDigits = 6;
+    } else {
+      minimumFractionDigits = 8;
+      maximumFractionDigits = 8;
+    }
+  } else if (compact) {
+    minimumFractionDigits = 0;
+    maximumFractionDigits = 2;
+  }
+
   try {
     const nf = new Intl.NumberFormat(undefined, {
       style: 'currency',
@@ -33,7 +56,7 @@ export function formatCurrency(
     return nf.format(amount);
   } catch {
     // Fallback
-    const rounded = compact ? Math.round(amount).toString() : amount.toFixed(2);
+    const rounded = compact ? Math.round(amount).toString() : amount.toFixed(maximumFractionDigits);
     return `${code} ${rounded}`;
   }
 }

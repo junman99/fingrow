@@ -5,8 +5,13 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
+  useAnimatedScrollHandler,
+  interpolate,
+  Extrapolate,
 } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenScroll } from '../../../components/ScreenScroll';
 import { useThemeTokens } from '../../../theme/ThemeProvider';
 import { spacing, radius } from '../../../theme/tokens';
@@ -149,6 +154,7 @@ const InvestmentsList: React.FC = () => {
   const { quotes, hydrate: hydrateInvest } = useInvestStore();
   const { profile, update: updateProfile } = useProfileStore();
   const [showSettingsSheet, setShowSettingsSheet] = useState(false);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     hydrateAcc();
@@ -166,6 +172,7 @@ const InvestmentsList: React.FC = () => {
   const muted = get('text.muted') as string;
   const onSurface = get('text.onSurface') as string;
   const cardBg = get('surface.level1') as string;
+  const bgDefault = get('background.default') as string;
   const border = get('border.subtle') as string;
   const accentPrimary = get('accent.primary') as string;
   const accentSecondary = get('accent.secondary') as string;
@@ -281,6 +288,34 @@ const InvestmentsList: React.FC = () => {
     opacity: fadeAnim.value,
   }));
 
+  // Floating title animation
+  const scrollY = useSharedValue(0);
+
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+
+  const originalTitleAnimatedStyle = useAnimatedStyle(() => {
+    const progress = interpolate(scrollY.value, [0, 50], [0, 1], Extrapolate.CLAMP);
+    return {
+      opacity: 1 - progress,
+    };
+  });
+
+  const floatingTitleAnimatedStyle = useAnimatedStyle(() => {
+    const progress = interpolate(scrollY.value, [0, 50], [0, 1], Extrapolate.CLAMP);
+    return {
+      opacity: progress,
+    };
+  });
+
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    const progress = interpolate(scrollY.value, [0, 50], [0, 1], Extrapolate.CLAMP);
+    return {
+      opacity: progress,
+    };
+  });
+
   const getAccountIcon = (kind?: string) => {
     switch (kind) {
       case 'retirement': return 'award';
@@ -343,47 +378,103 @@ const InvestmentsList: React.FC = () => {
   };
 
   return (
-    <ScreenScroll
-      inTab
-      contentStyle={{ padding: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s32, gap: spacing.s20 }}
-    >
-      {/* Header */}
-      <Animated.View style={[{ gap: spacing.s8 }, fadeStyle]}>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8, flex: 1 }}>
+    <>
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            width: '100%',
+          },
+          gradientAnimatedStyle,
+        ]}
+      >
+        <LinearGradient
+          colors={[
+            bgDefault,
+            bgDefault,
+            withAlpha(bgDefault, 0.95),
+            withAlpha(bgDefault, 0.8),
+            withAlpha(bgDefault, 0.5),
+            withAlpha(bgDefault, 0),
+          ]}
+          style={{
+            paddingTop: insets.top + spacing.s16,
+            paddingBottom: spacing.s20,
+          }}
+        >
+          <Animated.Text
+            style={[
+              {
+                fontSize: 20,
+                fontWeight: '700',
+                color: text,
+                textAlign: 'center',
+              },
+              floatingTitleAnimatedStyle,
+            ]}
+          >
+            Investments Overview
+          </Animated.Text>
+        </LinearGradient>
+      </Animated.View>
+      <ScreenScroll
+        inTab
+        fullScreen
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        contentStyle={{
+          paddingHorizontal: spacing.s16,
+          paddingTop: insets.top + spacing.s24,
+          paddingBottom: 68 + Math.max(insets.bottom, 20) + 16 + spacing.s32,
+          gap: spacing.s20,
+        }}
+      >
+        {/* Header */}
+        <Animated.View style={[{ gap: spacing.s8 }, fadeStyle]}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: spacing.s8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8, flex: 1 }}>
+              <Pressable
+                onPress={() => nav.goBack()}
+                style={({ pressed }) => ({
+                  padding: spacing.s8,
+                  marginLeft: -spacing.s8,
+                  marginTop: -spacing.s4,
+                  borderRadius: radius.md,
+                  backgroundColor: pressed ? cardBg : 'transparent',
+                })}
+                hitSlop={8}
+              >
+                <Icon name="chevron-left" size={28} color={text} />
+              </Pressable>
+              <View style={{ flex: 1 }}>
+                <Animated.Text
+                  style={[
+                    { color: text, fontSize: 28, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 },
+                    originalTitleAnimatedStyle,
+                  ]}
+                >
+                  Investments Overview
+                </Animated.Text>
+              </View>
+            </View>
             <Pressable
-              onPress={() => nav.goBack()}
+              onPress={() => setShowSettingsSheet(true)}
               style={({ pressed }) => ({
                 padding: spacing.s8,
-                marginLeft: -spacing.s8,
-                marginTop: -spacing.s4,
+                marginRight: -spacing.s8,
                 borderRadius: radius.md,
                 backgroundColor: pressed ? cardBg : 'transparent',
               })}
               hitSlop={8}
             >
-              <Icon name="chevron-left" size={28} color={text} />
+              <Icon name="settings" size={24} color={text} />
             </Pressable>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: text, fontSize: 28, fontWeight: '800', letterSpacing: -0.8 }}>
-                Investments Overview
-              </Text>
-            </View>
           </View>
-          <Pressable
-            onPress={() => setShowSettingsSheet(true)}
-            style={({ pressed }) => ({
-              padding: spacing.s8,
-              marginRight: -spacing.s8,
-              borderRadius: radius.md,
-              backgroundColor: pressed ? cardBg : 'transparent',
-            })}
-            hitSlop={8}
-          >
-            <Icon name="settings" size={24} color={text} />
-          </Pressable>
-        </View>
-      </Animated.View>
+        </Animated.View>
 
       {/* Summary - Direct on Background */}
       <Animated.View style={fadeStyle}>
@@ -668,6 +759,7 @@ const InvestmentsList: React.FC = () => {
         </View>
       </BottomSheet>
     </ScreenScroll>
+    </>
   );
 };
 

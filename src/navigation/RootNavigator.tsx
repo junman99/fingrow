@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { enableScreens } from 'react-native-screens';
+import { TabBarScrollProvider } from '../contexts/TabBarScrollContext';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Transactions } from '../screens/Transactions';
@@ -23,6 +24,7 @@ import EditTransaction from '../screens/EditTransaction';
 import AIAssistant from '../screens/AIAssistant';
 import AIPrivacyInfo from '../screens/AIPrivacyInfo';
 import FloatingAIButton from '../components/FloatingAIButton';
+import FloatingTabBar from '../components/FloatingTabBar';
 import { useTheme, useThemeTokens } from '../theme/ThemeProvider';
 import Icon from '../components/Icon';
 
@@ -54,32 +56,20 @@ function BottomTabs() {
   );
 
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: get('accent.primary') as string,
-        tabBarInactiveTintColor: get('icon.default') as string,
-        tabBarStyle,
-        tabBarItemStyle: styles.tabBarItem,
-        tabBarLabelStyle: styles.tabBarLabel,
-        tabBarHideOnKeyboard: true,
-        tabBarIcon: ({ focused }) => (
-          <View style={{ marginBottom: -2 }}>
-            <Icon
-              name={route.name === 'Home' ? 'receipt' : route.name === 'Money' ? 'wallet' : route.name === 'Goals' ? 'target' : route.name === 'Invest' ? 'trending-up' : 'settings'}
-              size={22}
-              colorToken={focused ? 'accent.primary' : 'icon.default'}
-            />
-          </View>
-        ),
-      })}
-    >
-      <Tab.Screen name="Home" component={HomeNavigator} options={{ tabBarLabel: 'Spending' }} />
-      <Tab.Screen name="Money" component={MoneyNavigator} options={{ tabBarLabel: 'Money' }} />
-      <Tab.Screen name="Goals" component={GoalsNavigator} options={{ tabBarLabel: 'Goals' }} />
-      <Tab.Screen name="Invest" component={InvestNavigator} />
-      <Tab.Screen name="Settings" component={Settings} />
-    </Tab.Navigator>
+    <TabBarScrollProvider>
+      <Tab.Navigator
+        tabBar={(props) => <FloatingTabBar {...props} />}
+        screenOptions={{
+          headerShown: false,
+        }}
+      >
+        <Tab.Screen name="Home" component={HomeNavigator} options={{ tabBarLabel: 'Spending' }} />
+        <Tab.Screen name="Money" component={MoneyNavigator} options={{ tabBarLabel: 'Money' }} />
+        <Tab.Screen name="Goals" component={GoalsNavigator} options={{ tabBarLabel: 'Goals' }} />
+        <Tab.Screen name="Invest" component={InvestNavigator} />
+        <Tab.Screen name="Settings" component={Settings} />
+      </Tab.Navigator>
+    </TabBarScrollProvider>
   );
 }
 

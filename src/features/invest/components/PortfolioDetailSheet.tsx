@@ -75,6 +75,7 @@ export default function PortfolioDetailSheet({
   const [showCashEditor, setShowCashEditor] = React.useState(false);
   const [menuVisible, setMenuVisible] = React.useState(false);
   const [menuAnchor, setMenuAnchor] = React.useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [showClosedPositions, setShowClosedPositions] = React.useState(false);
   const menuBtnRef = React.useRef<View>(null);
 
   React.useEffect(() => {
@@ -170,6 +171,72 @@ export default function PortfolioDetailSheet({
     const includeCash = summary.cashValue > 0.01 ? ['CASH'] : [];
     return [...syms, ...includeCash];
   }, [summary]);
+
+  // Closed positions: holdings with qty = 0 but have transaction history
+  const closedPositions = React.useMemo(() => {
+    if (!p) return [] as Array<{ sym: string; realizedPnL: number; realizedPct: number }>;
+
+    const closed: Array<{ sym: string; realizedPnL: number; realizedPct: number }> = [];
+    const base = (p.baseCurrency || 'USD').toUpperCase();
+
+    Object.values(p.holdings || {}).forEach((h: any) => {
+      if (!h) return;
+      const lots = h.lots || [];
+      if (lots.length === 0) return;
+
+      const qty = lots.reduce((acc: number, lot: any) => acc + (lot.side === 'buy' ? lot.qty : -lot.qty), 0);
+      if (qty > 0) return; // Skip open positions
+
+      const sym = h.symbol;
+
+      // Get ticker currency
+      let holdingCurrency = h.currency;
+      if (!holdingCurrency) {
+        const s = sym.toUpperCase();
+        if (s.includes('-USD') || s.includes('USD')) holdingCurrency = 'USD';
+        else if (s.endsWith('.L')) holdingCurrency = 'GBP';
+        else if (s.endsWith('.T')) holdingCurrency = 'JPY';
+        else if (s.endsWith('.TO')) holdingCurrency = 'CAD';
+        else if (s.endsWith('.AX')) holdingCurrency = 'AUD';
+        else if (s.endsWith('.HK')) holdingCurrency = 'HKD';
+        else if (s.endsWith('.PA') || s.endsWith('.DE')) holdingCurrency = 'EUR';
+        else if (s.endsWith('.SW')) holdingCurrency = 'CHF';
+        else holdingCurrency = 'USD';
+      }
+      holdingCurrency = String(holdingCurrency).toUpperCase();
+
+      // Convert lot prices for P&L calculation
+      const normalizedLots = lots.map((l: any) => ({
+        ...l,
+        price: convertCurrency(fxRates, l.price || 0, holdingCurrency, base),
+        fee: convertCurrency(fxRates, (l.fee ?? l.fees) || 0, holdingCurrency, base)
+      }));
+
+      // For closed positions, use last known price from the final sell
+      const lastSell = lots.filter((l: any) => l.side === 'sell').sort((a: any, b: any) =>
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      )[0];
+      const lastPrice = lastSell ? convertCurrency(fxRates, lastSell.price, holdingCurrency, base) : 0;
+
+      const pnl = computePnL(normalizedLots, lastPrice);
+      const realizedPnL = pnl.realized || 0;
+
+      // Calculate realized % based on cost basis
+      let totalCost = 0;
+      lots.forEach((lot: any) => {
+        const lotPrice = convertCurrency(fxRates, lot.price || 0, holdingCurrency, base);
+        if (lot.side === 'buy') {
+          totalCost += lot.qty * lotPrice;
+        }
+      });
+
+      const realizedPct = totalCost > 0 ? (realizedPnL / totalCost) * 100 : 0;
+
+      closed.push({ sym, realizedPnL, realizedPct });
+    });
+
+    return closed.sort((a, b) => b.realizedPnL - a.realizedPnL);
+  }, [p, fxRates]);
 
   const watchlistSyms = React.useMemo(() => {
     if (!p || !Array.isArray(p.watchlist)) return [] as string[];
@@ -475,6 +542,7 @@ export default function PortfolioDetailSheet({
             {/* Content */}
             {tab === 'Holdings' ? (
               <View>
+                {/* Open Holdings */}
                 {holdingsSyms.length ? (
                   holdingsSyms.map((sym, index) => (
                     <React.Fragment key={sym}>
@@ -499,6 +567,101 @@ export default function PortfolioDetailSheet({
                     actionLabel={onAddHolding ? 'Add ticker' : undefined}
                     onPressAction={onAddHolding}
                   />
+                )}
+
+                {/* Closed Positions Section */}
+                {closedPositions.length > 0 && (
+                  <View style={{ marginTop: spacing.s16 }}>
+                    <Pressable
+                      onPress={() => setShowClosedPositions(!showClosedPositions)}
+                      style={({ pressed }) => ({
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        paddingVertical: spacing.s12,
+                        paddingHorizontal: spacing.s12,
+                        opacity: pressed ? 0.7 : 1,
+                      })}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
+                        <Icon
+                          name={showClosedPositions ? 'chevron-down' : 'chevron-right'}
+                          size={20}
+                          colorToken="text.muted"
+                        />
+                        <Text style={{ color: get('text.muted') as string, fontSize: 14, fontWeight: '600' }}>
+                          Closed Positions ({closedPositions.length})
+                        </Text>
+                      </View>
+                      <Text style={{ color: get('text.muted') as string, fontSize: 12 }}>
+                        Realized P&L
+                      </Text>
+                    </Pressable>
+
+                    {showClosedPositions && (
+                      <View>
+                        {closedPositions.map((pos, index) => (
+                          <React.Fragment key={pos.sym}>
+                            <Pressable
+                              onPress={() => {
+                                onClose();
+                              }}
+                              style={({ pressed }) => ({
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                paddingVertical: spacing.s14,
+                                paddingHorizontal: spacing.s12,
+                                opacity: pressed ? 0.7 : 1,
+                              })}
+                            >
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s12 }}>
+                                <View style={{
+                                  width: 36,
+                                  height: 36,
+                                  borderRadius: 18,
+                                  backgroundColor: get('surface.level2') as string,
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}>
+                                  <Text style={{ color: get('text.muted') as string, fontSize: 14, fontWeight: '700' }}>
+                                    {pos.sym.slice(0, 2)}
+                                  </Text>
+                                </View>
+                                <View>
+                                  <Text style={{ color: get('text.muted') as string, fontSize: 14, fontWeight: '700' }}>
+                                    {pos.sym}
+                                  </Text>
+                                  <Text style={{ color: get('text.muted') as string, fontSize: 11 }}>
+                                    Closed
+                                  </Text>
+                                </View>
+                              </View>
+
+                              <View style={{ alignItems: 'flex-end' }}>
+                                <Text style={{
+                                  color: pos.realizedPnL >= 0 ? get('semantic.success') as string : get('semantic.danger') as string,
+                                  fontSize: 14,
+                                  fontWeight: '700',
+                                }}>
+                                  {pos.realizedPnL >= 0 ? '+' : ''}{formatCurrency(pos.realizedPnL, summary?.base || 'USD')}
+                                </Text>
+                                <Text style={{
+                                  color: pos.realizedPnL >= 0 ? get('semantic.success') as string : get('semantic.danger') as string,
+                                  fontSize: 12,
+                                }}>
+                                  {pos.realizedPct >= 0 ? '+' : ''}{pos.realizedPct.toFixed(2)}%
+                                </Text>
+                              </View>
+                            </Pressable>
+                            {index < closedPositions.length - 1 && (
+                              <View style={{ height: 1, backgroundColor: get('border.subtle') as string, marginLeft: spacing.s12 }} />
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </View>
+                    )}
+                  </View>
                 )}
               </View>
             ) : tab === 'Watchlist' ? (

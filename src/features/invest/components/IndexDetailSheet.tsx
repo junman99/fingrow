@@ -7,6 +7,7 @@ import LineChart from '../../../components/LineChart';
 import Icon from '../../../components/Icon';
 import { useInvestStore } from '../store';
 import { useProfileStore } from '../../../store/profile';
+import { formatPrice, formatPriceChange } from '../../../lib/formatPrice';
 
 type IndexData = {
   symbol: string;
@@ -209,7 +210,7 @@ export default function IndexDetailSheet({ index, visible, onClose }: Props) {
                 </Text>
                 <View style={{ flexDirection: 'row', gap: spacing.s12, marginTop: spacing.s8 }}>
                   <Text style={{ color: dayColor, fontSize: 14, fontWeight: '600' }}>
-                    {displayChangePct >= 0 ? '+' : ''}{displayChange.toFixed(2)} ({displayChangePct >= 0 ? '+' : ''}{displayChangePct.toFixed(2)}%)
+                    {formatPriceChange(displayChange, 'USD')} ({displayChangePct >= 0 ? '+' : ''}{displayChangePct.toFixed(2)}%)
                   </Text>
                   <Text style={{ color: textMuted, fontSize: 14 }}>Today</Text>
                 </View>
@@ -300,7 +301,7 @@ export default function IndexDetailSheet({ index, visible, onClose }: Props) {
                 Year to Date
               </Text>
               <Text style={{ color: ytdColor, fontSize: 20, fontWeight: '700' }}>
-                {index.ytdChangePct >= 0 ? '+' : ''}{index.ytdChange.toFixed(2)} ({index.ytdChangePct >= 0 ? '+' : ''}{index.ytdChangePct.toFixed(1)}%)
+                {formatPriceChange(index.ytdChange, 'USD')} ({index.ytdChangePct >= 0 ? '+' : ''}{index.ytdChangePct.toFixed(1)}%)
               </Text>
             </View>
 

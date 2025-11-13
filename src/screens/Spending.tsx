@@ -14,6 +14,7 @@ import Icon from '../components/Icon';
 import { useTxStore } from '../store/transactions';
 import { useProfileStore } from '../store/profile';
 import { useGroupsStore } from '../features/groups';
+import { useTabBarScroll } from '../contexts/TabBarScrollContext';
 
 const AnimatedText = RNAnimated.createAnimatedComponent(Text);
 
@@ -122,10 +123,11 @@ export const Home: React.FC = () => {
   const { get } = useThemeTokens();
   const tabBarHeight = useBottomTabBarHeight();
   const fabBottomOffset = useMemo(() => {
-    const baseGap = spacing.s16;
-    if (tabBarHeight > 0) return baseGap;
-    return insets.bottom + baseGap;
-  }, [insets.bottom, tabBarHeight]);
+    const floatingTabBarHeight = 68; // Height of our floating pill tab bar
+    const tabBarBottomPadding = Math.max(insets.bottom, 20); // Bottom padding of floating tab bar
+    const gapAboveTabBar = 16; // Gap between FAB and tab bar
+    return floatingTabBarHeight + tabBarBottomPadding + gapAboveTabBar;
+  }, [insets.bottom]);
 
   // stores
   const { hydrate: hydrateTx } = useTxStore();
@@ -137,6 +139,9 @@ export const Home: React.FC = () => {
     hydrateTx();
     hydrateGroups();
   }, []);
+
+  // Tab bar scroll context for auto-hide
+  const { scrollY: tabBarScrollY, contentHeight, layoutHeight } = useTabBarScroll();
 
   const accentPrimary = get('accent.primary') as string;
   const accentSecondary = get('accent.secondary') as string;
@@ -250,6 +255,9 @@ export const Home: React.FC = () => {
   const combinedScrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       scrollY.value = event.contentOffset.y;
+      tabBarScrollY.value = event.contentOffset.y;
+      contentHeight.value = event.contentSize.height;
+      layoutHeight.value = event.layoutMeasurement.height;
       runOnJS(onHomeScrollJS)(event);
     },
   });
@@ -384,7 +392,7 @@ export const Home: React.FC = () => {
           contentStyle={{
             paddingHorizontal: spacing.s16,
             paddingTop: insets.top + spacing.s24,
-            paddingBottom: spacing.s32
+            paddingBottom: 68 + Math.max(insets.bottom, 20) + 16 + spacing.s32 // Floating tab bar (68) + bottom padding + gap + extra space
           }}
         >
           {/* Header with profile */}
@@ -491,6 +499,7 @@ export const Home: React.FC = () => {
           position: 'absolute',
           right: spacing.s16,
           bottom: fabBottomOffset,
+          zIndex: 100,
         }}
       >
         <AddFabButton

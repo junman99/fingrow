@@ -12,12 +12,15 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAnimatedScrollHandler } from 'react-native-reanimated';
 import { ScreenScroll } from '../components/ScreenScroll';
 import { spacing, radius } from '../theme/tokens';
 import { useThemeTokens, useTheme } from '../theme/ThemeProvider';
 import { useProfileStore, type ThemeMode } from '../store/profile';
 import { useInvestStore } from '../features/invest';
 import { useNavigation } from '@react-navigation/native';
+import { useTabBarScroll } from '../contexts/TabBarScrollContext';
 import ProfileHero from '../components/ProfileHero';
 import Button from '../components/Button';
 import { Card } from '../components/Card';
@@ -184,6 +187,17 @@ export const Settings: React.FC = () => {
   const { refreshFx } = useInvestStore();
   const activePortfolioId = useInvestStore(state => state.activePortfolioId);
   const { t, i18n } = useTranslation();
+  const insets = useSafeAreaInsets();
+
+  // Tab bar scroll context for auto-hide
+  const { scrollY, contentHeight, layoutHeight } = useTabBarScroll();
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+      contentHeight.value = event.contentSize.height;
+      layoutHeight.value = event.layoutMeasurement.height;
+    },
+  });
 
   const [currencySheet, setCurrencySheet] = useState(false);
   const [currencyQuery, setCurrencyQuery] = useState('');
@@ -339,7 +353,9 @@ export const Settings: React.FC = () => {
     <>
       <ScreenScroll
         inTab
-        contentStyle={{ padding: spacing.s16, paddingBottom: spacing.s32, gap: spacing.s24 }}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        contentStyle={{ padding: spacing.s16, paddingBottom: 68 + Math.max(insets.bottom, 20) + 16 + spacing.s32, gap: spacing.s24 }}
       >
         {/* Hero Profile Card */}
         <AnimatedPressable

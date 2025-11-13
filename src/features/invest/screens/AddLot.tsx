@@ -13,6 +13,7 @@ import TransactionEditorSheet from '../components/TransactionEditorSheet';
 import TransactionRow from '../components/TransactionRow';
 import Icon from '../../../components/Icon';
 import { formatCurrency, formatPercent, formatMarketCap } from '../../../lib/format';
+import { formatPrice } from '../../../lib/formatPrice';
 import { computePnL } from '../../../lib/positions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { convertCurrency } from '../../../lib/fx';
@@ -164,10 +165,21 @@ export const AddLot = React.memo(() => {
   const dayGain = (Number(change) || 0) * qty;
   const totalGain = (mktValue - totalCost);
 
+  // Helper function to get dynamic precision for price input
+  const getPriceDecimals = (price: number) => {
+    const absPrice = Math.abs(price);
+    if (absPrice >= 1) return 2;
+    if (absPrice >= 0.01) return 4;
+    if (absPrice >= 0.0001) return 6;
+    return 8;
+  };
+
   // Trade form
   const [side, setSide] = React.useState<'buy'|'sell'>('buy');
   const [qtyInput, setQtyInput] = React.useState<string>('');
-  const [priceInput, setPriceInput] = React.useState<string>(last ? String(Number(last).toFixed(2)) : '');
+  const [priceInput, setPriceInput] = React.useState<string>(
+    last ? String(Number(last).toFixed(getPriceDecimals(Number(last)))) : ''
+  );
   const [date, setDate] = React.useState<Date>(new Date());
   const [showDateTimePicker, setShowDateTimePicker] = React.useState(false);
   const [showTimeOverlay, setShowTimeOverlay] = React.useState(false);
@@ -251,7 +263,7 @@ export const AddLot = React.memo(() => {
           {/* Price below header */}
           <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
             <Text style={{ color: text, fontSize: 32, fontWeight: '800', letterSpacing: -0.8 }}>
-              {Number(last || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatPrice(Number(last || 0), cur).replace(/[^\d,.-]/g, '')}
             </Text>
             <Text style={{ color: muted, fontSize: 14, marginLeft: spacing.s4, fontWeight: '600' }}>
               {cur}
@@ -419,7 +431,7 @@ export const AddLot = React.memo(() => {
                     EPS (TTM)
                   </Text>
                   <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>
-                    {fundamentals.eps !== undefined ? formatCurrency(fundamentals.eps, cur) : '-'}
+                    {fundamentals.eps !== undefined ? formatCurrency(fundamentals.eps, cur, { dynamicPrecision: true }) : '-'}
                   </Text>
                 </View>
 
@@ -459,7 +471,7 @@ export const AddLot = React.memo(() => {
                     52W HIGH
                   </Text>
                   <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>
-                    {fundamentals.week52High !== undefined ? formatCurrency(fundamentals.week52High, cur) : '-'}
+                    {fundamentals.week52High !== undefined ? formatCurrency(fundamentals.week52High, cur, { dynamicPrecision: true }) : '-'}
                   </Text>
                 </View>
 
@@ -469,7 +481,7 @@ export const AddLot = React.memo(() => {
                     52W LOW
                   </Text>
                   <Text style={{ color: text, fontWeight: '700', fontSize: 16 }}>
-                    {fundamentals.week52Low !== undefined ? formatCurrency(fundamentals.week52Low, cur) : '-'}
+                    {fundamentals.week52Low !== undefined ? formatCurrency(fundamentals.week52Low, cur, { dynamicPrecision: true }) : '-'}
                   </Text>
                 </View>
               </View>
@@ -660,18 +672,18 @@ export const AddLot = React.memo(() => {
                       <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: muted, fontSize: 11, marginBottom: spacing.s2 }}>Estimate</Text>
-                          <Text style={{ color: text, fontSize: 13 }}>{formatCurrency(estimate, cur)}</Text>
+                          <Text style={{ color: text, fontSize: 13 }}>{formatCurrency(estimate, cur, { dynamicPrecision: true })}</Text>
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: muted, fontSize: 11, marginBottom: spacing.s2 }}>Actual</Text>
                           <Text style={{ color: hasActual ? (beat ? good : bad) : muted, fontWeight: hasActual ? '700' : '600', fontSize: 13 }}>
-                            {hasActual ? formatCurrency(actual, cur) : '-'}
+                            {hasActual ? formatCurrency(actual, cur, { dynamicPrecision: true }) : '-'}
                           </Text>
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: muted, fontSize: 11, marginBottom: spacing.s2 }}>Difference</Text>
                           <Text style={{ color: hasActual ? (beat ? good : bad) : muted, fontWeight: '600', fontSize: 13 }}>
-                            {hasActual ? (diff >= 0 ? '+' : '') + formatCurrency(diff, cur) : '-'}
+                            {hasActual ? (diff >= 0 ? '+' : '') + formatCurrency(diff, cur, { dynamicPrecision: true }) : '-'}
                           </Text>
                         </View>
                       </View>
@@ -697,13 +709,13 @@ export const AddLot = React.memo(() => {
               <View style={{ flex: 1 }}>
                 <Text style={{ color: muted, fontSize: 12, marginBottom: spacing.s4 }}>Day's gain</Text>
                 <Text style={{ color: dayGain >= 0 ? good : bad, fontWeight:'700', fontSize: 16 }}>
-                  {formatCurrency(dayGain, cur)}
+                  {formatCurrency(dayGain, cur, { dynamicPrecision: true })}
                 </Text>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: muted, fontSize: 12, marginBottom: spacing.s4 }}>Total gain</Text>
                 <Text style={{ color: totalGain >= 0 ? good : bad, fontWeight:'700', fontSize: 16 }}>
-                  {formatCurrency(totalGain, cur)}
+                  {formatCurrency(totalGain, cur, { dynamicPrecision: true })}
                 </Text>
               </View>
             </View>
@@ -712,11 +724,11 @@ export const AddLot = React.memo(() => {
             <View style={{ gap: spacing.s8, paddingTop: spacing.s8, borderTopWidth: 1, borderColor: border }}>
               <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
                 <Text style={{ color: muted, fontSize: 13 }}>Market value</Text>
-                <Text style={{ color: text, fontWeight: '600', fontSize: 14 }}>{formatCurrency(mktValue, cur)}</Text>
+                <Text style={{ color: text, fontWeight: '600', fontSize: 14 }}>{formatCurrency(mktValue, cur, { dynamicPrecision: true })}</Text>
               </View>
               <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
                 <Text style={{ color: muted, fontSize: 13 }}>Total cost</Text>
-                <Text style={{ color: text, fontWeight: '600', fontSize: 14 }}>{formatCurrency(totalCost, cur)}</Text>
+                <Text style={{ color: text, fontWeight: '600', fontSize: 14 }}>{formatCurrency(totalCost, cur, { dynamicPrecision: true })}</Text>
               </View>
               <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
                 <Text style={{ color: muted, fontSize: 13 }}>Shares</Text>
@@ -724,7 +736,7 @@ export const AddLot = React.memo(() => {
               </View>
               <View style={{ flexDirection:'row', justifyContent:'space-between' }}>
                 <Text style={{ color: muted, fontSize: 13 }}>Average cost</Text>
-                <Text style={{ color: text, fontWeight: '600', fontSize: 14 }}>{formatCurrency(avgCost, cur)}</Text>
+                <Text style={{ color: text, fontWeight: '600', fontSize: 14 }}>{formatCurrency(avgCost, cur, { dynamicPrecision: true })}</Text>
               </View>
             </View>
           </View>

@@ -334,11 +334,12 @@ export const Insights: React.FC = () => {
 
       <ScreenScroll
         inTab
+        fullScreen
         onScroll={combinedScrollHandler}
         scrollEventThrottle={16}
       >
         <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
-          <View style={{ paddingHorizontal: spacing.s16, paddingTop: spacing.s12, paddingBottom: spacing.s24, gap: spacing.s16 }}>
+          <View style={{ paddingHorizontal: spacing.s16, paddingTop: insets.top + spacing.s24, paddingBottom: spacing.s24, gap: spacing.s16 }}>
             {/* Header with back button */}
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8, marginBottom: spacing.s8 }}>
               <Pressable

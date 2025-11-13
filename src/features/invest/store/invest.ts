@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchDailyHistoryYahoo, fetchYahooFundamentals } from '../../../lib/yahoo';
-import { fetchHistoricalWithCache, fetchPriceWithCache } from '../../../lib/yahoo-cache';
+import { fetchHistoricalWithCache, fetchPriceWithCache, clearInvestmentCache } from '../../../lib/yahoo-cache';
 import { fetchDailyHistoryFMP, fetchFMPFundamentals, fetchFMPBatchQuotes, setFMPApiKey } from '../../../lib/fmp';
 import { setFinnhubApiKey } from '../../../lib/finnhub';
 import { isCryptoSymbol, fetchYahooCrypto, baseCryptoSymbol, fetchYahooCryptoOhlc } from '../../../lib/yahoo-crypto';
@@ -687,6 +687,16 @@ addLot: async (symbol, lot, meta, opts) => {
 
   refreshQuotes: async (symbols?: string[]) => {
     set({ refreshing: true, error: undefined });
+
+    // One-time cache clear to fetch fresh data with company names (v4 - fixed merge logic)
+    const cacheCleared = await AsyncStorage.getItem('fingrow:yahoo:cache-cleared-v4');
+    if (!cacheCleared) {
+      console.log('🗑️ [Invest Store] Clearing Yahoo cache to fix company names (v4)...');
+      await clearInvestmentCache();
+      await AsyncStorage.setItem('fingrow:yahoo:cache-cleared-v4', 'true');
+      console.log('✅ [Invest Store] Cache cleared! Fresh data with correct company names will be fetched.');
+    }
+
     const quotes = { ...get().quotes } as any;
 
     // Get data source preference from profile
@@ -840,7 +850,7 @@ addLot: async (symbol, lot, meta, opts) => {
         for (const sym of equitySymbols) {
           try {
             // Use cached data (24h for historical, 5min for price)
-            const { bars: rawBars, fundamentals: cachedFundamentals, fromCache } = await fetchHistoricalWithCache(sym as any, '5y' as any);
+            const { bars: rawBars, fundamentals: cachedFundamentals, companyName, fromCache } = await fetchHistoricalWithCache(sym as any, '5y' as any);
 
             if (fromCache) {
               console.log(`📊 [Invest Store] Using cached data for ${sym}`);
@@ -858,8 +868,12 @@ addLot: async (symbol, lot, meta, opts) => {
               const line = rawBars.map(b => ({ t: b.date, v: Number((b.close ?? 0).toFixed ? (b.close as any).toFixed(2) : Number(b.close ?? 0).toFixed(2)) }));
               const cbars = rawBars.map(b => ({ t: b.date, o: b.open ?? b.close, h: b.high ?? b.close, l: b.low ?? b.close, c: b.close ?? 0, v: b.volume ?? 0 }));
 
-              // Use fundamentals from cache if available
-              let fundamentals = cachedFundamentals;
+              // Use fundamentals from cache if available, merge with company name
+              // IMPORTANT: Always prefer fresh companyName from Yahoo chart API over cached value
+              let fundamentals = cachedFundamentals ? {
+                ...cachedFundamentals,
+                companyName: companyName || cachedFundamentals.companyName
+              } : (companyName ? { companyName } : undefined);
 
               quotes[sym] = { symbol: sym, last, change, changePct, ts: Date.now(), line, bars: cbars, fundamentals };
             }

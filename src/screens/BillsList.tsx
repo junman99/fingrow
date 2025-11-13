@@ -249,7 +249,7 @@ const BillsList: React.FC = () => {
               floatingTitleAnimatedStyle,
             ]}
           >
-            Shared Bills
+            Bills Due
           </Animated.Text>
         </LinearGradient>
       </Animated.View>
@@ -262,14 +262,14 @@ const BillsList: React.FC = () => {
         contentStyle={{
           paddingHorizontal: 0,
           paddingTop: insets.top + spacing.s24,
-          paddingBottom: spacing.s32,
+          paddingBottom: 68 + Math.max(insets.bottom, 20) + 16 + spacing.s32,
           gap: spacing.s20,
         }}
       >
         {/* Header */}
         <View style={{ paddingHorizontal: spacing.s16, gap: spacing.s20 }}>
           <Animated.View style={[{ gap: spacing.s8 }, fadeStyle]}>
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8, marginBottom: spacing.s8 }}>
               <Pressable
                 onPress={() => nav.goBack()}
                 style={({ pressed }) => ({
@@ -291,15 +291,13 @@ const BillsList: React.FC = () => {
                       fontSize: 28,
                       fontWeight: '800',
                       letterSpacing: -0.5,
+                      marginTop: spacing.s2,
                     },
                     originalTitleAnimatedStyle,
                   ]}
                 >
-                  Shared Bills
+                  Bills Due
                 </Animated.Text>
-                <Text style={{ color: muted, fontSize: 13, marginTop: spacing.s4 }}>
-                  Track and manage recurring expenses
-                </Text>
               </View>
             </View>
           </Animated.View>

@@ -6,9 +6,13 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
+  useAnimatedScrollHandler,
+  interpolate,
+  Extrapolate,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenScroll } from '../components/ScreenScroll';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
@@ -66,6 +70,7 @@ const AnimatedPressable: React.FC<{
 
 const PaycheckBreakdown: React.FC = () => {
   const nav = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const { get, isDark } = useThemeTokens();
   const { config, splitHistory, hydrate, createCPFAccounts, processIncomeSplit } = useIncomeSplittingStore();
   const { transactions } = useTxStore();
@@ -162,6 +167,57 @@ const PaycheckBreakdown: React.FC = () => {
   const warningColor = get('semantic.warning') as string;
   const bgDefault = get('background.default') as string;
 
+  // Main Tab Title Animation
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+
+  // Original title animation (fades out)
+  const originalTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: 1 - progress,
+    };
+  });
+
+  // Floating title animation (fades in)
+  const floatingTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
+  // Gradient background animation
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
   // Removed entrance animations for cleaner navigation experience
 
   // State for manual calculator
@@ -235,47 +291,89 @@ const PaycheckBreakdown: React.FC = () => {
 
   if (!setupComplete) {
     return (
-      <ScreenScroll
-        inTab
-        contentStyle={{ padding: spacing.s16, paddingTop: spacing.s24, gap: spacing.s24 }}
-      >
-        {/* Header */}
-        <View style={{ gap: spacing.s12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8 }}>
-            <Pressable
-              onPress={() => nav.goBack()}
-              style={({ pressed }) => ({
-                padding: spacing.s8,
-                marginLeft: -spacing.s8,
-                borderRadius: radius.md,
-                backgroundColor: pressed ? cardBg : 'transparent',
-              })}
-              hitSlop={8}
+      <>
+        <Animated.View
+          style={[
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: 10,
+              width: '100%',
+            },
+            gradientAnimatedStyle,
+          ]}
+        >
+          <LinearGradient
+            colors={[
+              bgDefault,
+              bgDefault,
+              withAlpha(bgDefault, 0.95),
+              withAlpha(bgDefault, 0.8),
+              withAlpha(bgDefault, 0.5),
+              withAlpha(bgDefault, 0),
+            ]}
+            style={{
+              paddingTop: insets.top + spacing.s16,
+              paddingBottom: spacing.s20,
+            }}
+          >
+            <Animated.Text
+              style={[
+                {
+                  fontSize: 20,
+                  fontWeight: '700',
+                  color: text,
+                  textAlign: 'center',
+                },
+                floatingTitleAnimatedStyle,
+              ]}
             >
-              <Icon name="chevron-left" size={28} color={text} />
-            </Pressable>
-            <View
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: radius.xl,
-                backgroundColor: withAlpha(accentPrimary, 0.15),
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Icon name="dollar-sign" size={28} color={accentPrimary} />
+              Paycheck Breakdown
+            </Animated.Text>
+          </LinearGradient>
+        </Animated.View>
+        <ScreenScroll
+          inTab
+          fullScreen
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          contentStyle={{
+            paddingHorizontal: spacing.s16,
+            paddingTop: insets.top + spacing.s24,
+            paddingBottom: spacing.s32,
+            gap: spacing.s24,
+          }}
+        >
+          {/* Header */}
+          <Animated.View style={[{ gap: spacing.s8 }, { opacity: 1 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s8, marginBottom: spacing.s8 }}>
+              <Pressable
+                onPress={() => nav.goBack()}
+                style={({ pressed }) => ({
+                  padding: spacing.s8,
+                  marginLeft: -spacing.s8,
+                  marginTop: -spacing.s4,
+                  borderRadius: radius.md,
+                  backgroundColor: pressed ? cardBg : 'transparent',
+                })}
+                hitSlop={8}
+              >
+                <Icon name="chevron-left" size={28} color={text} />
+              </Pressable>
+              <View style={{ flex: 1 }}>
+                <Animated.Text
+                  style={[
+                    { color: text, fontSize: 28, fontWeight: '800', letterSpacing: -0.5, marginTop: spacing.s2 },
+                    originalTitleAnimatedStyle,
+                  ]}
+                >
+                  Paycheck Breakdown
+                </Animated.Text>
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: text, fontSize: 28, fontWeight: '800', letterSpacing: -0.6 }}>
-                Paycheck Breakdown
-              </Text>
-              <Text style={{ color: muted, fontSize: 14, marginTop: spacing.s4 }}>
-                Split your income automatically
-              </Text>
-            </View>
-          </View>
-        </View>
+          </Animated.View>
 
         {/* Welcome Card */}
         <Card style={{ padding: spacing.s20, backgroundColor: withAlpha(accentPrimary, isDark ? 0.15 : 0.08), borderWidth: 2, borderColor: accentPrimary }}>
@@ -505,13 +603,14 @@ const PaycheckBreakdown: React.FC = () => {
           </View>
         </View>
       </ScreenScroll>
+      </>
     );
   }
 
   return (
     <ScreenScroll
       inTab
-      contentStyle={{ padding: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s32, gap: spacing.s20 }}
+      contentStyle={{ padding: spacing.s16, paddingTop: spacing.s16, paddingBottom: 68 + Math.max(insets.bottom, 20) + 16 + spacing.s32, gap: spacing.s20 }}
     >
       {/* Header */}
       <View style={{ gap: spacing.s8 }}>

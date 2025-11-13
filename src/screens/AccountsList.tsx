@@ -5,8 +5,13 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
+  useAnimatedScrollHandler,
+  interpolate,
+  Extrapolate,
 } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenScroll } from '../components/ScreenScroll';
 import { useThemeTokens } from '../theme/ThemeProvider';
 import { spacing, radius } from '../theme/tokens';
@@ -141,6 +146,7 @@ const CollapsibleSection: React.FC<{
 
 const AccountsList: React.FC = () => {
   const nav = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const { get, isDark } = useThemeTokens();
   const { accounts, hydrate: hydrateAcc, updateAccount } = useAccountsStore();
   const { transactions } = useTxStore();
@@ -214,6 +220,58 @@ const AccountsList: React.FC = () => {
   const warningColor = get('semantic.warning') as string;
   const successColor = get('semantic.success') as string;
   const errorColor = get('semantic.error') as string;
+  const bgDefault = get('background.default') as string;
+
+  // Main Tab Title Animation
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+
+  // Original title animation (fades out)
+  const originalTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: 1 - progress,
+    };
+  });
+
+  // Floating title animation (fades in, shrinks)
+  const floatingTitleAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
+
+  // Gradient background animation
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const progress = interpolate(
+      scrollY.value,
+      [0, 50],
+      [0, 1],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity: progress >= 1 ? 1 : progress,
+    };
+  });
 
   const totalCash = totals.cash;
 
@@ -311,33 +369,99 @@ const AccountsList: React.FC = () => {
   };
 
   return (
-    <ScreenScroll
-      inTab
-      contentStyle={{ padding: spacing.s16, paddingTop: spacing.s16, paddingBottom: spacing.s32, gap: spacing.s20 }}
-    >
-      {/* Header */}
-      <Animated.View style={[{ gap: spacing.s8 }, fadeStyle]}>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8 }}>
-          <Pressable
-            onPress={() => nav.goBack()}
-            style={({ pressed }) => ({
-              padding: spacing.s8,
-              marginLeft: -spacing.s8,
-              marginTop: -spacing.s4,
-              borderRadius: radius.md,
-              backgroundColor: pressed ? cardBg : 'transparent',
-            })}
-            hitSlop={8}
+    <>
+      {/* Main Tab Title Animation - Floating Gradient Header (Fixed at top, outside scroll) */}
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            pointerEvents: 'none',
+          },
+          gradientAnimatedStyle,
+        ]}
+      >
+        <LinearGradient
+          colors={[
+            bgDefault,
+            bgDefault,
+            withAlpha(bgDefault, 0.95),
+            withAlpha(bgDefault, 0.8),
+            withAlpha(bgDefault, 0.5),
+            withAlpha(bgDefault, 0)
+          ]}
+          style={{
+            paddingTop: insets.top + spacing.s16,
+            paddingBottom: spacing.s32 + spacing.s20,
+            paddingHorizontal: spacing.s16,
+          }}
+        >
+          <Animated.Text
+            style={[
+              {
+                color: text,
+                fontSize: 20,
+                fontWeight: '700',
+                letterSpacing: -0.5,
+                textAlign: 'center',
+              },
+              floatingTitleAnimatedStyle,
+            ]}
           >
-            <Icon name="chevron-left" size={28} color={text} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: text, fontSize: 28, fontWeight: '800', letterSpacing: -0.8 }}>
-              Cash Overview
-            </Text>
-          </View>
-        </View>
+            Cash Overview
+          </Animated.Text>
+        </LinearGradient>
       </Animated.View>
+
+      <ScreenScroll
+        inTab
+        fullScreen
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        contentStyle={{
+          paddingHorizontal: spacing.s16,
+          paddingTop: insets.top + spacing.s24,
+          paddingBottom: 68 + Math.max(insets.bottom, 20) + 16 + spacing.s32,
+          gap: spacing.s20,
+        }}
+      >
+        {/* Header */}
+        <Animated.View style={[{ gap: spacing.s8 }, fadeStyle]}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s8, marginBottom: spacing.s8 }}>
+            <Pressable
+              onPress={() => nav.goBack()}
+              style={({ pressed }) => ({
+                padding: spacing.s8,
+                marginLeft: -spacing.s8,
+                marginTop: -spacing.s4,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? cardBg : 'transparent',
+              })}
+              hitSlop={8}
+            >
+              <Icon name="chevron-left" size={28} color={text} />
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Animated.Text
+                style={[
+                  {
+                    color: text,
+                    fontSize: 28,
+                    fontWeight: '800',
+                    letterSpacing: -0.5,
+                    marginTop: spacing.s2,
+                  },
+                  originalTitleAnimatedStyle,
+                ]}
+              >
+                Cash Overview
+              </Animated.Text>
+            </View>
+          </View>
+        </Animated.View>
 
       {/* Summary - Direct on Background */}
       <Animated.View style={fadeStyle}>
@@ -399,7 +523,7 @@ const AccountsList: React.FC = () => {
               </View>
               <Button
                 title="Add account"
-                onPress={() => nav.navigate('AddAccount')}
+                onPress={() => nav.navigate('AddAccount', { context: 'asset' })}
                 style={{ width: '100%' }}
               />
             </View>
@@ -488,7 +612,7 @@ const AccountsList: React.FC = () => {
         </Text>
         <View style={{ flexDirection: 'row', gap: spacing.s12 }}>
           <Pressable
-            onPress={() => nav.navigate('AddAccount')}
+            onPress={() => nav.navigate('AddAccount', { context: 'asset' })}
             style={({ pressed }) => ({
               flex: 1,
               backgroundColor: cardBg,
@@ -545,6 +669,7 @@ const AccountsList: React.FC = () => {
         </View>
       </Animated.View>
     </ScreenScroll>
+    </>
   );
 };
 
